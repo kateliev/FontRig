@@ -1,5 +1,5 @@
 # FontRig
-An coolection of assorted tools for manipulating fonts.
+An collection of assorted tools for manipulating fonts.
 
 ## Command line tools
 ### Python

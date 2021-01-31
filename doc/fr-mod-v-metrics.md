@@ -2,7 +2,7 @@
 ## Requirements
 Python3, FontTools
 
-## Descritption
+## Description
 A command line tool for modifying the vertical font metrics of one or multiple font files.
 
 ## Usage
