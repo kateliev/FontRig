@@ -37,8 +37,6 @@ lookup_dict = {	'sTypoAscender':'OS/2',
 				'yMax':'head',
 				'yMin':'head',
 				'unitsPerEm':'head',
-				'fontRevision' : 'head'
-
 			}
 
 # - Helpers -------------------------------------
