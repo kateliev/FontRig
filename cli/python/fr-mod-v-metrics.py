@@ -18,7 +18,7 @@ from fontTools.misc.py23 import *
 from fontTools import ttLib
 
 # -- String -------------------------------------
-__version__ = 1.5
+__version__ = 1.6
 
 tool_name = 'FR-MOD-V-METRICS'
 tool_description = 'FontRig | Modify the vertical metrics of a *.ttf or *.otf file'
@@ -36,7 +36,9 @@ lookup_dict = {	'sTypoAscender':'OS/2',
 				'lineGap':'hhea',
 				'yMax':'head',
 				'yMin':'head',
-				'unitsPerEm':'head'
+				'unitsPerEm':'head',
+				'fontRevision' : 'head'
+
 			}
 
 # - Helpers -------------------------------------
@@ -176,12 +178,12 @@ for work_file in font_files:
 			if new_parameter_value is not None:
 				font_metrics[param] = new_parameter_value
 				changes_made = True
-				_output(0,'Font: {} Changed: {} to {}'.format(font_filename, param, new_parameter_value))
+				_output(0,'Font: {} Changed: {} to {}'.format(font_save_path, param, new_parameter_value))
 
 	# - Save changes
 	if changes_made:
 		font_metrics.save(font_save_path)
-		_output(0,'Saved Font: {}'.format(font_filename))
+		_output(0,'Saved Font: {}'.format(font_save_path))
 
 
 
