@@ -64,9 +64,8 @@ class trw_class_explorer(QtWidgets.QTreeWidget):
 		new_item = QtWidgets.QTreeWidgetItem(new_item_data)
 		new_item.setFlags(new_item.flags() & ~QtCore.Qt.ItemIsDropEnabled | QtCore.Qt.ItemIsEditable)
 		
-		root = self.selectedItems()[0].parent()
-		if root is not None: 
-			root.addChild(new_item)
+		if len(self.selectedItems()) and self.selectedItems()[0].parent() is not None:
+			self.selectedItems()[0].parent().addChild(new_item)
 		else:
 			self.addTopLevelItem(new_item)
 
