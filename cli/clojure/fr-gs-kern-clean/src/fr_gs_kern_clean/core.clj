@@ -14,6 +14,22 @@
 				[clojure.tools.cli :refer [parse-opts]])
 	(:import (com.dd.plist NSArray NSDictionary NSNumber NSString PropertyListParser)))
 
+;; - Init ------------------------------
+(def application {:name "fr-gs-kern-clean" :version "1.2"})
+
+;; -- CLI Configuration 
+(def cli-options
+  ;; An option with a required argument
+  [["-le" "--less-than value" "Kerning Value"
+	:default 0
+	:parse-fn #(Integer/parseInt %)]
+
+	["-ge" "--greater-than value" "Kerning Value"
+	:default 0
+	:parse-fn #(Integer/parseInt %)]
+   
+ ;; A boolean option defaulting to nil
+ ["-h" "--help"]])
 
 ;; - Objects -----------------------------
 ;; -- Glyphs parser ----------------------
@@ -44,40 +60,36 @@
 	(let [[k v] data]
 	(when-not (and (string? v) (< 0 (Integer/parseInt v) filter-value)) [k v])))
 
-(defn value-above [data filter-value]
+(defn value-check [data filter-below filter-above]
 	(let [[k v] data]
-	(when-not (and (string? v) (> filter-value (Integer/parseInt v) 0)) [k v])))
+	(when-not (and (string? v) 
+					(or (> filter-above (Integer/parseInt v) 0)
+									(< 0 (Integer/parseInt v) filter-below)))
+					[k v])))
 
 (defn read-plist [^String source]
 	(nsobject->object
 		(PropertyListParser/parse source)))
 
 ;; -- Main --------------------------------
-;; -- CLI Configuration 
-(def cli-options
-  ;; An option with a required argument
-  [["-le" "--less-then value" "Kerning Value"
-	:default 0
-	:parse-fn #(Integer/parseInt %)]
-
-	["-ge" "--greater-then value" "Kerning Value"
-	:default 0
-	:parse-fn #(Integer/parseInt %)]
-   
-   ;; A boolean option defaulting to nil
-   ["-h" "--help"]])
-
-;; -- Run
 (defn -main [& args]
 	(def cli-options (parse-opts args cli-options))
-	(def src-file (first (cli-options "arguments")))
+	(def src-file (first (cli-options :arguments)))
+	;(println cli-options)
 
 	;; - Parse glyphs file
-	(when-not (nil? src-file)
-		(println (format "Processing file: %s" src-file))
+	(if (.exists (io/file src-file))
+		((println (format "Processing file: %s" src-file))
+		
 		;; - Parse file
 		(def gs-font-source (read-plist src-file))
+		
 		;; - Process
-		(def new-kerning (remove-kern-value-cond (gs-font-source "kerning") (fn [x] (value-below x 5))))
+		(def new-kerning 
+				(remove-kern-value-cond 
+						(gs-font-source "kerning") 
+								(fn [x] (value-check x ((cli-options :options) :less-than) ((cli-options :options) :greater-than)))))
+		
 		(prn new-kerning))
-)
+
+		(println (format "%s : Please specify a valid input file and options..." (clojure.string/join " " (vals application))))))
