@@ -8,10 +8,10 @@
 ;; that you use it at your own risk!
 
 ;; - Dependancies -------------------------
-(ns clj-parse-glyphs.core
+(ns fr-gs-kern-clean.core
 	(:require 	[clojure.java.io :as io] 
-				[clojure.walk])
-				;[clojure.tools.cli :refer [parse-opts]])
+				[clojure.walk]
+				[clojure.tools.cli :refer [parse-opts]])
 	(:import (com.dd.plist NSArray NSDictionary NSNumber NSString PropertyListParser)))
 
 
@@ -42,23 +42,42 @@
 
 (defn value-below [data filter-value]
 	(let [[k v] data]
-	(when-not (and (string? v) (< (Integer/parseInt v) filter-value)) [k v])))
+	(when-not (and (string? v) (< 0 (Integer/parseInt v) filter-value)) [k v])))
+
+(defn value-above [data filter-value]
+	(let [[k v] data]
+	(when-not (and (string? v) (> filter-value (Integer/parseInt v) 0)) [k v])))
 
 (defn read-plist [^String source]
 	(nsobject->object
 		(PropertyListParser/parse source)))
 
 ;; -- Main --------------------------------
-;; - Init
-;;(def src-file "d:\\test.glyphs")
+;; -- CLI Configuration 
+(def cli-options
+  ;; An option with a required argument
+  [["-le" "--less-then value" "Kerning Value"
+	:default 0
+	:parse-fn #(Integer/parseInt %)]
 
+	["-ge" "--greater-then value" "Kerning Value"
+	:default 0
+	:parse-fn #(Integer/parseInt %)]
+   
+   ;; A boolean option defaulting to nil
+   ["-h" "--help"]])
+
+;; -- Run
 (defn -main [& args]
-	(prn (format "Parsing file: %s" src-file))
-  	
-  	;; - Parse glyphs file
-	(def gs-font-source (read-plist src-file))
+	(def cli-options (parse-opts args cli-options))
+	(def src-file (first (cli-options "arguments")))
 
-	;; - Process
-	;(remove-kern-value-cond (gs-font-source "kerning") (fn [x] (value-below x 5)))
-
-  )
+	;; - Parse glyphs file
+	(when-not (nil? src-file)
+		(println (format "Processing file: %s" src-file))
+		;; - Parse file
+		(def gs-font-source (read-plist src-file))
+		;; - Process
+		(def new-kerning (remove-kern-value-cond (gs-font-source "kerning") (fn [x] (value-below x 5))))
+		(prn new-kerning))
+)
