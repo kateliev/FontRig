@@ -11,11 +11,12 @@
 (ns fr-gs-kern-clean.core
 	(:require 	[clojure.java.io :as io] 
 				[clojure.walk]
-				[clojure.tools.cli :refer [parse-opts]])
+				[clojure.tools.cli :refer [parse-opts]]
+				[clojure.string :as str])
 	(:import (com.dd.plist NSArray NSDictionary NSNumber NSString PropertyListParser)))
 
 ;; - Init ------------------------------
-(def application {:name "fr-gs-kern-clean" :version "1.2"})
+(def application {:name "fr-gs-kern-clean" :version "1.3"})
 
 ;; -- CLI Configuration 
 (def cli-options
@@ -56,10 +57,6 @@
 (defn remove-kern-value-cond [gs-font-kerning cond-function]
 	(clojure.walk/postwalk #(if (map? %) (into {} (map cond-function %)) %) gs-font-kerning))
 
-(defn value-below [data filter-value]
-	(let [[k v] data]
-	(when-not (and (string? v) (< 0 (Integer/parseInt v) filter-value)) [k v])))
-
 (defn value-check [data filter-below filter-above]
 	(let [[k v] data]
 	(when-not (and (string? v) 
@@ -67,9 +64,16 @@
 									(< 0 (Integer/parseInt v) filter-below)))
 					[k v])))
 
-(defn read-plist [^String source]
+(defn rename-file [filename]
+	(let [filename-split (str/split filename #"\.")]
+		(str/join "." (concat (drop-last filename-split) ["new"] [(last filename-split)]))))
+
+(defn read-plist [^String source-file]
 	(nsobject->object
-		(PropertyListParser/parse source)))
+		(PropertyListParser/parse source-file)))
+
+(defn write-plist [object destination-file]
+	(PropertyListParser/saveAsASCII object (io/file destination-file)))
 
 ;; -- Main --------------------------------
 (defn -main [& args]
@@ -90,6 +94,8 @@
 						(gs-font-source "kerning") 
 								(fn [x] (value-check x ((cli-options :options) :less-than) ((cli-options :options) :greater-than)))))
 		
-		(prn new-kerning))
+		(assoc gs-font-source :kerning new-kerning)
+		(println (type gs-font-source))
+		(write-plist gs-font-source (rename-file src-file)))
 
 		(println (format "%s : Please specify a valid input file and options..." (clojure.string/join " " (vals application))))))
