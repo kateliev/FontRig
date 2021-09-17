@@ -38,8 +38,8 @@
 
 (defmethod nsobject->object NSNumber [^NSNumber obj]
 	(cond 	(.isBoolean obj) (.boolValue obj)
-			(.isInteger obj) (.longValue obj)
-			:else (.doubleValue obj)))
+								(.isInteger obj) (.longValue obj)
+								:else (.doubleValue obj)))
 
 (defmethod nsobject->object NSString [^NSString obj]
 	(.getContent obj))
@@ -51,6 +51,29 @@
 	(into {}
 		(map (fn [^"java.util.LinkedHashMap$Entry" e]
 			[(.getKey e) (nsobject->object (.getValue e))])
+			(.. obj getHashMap entrySet))))
+
+(defmulti ^:private object->nsobject class)
+
+(defmethod object->nsobject java.lang.Boolean [obj]
+	(NSNumber obj))
+
+(defmethod object->nsobject java.lang.Double [obj]
+	(NSNumber obj))
+
+(defmethod object->nsobject java.lang.Long [obj]
+	(NSNumber obj))
+
+(defmethod object->nsobject java.lang.String [obj]
+	(NSString obj))
+
+(defmethod object->nsobject NSArray [^NSArray obj]
+	(map object->nsobject (.getArray obj)))
+
+(defmethod object->nsobject NSDictionary [^NSDictionary obj]
+	(into {}
+		(map (fn [^"java.util.LinkedHashMap$Entry" e]
+			[(.getKey e) (object->nsobject (.getValue e))])
 			(.. obj getHashMap entrySet))))
 
 ;; - Functions ----------------------------
@@ -71,6 +94,9 @@
 (defn read-plist [^String source-file]
 	(nsobject->object
 		(PropertyListParser/parse source-file)))
+
+(defn read-plist-raw [^String source-file]
+		(PropertyListParser/parse source-file))
 
 (defn write-plist [object destination-file]
 	(PropertyListParser/saveAsASCII object (io/file destination-file)))
