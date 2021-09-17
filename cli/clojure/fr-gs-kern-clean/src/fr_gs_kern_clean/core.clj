@@ -34,6 +34,7 @@
 
 ;; - Objects -----------------------------
 ;; -- Glyphs parser ----------------------
+;; -- NS to Clojure
 (defmulti ^:private nsobject->object class)
 
 (defmethod nsobject->object NSNumber [^NSNumber obj]
@@ -53,19 +54,13 @@
 			[(.getKey e) (nsobject->object (.getValue e))])
 			(.. obj getHashMap entrySet))))
 
+
+;; --- Clojure to NS 
 (defmulti ^:private object->nsobject class)
 
-(defmethod object->nsobject java.lang.Boolean [obj]
-	(NSNumber obj))
+(defmethod object->nsobject :default [obj] (NSNumber. obj))
 
-(defmethod object->nsobject java.lang.Double [obj]
-	(NSNumber obj))
-
-(defmethod object->nsobject java.lang.Long [obj]
-	(NSNumber obj))
-
-(defmethod object->nsobject java.lang.String [obj]
-	(NSString obj))
+(defmethod object->nsobject java.lang.String [^java.lang.String obj] (NSString. obj))
 
 (defmethod object->nsobject NSArray [^NSArray obj]
 	(map object->nsobject (.getArray obj)))
@@ -75,6 +70,7 @@
 		(map (fn [^"java.util.LinkedHashMap$Entry" e]
 			[(.getKey e) (object->nsobject (.getValue e))])
 			(.. obj getHashMap entrySet))))
+
 
 ;; - Functions ----------------------------
 (defn remove-kern-value-cond [gs-font-kerning cond-function]
