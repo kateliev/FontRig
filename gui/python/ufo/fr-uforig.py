@@ -19,12 +19,26 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from typerig.core.fileio import cla, krn
 
 # - Init ----------------------------
-app_name, app_version = 'UFO Rig', '1.25'
+app_name, app_version = 'UFO Rig', '1.30'
 
 # - Config ----------------------------
 cfg_trw_columns_class = ['Tag/Key', 'Data/Value', 'Info']
 cfg_file_open_formats = 'UFO Designspace (*.designspace);; UFO (*.plist);;'
 
+# - Functions -----------------------
+def xml_pretty_print(current, parent=None, index=-1, depth=0, indent='  '):
+	''' Adapted from: https://stackoverflow.com/questions/28813876/how-do-i-get-pythons-elementtree-to-pretty-print-to-an-xml-file'''
+	for i, node in enumerate(current):
+		xml_pretty_print(node, current, i, depth + 1)
+	
+	if parent is not None:
+		if index == 0:
+			parent.text = '\n' + (indent * depth)
+		else:
+			parent[index - 1].tail = '\n' + (indent * depth)
+		if index == len(parent) - 1:
+			current.tail = '\n' + (indent * (depth - 1))
+			
 # - Widgets -------------------------
 class trw_xml_explorer(QtWidgets.QTreeWidget):
 	def __init__(self):
@@ -131,10 +145,10 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 		size = len(obj)
 		return '{} {}'.format(size, pair[size == 1])
 
-	def __tree_walker(self, node, parent):
+	def __tree_walker_set(self, node, parent):
 		# - Set Node	
-		new_item_info = 'Node: {} / {}'.format(self.__plural(node), self.__plural(node.attrib, ['attributes', 'attribute']))
 		new_item_text = node.text.strip().strip('\n') if node.text is not None else ''
+		new_item_info = '<{}> {} / {}'.format(node.tag, self.__plural(node), self.__plural(node.attrib, ['attributes', 'attribute']))
 		new_item = QtWidgets.QTreeWidgetItem(parent, [node.tag, new_item_text, new_item_info])
 		new_item.setFlags(new_item.flags() | QtCore.Qt.ItemIsEditable)
 		new_item.setFont(2, self.font_italic)
@@ -147,7 +161,7 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 
 		# - Set Attributes
 		for pair in node.attrib.items():
-			new_attribute = QtWidgets.QTreeWidgetItem(new_item, [pair[0], pair[1], 'Attribute: {}'.format(node.tag)])
+			new_attribute = QtWidgets.QTreeWidgetItem(new_item, [pair[0], pair[1], '... attribute of <{}>'.format(node.tag)])
 			new_attribute.setIcon(0, self.folder_attrib_icon)
 			new_attribute.setFont(2, self.font_italic)
 			new_attribute.setForeground(2, self.brush_gray)
@@ -160,7 +174,21 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 		# - Set Children
 		if len(node):
 			for child in node:
-				self.__tree_walker(child, new_item)
+				self.__tree_walker_set(child, new_item)
+
+	def __tree_walker_get(self, node, parent):
+		if node.childCount() or '...' not in str(node.text(2)):
+			new_element = ET.Element(node.text(0))
+
+			if len(node.text(1)):
+				new_element.text = node.text(1)
+			
+			for c in range(node.childCount()):
+				self.__tree_walker_get(node.child(c), new_element)
+
+			parent.append(new_element)
+		else:
+			parent.set(node.text(0), node.text(1))
 
 	def set_tree(self, data, headers):
 		self.blockSignals(True)
@@ -170,7 +198,7 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 		# - Insert 
 		if data is not None and isinstance(data, type(ET.ElementTree(None))):
 			data_root = data.getroot()
-			self.__tree_walker(data_root, self)
+			self.__tree_walker_set(data_root, self)
 
 		self.expandAll()
 		for c in range(self.columnCount()):
@@ -181,7 +209,13 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 		self.blockSignals(False)
 
 	def get_tree(self):
-		pass
+		root = self.invisibleRootItem().child(0)
+		new_element = ET.Element(None)
+		self.__tree_walker_get(root, new_element)
+		xml_pretty_print(new_element)
+		root_element = ET.ElementTree(new_element)
+		return root_element
+		
 
 class wgt_designspace_manager(QtWidgets.QWidget):
 	def __init__(self, data_tree):
@@ -233,12 +267,16 @@ class main_ufo_manager(QtWidgets.QMainWindow):
 	# - File IO ---------------------------------------------
 	# -- Classes Reader
 	def file_save(self):
-		export_class = self.ufo_manager.trw_explorer.get_tree(False)
 		curr_path = pathlib.Path(__file__).parent.absolute()
+		
+		# - Get data from current active tab
+		curr_tab = self.wgt_tabs.widget(self.wgt_tabs.currentIndex())
+		curr_data = curr_tab.trw_explorer.get_tree()
 		export_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save file', str(curr_path), cfg_file_open_formats)
 
 		if len(export_file[0]):
-			pass
+			with open(export_file[0], 'wb') as exportFile:
+				curr_data.write(exportFile, encoding='utf-8', xml_declaration=True)
 		
 		self.status_bar.showMessage('File Saved: {}'.format(export_file[0]))
 				
