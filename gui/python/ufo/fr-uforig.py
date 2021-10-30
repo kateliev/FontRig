@@ -19,7 +19,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from typerig.core.fileio import cla, krn
 
 # - Init ----------------------------
-app_name, app_version = 'UFO Rig', '1.30'
+app_name, app_version = 'UFO Rig', '1.31'
 
 # - Config ----------------------------
 cfg_trw_columns_class = ['Tag/Key', 'Data/Value', 'Info']
@@ -60,7 +60,7 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 		# - Style
 		self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
 		self.setDragEnabled(True)
-		self.setDragDropMode(self.DragDrop)
+		self.setDragDropMode(self.InternalMove)
 		self.setDropIndicatorShown(True)
 		#self.header().setStretchLastSection(False)
 
@@ -125,21 +125,6 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 	def contextMenuEvent(self, event):
 		self.context_menu.popup(QtGui.QCursor.pos())
 
-	def dropEvent(self, event):
-		source = event.source().selectedItems()
-		destination = self.itemAt(event.pos())
-		modifiers = QtWidgets.QApplication.keyboardModifiers()
-
-		for item in source:
-			if modifiers != QtCore.Qt.AltModifier:
-				data = [item.text(0)]
-			else:
-				data = [item.text(1)]
-
-			self._addItem(data, destination)
-		
-		event.acceptProposedAction()
-
 	# - Getter/Setter -----------------------
 	def __plural(self, obj, pair=['items', 'item']):
 		size = len(obj)
@@ -154,7 +139,7 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 		new_item.setFont(2, self.font_italic)
 		new_item.setForeground(2, self.brush_gray)
 		
-		if len(node.getchildren()) or len(node.attrib):	
+		if len(list(node)) or len(node.attrib):	
 			new_item.setIcon(0, self.folder_children_icon)
 		else:
 			new_item.setIcon(0, self.folder_attrib_icon)
