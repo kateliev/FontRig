@@ -1,4 +1,4 @@
-# SCRIPT: FontRig / UFOrig
+# SCRIPT: FontRig / ufoRig
 # DESCRIPTION:	
 # -----------------------------------------------------------
 # (C) Vassil Kateliev, 2021 		(http://www.kateliev.com)
@@ -16,13 +16,12 @@ import xml.etree.ElementTree as ET
 
 from itertools import product
 from PyQt5 import QtCore, QtGui, QtWidgets
-from typerig.core.fileio import cla, krn
 
 # - Init ----------------------------
-app_name, app_version = 'UFO Rig', '1.31'
+app_name, app_version = 'ufoRig', '1.33'
 
 # - Config ----------------------------
-cfg_trw_columns_class = ['Tag/Key', 'Data/Value', 'Info']
+cfg_trw_columns_class = ['Tag/Key', 'Data/Value', 'Type']
 cfg_file_open_formats = 'UFO Designspace (*.designspace);; UFO (*.plist);;'
 
 # - Functions -----------------------
@@ -40,44 +39,51 @@ def xml_pretty_print(current, parent=None, index=-1, depth=0, indent='  '):
 			current.tail = '\n' + (indent * (depth - 1))
 			
 # - Widgets -------------------------
-class trw_xml_explorer(QtWidgets.QTreeWidget):
-	def __init__(self):
-		super(trw_xml_explorer, self).__init__()
+class trw_tree_explorer(QtWidgets.QTreeWidget):
+	def __init__(self, status_hook):
+		super(trw_tree_explorer, self).__init__()
 		
-		# - Init
+		# - Styling
+		# -- Fonts
 		self.font_bold = self.font()
 		self.font_bold.setBold(True)
 		self.font_italic = self.font()
 		self.font_italic.setItalic(True)
 		self.brush_gray = QtGui.QBrush(QtGui.QColor('Gray'))
 		self.attrib_background = QtGui.QColor('Yellow')
+		self.status_hook = status_hook
 
+		# -- Icons
 		self.folder_attrib_name = 'attributes'
 		self.folder_attrib_icon = self.style().standardIcon(QtWidgets.QStyle.SP_FileIcon)
 		self.folder_children_name = 'children'
 		self.folder_children_icon = self.style().standardIcon(QtWidgets.QStyle.SP_DirIcon)
 
-		# - Style
+		# - Drag and drop
 		self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
 		self.setDragEnabled(True)
 		self.setDragDropMode(self.InternalMove)
 		self.setDropIndicatorShown(True)
-		#self.header().setStretchLastSection(False)
 
 		# - Menus
 		self.context_menu = QtWidgets.QMenu(self)
 		self.context_menu.setTitle('Actions:')
-		act_addItem = QtWidgets.QAction('Add', self)
+		act_add_tag = QtWidgets.QAction('New Tag', self)
+		act_add_attrib = QtWidgets.QAction('New Attribute', self)
 		act_delItem = QtWidgets.QAction('Remove', self)
 		act_dupItem = QtWidgets.QAction('Duplicate', self)
 		act_uneItem = QtWidgets.QAction('Unnest', self)
 		
-		self.context_menu.addAction(act_addItem)
+		self.context_menu.addAction(act_add_tag)
+		self.context_menu.addAction(act_add_attrib)
+		self.context_menu.addSeparator()
 		self.context_menu.addAction(act_delItem)
 		self.context_menu.addAction(act_dupItem)
+		self.context_menu.addSeparator()
 		self.context_menu.addAction(act_uneItem)
 		
-		act_addItem.triggered.connect(lambda: self._addItem())
+		act_add_tag.triggered.connect(lambda: self._addItem(is_folder=True))
+		act_add_attrib.triggered.connect(lambda: self._addItem(is_folder=False))
 		act_dupItem.triggered.connect(lambda: self._duplicateItems())
 		act_uneItem.triggered.connect(lambda: self._unnestItem())
 		act_delItem.triggered.connect(lambda: self._removeItems())
@@ -89,25 +95,26 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 		for item in self.selectedItems():
 			(item.parent() or root).removeChild(item)
 
-	def _addItem(self, data=None, parent=None):
-		new_item_data = ['New Item'] if data is None else data
+	def _addItem(self, data=None, is_folder=False):
+		defualt_text = 'New Tag' if is_folder else 'New Attribute'
+		new_item_data = [defualt_text] if data is None else data
 		new_item = QtWidgets.QTreeWidgetItem(new_item_data)
-		new_item.setFlags(new_item.flags() & ~QtCore.Qt.ItemIsDropEnabled | QtCore.Qt.ItemIsEditable)
+		new_item.setFont(2, self.font_italic)
+		new_item.setForeground(2, self.brush_gray)
 		
-		if parent is None and len(self.selectedItems()):
-			parent = self.selectedItems()[0].parent()
-		
-		if parent is not None:
-			parent.addChild(new_item)
+		if is_folder:	
+			new_item.setIcon(0, self.folder_children_icon)
+			new_item.setFlags(new_item.flags() | QtCore.Qt.ItemIsEditable)
 		else:
-			self.addTopLevelItem(new_item)
+			new_item.setFlags(new_item.flags() & ~QtCore.Qt.ItemIsDropEnabled | QtCore.Qt.ItemIsEditable)
+			new_item.setIcon(0, self.folder_attrib_icon)
+
+		parent = self.selectedItems()[0].parent()
+		parent.addChild(new_item)
 
 	def _duplicateItems(self):
-		root = self.invisibleRootItem()
-		
 		for item in self.selectedItems():
-			data = [item.text(c) for c in range(item.columnCount())]
-			self._addItem(data)
+			item.parent().addChild(item.clone())
 		
 	def _unnestItem(self):
 		root = self.invisibleRootItem()
@@ -125,32 +132,55 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 	def contextMenuEvent(self, event):
 		self.context_menu.popup(QtGui.QCursor.pos())
 
-	# - Getter/Setter -----------------------
-	def __plural(self, obj, pair=['items', 'item']):
-		size = len(obj)
-		return '{} {}'.format(size, pair[size == 1])
+	@QtCore.pyqtSlot(QtWidgets.QTreeWidgetItem, int)
+	def set_status(self, item, col):
+		if item.childCount() and item.text(2) != 'attribute':
+			tags, attributes = 0, 0
 
+			for c in range(item.childCount()):
+				if item.child(c).childCount():
+					tags += 1
+				else:
+					attributes += 1
+
+			status_message = 'Info: Tag <{}> with {} / {}'.format(item.text(0), self._string_plural(tags), self._string_plural(attributes, 'attributes'))
+		else:
+			status_message = 'Info: Attribute "{}" of <{}>'.format(item.text(0), item.parent().text(0))
+		
+		self.status_hook.showMessage(status_message)
+
+	def _string_plural(self, count, text='items'):
+		text = text[:-1] if count == 1 else text
+		return '{} {}'.format(count, text)
+
+# -- XML -----------------------------------
+class trw_xml_explorer(trw_tree_explorer):
+	''' XML parsing and exporting tree exlorer'''
+
+	# - Getter/Setter -----------------------
 	def __tree_walker_set(self, node, parent):
-		# - Set Node	
+		# - Set Tag	
 		new_item_text = node.text.strip().strip('\n') if node.text is not None else ''
-		new_item_info = '<{}> {} / {}'.format(node.tag, self.__plural(node), self.__plural(node.attrib, ['attributes', 'attribute']))
-		new_item = QtWidgets.QTreeWidgetItem(parent, [node.tag, new_item_text, new_item_info])
+		new_item = QtWidgets.QTreeWidgetItem(parent, [node.tag, new_item_text, 'tag'])
 		new_item.setFlags(new_item.flags() | QtCore.Qt.ItemIsEditable)
 		new_item.setFont(2, self.font_italic)
 		new_item.setForeground(2, self.brush_gray)
 		
+		# - Set Icon
 		if len(list(node)) or len(node.attrib):	
 			new_item.setIcon(0, self.folder_children_icon)
 		else:
 			new_item.setIcon(0, self.folder_attrib_icon)
 
-		# - Set Attributes
+		# - Set Attribute
 		for pair in node.attrib.items():
-			new_attribute = QtWidgets.QTreeWidgetItem(new_item, [pair[0], pair[1], '... attribute of <{}>'.format(node.tag)])
+			new_attribute = QtWidgets.QTreeWidgetItem(new_item, [pair[0], pair[1], 'attribute'])
+			new_attribute.setFlags(new_item.flags() & ~QtCore.Qt.ItemIsDropEnabled | QtCore.Qt.ItemIsEditable)
 			new_attribute.setIcon(0, self.folder_attrib_icon)
 			new_attribute.setFont(2, self.font_italic)
 			new_attribute.setForeground(2, self.brush_gray)
-			new_attribute.setFlags(new_attribute.flags() | QtCore.Qt.ItemIsEditable)
+			
+			# - Set Styling
 			self.attrib_background.setAlpha(15)
 			
 			for col in range(self.columnCount()):
@@ -162,7 +192,7 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 				self.__tree_walker_set(child, new_item)
 
 	def __tree_walker_get(self, node, parent):
-		if node.childCount() or '...' not in str(node.text(2)):
+		if node.childCount() or 'attribute' not in str(node.text(2)):
 			new_element = ET.Element(node.text(0))
 
 			if len(node.text(1)):
@@ -185,30 +215,35 @@ class trw_xml_explorer(QtWidgets.QTreeWidget):
 			data_root = data.getroot()
 			self.__tree_walker_set(data_root, self)
 
+		# - Format
 		self.expandAll()
 		for c in range(self.columnCount()):
 			self.resizeColumnToContents(c)	
 		self.collapseAll()
 
+		# - Set
+		self.itemClicked.connect(self.set_status)
+		self.hideColumn(2)
 		self.setAlternatingRowColors(True)
 		self.blockSignals(False)
 
 	def get_tree(self):
 		root = self.invisibleRootItem().child(0)
 		new_element = ET.Element(None)
+		
 		self.__tree_walker_get(root, new_element)
 		xml_pretty_print(new_element)
+		
 		root_element = ET.ElementTree(new_element)
 		return root_element
 		
-
 class wgt_designspace_manager(QtWidgets.QWidget):
-	def __init__(self, data_tree):
+	def __init__(self, data_tree, status_hook):
 		super(wgt_designspace_manager, self).__init__()
 		
 		# - Widgets
 		# -- Trees
-		self.trw_explorer = trw_xml_explorer()
+		self.trw_explorer = trw_xml_explorer(status_hook)
 		self.trw_explorer.set_tree(data_tree, cfg_trw_columns_class)
 
 		# - Layout
@@ -222,14 +257,21 @@ class main_ufo_manager(QtWidgets.QMainWindow):
 		super(main_ufo_manager, self).__init__()
 
 		# - Init
-		# -- Central Widget
-		self.wgt_tabs = QtWidgets.QTabWidget()
-		self.setCentralWidget(self.wgt_tabs)
-		
+		self.setTabPosition(QtCore.Qt.TopDockWidgetArea, QtWidgets.QTabWidget.North )
+		self.setDockOptions(QtWidgets.QMainWindow.ForceTabbedDocks )
+
 		# -- Status bar
 		self.status_bar = QtWidgets.QStatusBar()
 		self.setStatusBar(self.status_bar)
-
+		
+		# -- Tab widget
+		self.wgt_tabs = QtWidgets.QTabWidget()
+		self.wgt_tabs.setTabsClosable(True)
+		self.wgt_tabs.tabCloseRequested.connect(lambda index: self.wgt_tabs.removeTab(index))
+		
+		# -- Central Widget
+		self.setCentralWidget(self.wgt_tabs)
+		
 		# - Menu bar
 		self.menu_file = QtWidgets.QMenu('File', self)
 
@@ -248,6 +290,12 @@ class main_ufo_manager(QtWidgets.QMainWindow):
 		# - Set
 		self.setWindowTitle('%s %s' %(app_name, app_version))
 		self.setGeometry(300, 100, 900, 720)
+
+	# - Docks ----------------------------------------------
+	def __park_docks(self):
+		all_docks = self.findChildren(QtWidgets.QDockWidget)
+		for dock in all_docks[1:]:
+			self.tabifyDockWidget(all_docks[0], dock)
 
 	# - File IO ---------------------------------------------
 	# -- Classes Reader
@@ -273,7 +321,7 @@ class main_ufo_manager(QtWidgets.QMainWindow):
 			if '.designspace' in import_file[0]:
 				file_tree = ET.parse(import_file[0])
 				tab_caption = os.path.split(import_file[0])[1]
-				self.wgt_tabs.addTab(wgt_designspace_manager(file_tree), tab_caption)
+				self.wgt_tabs.addTab(wgt_designspace_manager(file_tree, self.status_bar), tab_caption)
 
 		self.status_bar.showMessage('File Loaded: {}'.format(import_file[0]))
 
