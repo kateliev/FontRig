@@ -18,7 +18,7 @@ from itertools import product
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 # - Init ----------------------------
-app_name, app_version = 'ufoRig', '1.33'
+app_name, app_version = 'ufoRig', '1.35'
 
 # - Config ----------------------------
 cfg_trw_columns_class = ['Tag/Key', 'Data/Value', 'Type']
@@ -155,7 +155,7 @@ class trw_tree_explorer(QtWidgets.QTreeWidget):
 
 # -- XML -----------------------------------
 class trw_xml_explorer(trw_tree_explorer):
-	''' XML parsing and exporting tree exlorer'''
+	''' XML parsing and exporting tree widget'''
 
 	# - Getter/Setter -----------------------
 	def __tree_walker_set(self, node, parent):
@@ -223,7 +223,63 @@ class trw_xml_explorer(trw_tree_explorer):
 
 		# - Set
 		self.itemClicked.connect(self.set_status)
-		self.hideColumn(2)
+		self.setAlternatingRowColors(True)
+		self.blockSignals(False)
+
+	def get_tree(self):
+		pass
+
+class trw_plist_explorer(trw_tree_explorer):
+	''' pList parsing and exporting tree widget'''
+
+	# - Getter/Setter -----------------------
+	def __tree_walker_set(self, node, parent):
+		if isinstance(node, tuple):
+			node_text, node_data = str(node[0]), node[1]
+			node_data_text = str(node_data)
+			node_type = str(type(node[1]))
+
+			new_item = QtWidgets.QTreeWidgetItem(parent, [node_text, node_data_text, node_type])
+			new_item.setFlags(new_item.flags() | QtCore.Qt.ItemIsEditable)
+			new_item.setForeground(2, self.brush_gray)
+			new_item.setFont(2, self.font_italic)
+			new_item.setIcon(0, self.folder_attrib_icon)
+
+			if isinstance(node_data, (list, dict)):
+				node_data_list = node_data.values() if isinstance(node_data, dict) else node_data
+				if any([isinstance(item, (list, dict)) for item in node_data_list]):
+					new_item.setIcon(0, self.folder_children_icon)
+					new_item.setText(1, '')
+
+				self.__tree_walker_set(node_data, new_item)
+
+		elif isinstance(node, list):
+			for item in node:
+				self.__tree_walker_set(item, parent)
+		
+		elif isinstance(node, dict):
+			for item in node.items():
+				self.__tree_walker_set(item, parent)
+		
+	def __tree_walker_get(self, node, parent):
+		pass
+
+	def set_tree(self, data, headers):
+		self.blockSignals(True)
+		self.clear()
+		self.setHeaderLabels(headers)
+			
+		# - Insert 
+		self.__tree_walker_set(data, self)
+
+		# - Format
+		self.expandAll()
+		for c in range(self.columnCount()):
+			self.resizeColumnToContents(c)	
+		self.collapseAll()
+
+		# - Set
+		self.itemClicked.connect(self.set_status)
 		self.setAlternatingRowColors(True)
 		self.blockSignals(False)
 
@@ -244,6 +300,20 @@ class wgt_designspace_manager(QtWidgets.QWidget):
 		# - Widgets
 		# -- Trees
 		self.trw_explorer = trw_xml_explorer(status_hook)
+		self.trw_explorer.set_tree(data_tree, cfg_trw_columns_class)
+
+		# - Layout
+		lay_main = QtWidgets.QVBoxLayout()
+		lay_main.addWidget(self.trw_explorer)
+		self.setLayout(lay_main)
+
+class wgt_plist_manager(QtWidgets.QWidget):
+	def __init__(self, data_tree, status_hook):
+		super(wgt_plist_manager, self).__init__()
+		
+		# - Widgets
+		# -- Trees
+		self.trw_explorer = trw_plist_explorer(status_hook)
 		self.trw_explorer.set_tree(data_tree, cfg_trw_columns_class)
 
 		# - Layout
@@ -322,6 +392,12 @@ class main_ufo_manager(QtWidgets.QMainWindow):
 				file_tree = ET.parse(import_file[0])
 				tab_caption = os.path.split(import_file[0])[1]
 				self.wgt_tabs.addTab(wgt_designspace_manager(file_tree, self.status_bar), tab_caption)
+
+			if '.plist' in import_file[0]:
+				with open(import_file[0], 'rb') as plist_file:
+					file_tree = plistlib.load(plist_file)
+				tab_caption = os.path.split(import_file[0])[1]
+				self.wgt_tabs.addTab(wgt_plist_manager((tab_caption, file_tree), self.status_bar), tab_caption)
 
 		self.status_bar.showMessage('File Loaded: {}'.format(import_file[0]))
 
