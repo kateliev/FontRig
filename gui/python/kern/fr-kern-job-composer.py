@@ -18,7 +18,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from typerig.core.fileio import cla, krn
 
 # - Init ----------------------------
-app_name, app_version = 'FontRig | Kern Job Composer', '2.17'
+app_name, app_version = 'FontRig | Kern Job Composer', '2.20'
 
 # - Config ----------------------------
 cfg_trw_columns_class = ['Class', 'Members']
@@ -28,6 +28,10 @@ cfg_file_save_formats = 'DTL Kern Pairs (*.krn);;'
 cfg_glyph_separator = ' '
 cfg_class_mark = '@'
 cfg_ufo_group_prefix = 'public.kern'
+
+# -- Resident values -----------------
+res_file_last_save = {'CLA': None, 'JSON': None, 'KRN': None}
+res_path_last_save = {'CLA': None, 'JSON': None, 'KRN': None}
 
 # - Widgets -------------------------
 class trw_class_explorer(QtWidgets.QTreeWidget):
@@ -426,24 +430,33 @@ class main_class_manager(QtWidgets.QMainWindow):
 		# -- Actions
 		act_data_open_class = QtWidgets.QAction('Open Classes', self)
 		act_data_save_class = QtWidgets.QAction('Save Classes', self)
+		act_data_save_as_class = QtWidgets.QAction('Save Classes As...', self)
 		act_data_open_class.triggered.connect(self.file_open_classes)
-		act_data_save_class.triggered.connect(self.file_save_classes)
+		act_data_save_class.triggered.connect(lambda: self.file_save_classes(False))
+		act_data_save_as_class.triggered.connect(lambda: self.file_save_classes(True))
 		
 		act_data_open_comp = QtWidgets.QAction('Open Composition', self)
 		act_data_save_comp = QtWidgets.QAction('Save Composition', self)
+		act_data_save_as_comp = QtWidgets.QAction('Save Composition As...', self)
 		act_data_open_comp.triggered.connect(self.file_open_comp)
-		act_data_save_comp.triggered.connect(self.file_save_comp)
+		act_data_save_comp.triggered.connect(lambda: self.file_save_comp(False))
+		act_data_save_as_comp.triggered.connect(lambda: self.file_save_comp(True))
 
 		act_data_save_pairs = QtWidgets.QAction('Save Pairs', self)
-		act_data_save_pairs.triggered.connect(self.file_save_pairs)
+		act_data_save_as_pairs = QtWidgets.QAction('Save Pairs As...', self)
+		act_data_save_pairs.triggered.connect(lambda: self.file_save_pairs(False))
+		act_data_save_as_pairs.triggered.connect(lambda: self.file_save_pairs(True))
 
 		self.menu_file.addAction(act_data_open_class)
 		self.menu_file.addAction(act_data_save_class)
+		self.menu_file.addAction(act_data_save_as_class)
 		self.menu_file.addSeparator()
 		self.menu_file.addAction(act_data_open_comp)
 		self.menu_file.addAction(act_data_save_comp)
+		self.menu_file.addAction(act_data_save_as_comp)
 		self.menu_file.addSeparator()
 		self.menu_file.addAction(act_data_save_pairs)
+		self.menu_file.addAction(act_data_save_as_pairs)
 
 		# -- Set Menu
 		self.menuBar().addMenu(self.menu_file)
@@ -454,10 +467,21 @@ class main_class_manager(QtWidgets.QMainWindow):
 
 	# - File IO ---------------------------------------------
 	# -- Classes Reader
-	def file_save_classes(self):
+	def file_save_classes(self, get_filename=True):
+		if res_file_last_save['CLA'] is None:
+			curr_path = pathlib.Path(__file__).parent.absolute()  
+		else:
+			curr_path = pathlib.Path(res_file_last_save['CLA'][0]).parent.absolute()  
+
+		if res_file_last_save['CLA'] is not None and not get_filename and os.path.isfile(res_file_last_save['CLA'][0]):
+			export_file = res_file_last_save['CLA']
+		else:
+			export_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Classes to file', str(curr_path), cfg_file_open_formats)
+			if len(export_file[0]):	res_file_last_save['CLA'] = export_file
+		
 		export_class = self.class_manager.trw_source_classes.get_tree(False)
-		curr_path = pathlib.Path(__file__).parent.absolute()
-		export_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Classes to file', str(curr_path), cfg_file_open_formats)
+
+		print(export_file)
 
 		if len(export_file[0]):
 			if '*.cla' in export_file[1]:
@@ -475,6 +499,7 @@ class main_class_manager(QtWidgets.QMainWindow):
 		temp_classes = []
 		curr_path = pathlib.Path(__file__).parent.absolute()
 		import_file = QtWidgets.QFileDialog.getOpenFileName(self, 'Load Kerning Classes from file', str(curr_path), cfg_file_open_formats)
+		res_file_last_save['CLA'] = import_file
 			
 		if len(import_file[0]):
 			# - DTL Classes File
@@ -500,10 +525,19 @@ class main_class_manager(QtWidgets.QMainWindow):
 		self.class_manager.trw_source_classes.set_tree(load_data, cfg_trw_columns_class)
 		self.status_bar.showMessage('{} Kerning Classes Loaded from: {}'.format(len(load_data[0][1]), import_file[0]))
 
-	def file_save_comp(self):
+	def file_save_comp(self, get_filename=True):
+		if res_file_last_save['JSON'] is None:
+			curr_path = pathlib.Path(__file__).parent.absolute()  
+		else:
+			curr_path = pathlib.Path(res_file_last_save['JSON'][0]).parent.absolute()
+
+		if res_file_last_save['JSON'] is not None and not get_filename and os.path.isfile(res_file_last_save['JSON'][0]):
+			export_file = res_file_last_save['JSON']
+		else:
+			export_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Pairs Composition to file', str(curr_path), '(*.json);;')
+			if len(export_file[0]):	res_file_last_save['JSON'] = export_file
+		
 		export_comp = self.class_manager.trw_kern_assembler.get_tree()
-		curr_path = pathlib.Path(__file__).parent.absolute()
-		export_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Pairs Composition to file', str(curr_path), '(*.json);;')
 		
 		if len(export_file[0]):
 			with open(export_file[0], 'w') as writer:
@@ -516,6 +550,7 @@ class main_class_manager(QtWidgets.QMainWindow):
 	def file_open_comp(self):
 		curr_path = pathlib.Path(__file__).parent.absolute()
 		import_file = QtWidgets.QFileDialog.getOpenFileName(self, 'Load Pairs Composition from file', str(curr_path), '(*.json);;')
+		res_file_last_save['JSON'] = import_file
 
 		if len(import_file[0]):
 			with open(import_file[0], 'r') as reader:
@@ -526,10 +561,20 @@ class main_class_manager(QtWidgets.QMainWindow):
 		self.class_manager.trw_kern_assembler.set_tree(import_comp, cfg_trw_columns_pairs, True)
 		self.status_bar.showMessage('{} Composition Groups Loaded from: {}'.format(len(import_comp), import_file[0]))
 
-	def file_save_pairs(self):
+	def file_save_pairs(self, get_filename=True):
+		if res_file_last_save['KRN'] is None:
+			curr_path = pathlib.Path(__file__).parent.absolute()  
+		else:
+			curr_path = pathlib.Path(res_file_last_save['KRN'][0]).parent.absolute()
+
+		if res_file_last_save['KRN'] is not None and not get_filename and os.path.isfile(res_file_last_save['KRN'][0]):
+			export_file = res_file_last_save['KRN'] 
+		else:
+			export_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Kerning Pairs to file', str(curr_path), cfg_file_save_formats)
+			if len(export_file[0]):	res_file_last_save['KRN'] = export_file
+		
 		export_pairs = self.class_manager.gen_kern_pairs()
 		curr_path = pathlib.Path(__file__).parent.absolute()
-		export_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Kerning Pairs to file', str(curr_path), cfg_file_save_formats)
 			
 		if len(export_file[0]):
 			# - DTL Kern pair file File
