@@ -16,9 +16,10 @@ import plistlib
 from itertools import product
 from PyQt5 import QtCore, QtGui, QtWidgets
 from typerig.core.fileio import cla, krn
+from typerig.core.base.message import output
 
 # - Init ----------------------------
-app_name, app_version = 'FontRig | Kern Job Composer', '2.20'
+app_name, app_version = 'FontRig | Kern Job Composer', '2.30'
 
 # - Config ----------------------------
 cfg_trw_columns_class = ['Class', 'Members']
@@ -34,6 +35,41 @@ res_file_last_save = {'CLA': None, 'JSON': None, 'KRN': None}
 res_path_last_save = {'CLA': None, 'JSON': None, 'KRN': None}
 
 # - Widgets -------------------------
+class trw_file_load(QtWidgets.QWidget):
+	def __init__(self, label_text=None, placeholder_text=None, button_text=None, dialog_message=None, dialog_formats=None):
+		super(trw_file_load, self).__init__()
+
+		# - Init
+		lay_main = QtWidgets.QHBoxLayout()
+
+		button_text = '...' if button_text is None else button_text
+		lable_text = 'File:' if label_text is None else label_text
+
+		self.dialog_message = 'Open file' if dialog_message is None else dialog_message
+		self.dialog_formats = 'All files (*.*);;' if dialog_formats is None else dialog_formats
+
+		# - Widgets
+		lbl_file = QtWidgets.QLabel(label_text)
+		lay_main.addWidget(lbl_file)
+
+		self.value = QtWidgets.QLineEdit()
+		lay_main.addWidget(self.value)
+		
+		if placeholder_text is not None: 
+			self.value.setPlaceholderText(placeholder_text)
+
+		btn_load = QtWidgets.QPushButton(button_text)
+		btn_load.clicked.connect(lambda: self.load_file())
+		lay_main.addWidget(btn_load)
+
+		lay_main.setContentsMargins(0, 0, 0, 0)
+		self.setLayout(lay_main)
+
+	def load_file(self):
+		curr_path = pathlib.Path(__file__).parent.absolute() 
+		file_path = QtWidgets.QFileDialog.getOpenFileName(self, self.dialog_message, str(curr_path), self.dialog_formats)
+		self.value.setText(file_path[0])
+
 class trw_class_explorer(QtWidgets.QTreeWidget):
 	def __init__(self, set_checks=False):
 		super(trw_class_explorer, self).__init__()
@@ -410,6 +446,100 @@ class wgt_class_manager(QtWidgets.QWidget):
 		pair_export = sum(pair_export, [])
 		return pair_export
 
+# - Tools ----------------------------------------------
+class tool_cla_copy_leader(QtWidgets.QDialog):
+	def __init__(self):
+		super(tool_cla_copy_leader, self).__init__()
+
+		# - Init
+		lay_main = QtWidgets.QGridLayout()
+
+		# - Widgets
+		lbl_desc = QtWidgets.QLabel('Transfer kerning class leaders from source to destination.')
+		lay_main.addWidget(lbl_desc, 0, 0, 1, 2)
+
+		self.edt_file_src = trw_file_load('Source:', 'Source CLA file path', '...', 'Open Source Classes file', cfg_file_open_formats)
+		lay_main.addWidget(self.edt_file_src, 1, 0, 1, 2)
+
+		self.edt_file_dst = trw_file_load('Destination:', 'Destination CLA file path', '...', 'Open destination Classes file', cfg_file_open_formats)
+		lay_main.addWidget(self.edt_file_dst, 2, 0, 1, 2)
+
+		self.opt_cla_add_leader = QtWidgets.QCheckBox('Force add missing class leader if leader not found in destination class.')
+		self.opt_cla_add_leader.setChecked(False)
+		lay_main.addWidget(self.opt_cla_add_leader, 4, 0, 1, 2)
+
+		self.opt_file_backup = QtWidgets.QCheckBox('Make backup of destination file (*.bak)')
+		self.opt_file_backup.setChecked(True)
+		lay_main.addWidget(self.opt_file_backup, 3, 0, 1, 2)
+
+		btn_proceed = QtWidgets.QPushButton('Proceed')
+		lay_main.addWidget(btn_proceed, 5, 0, 1, 1)
+		btn_proceed.clicked.connect(self.cla_copy_leaders)
+
+		btn_cancel = QtWidgets.QPushButton('Cancel')
+		lay_main.addWidget(btn_cancel, 5, 1, 1, 2)
+		btn_cancel.clicked.connect(lambda: self.close())
+
+		self.setLayout(lay_main)
+		self.setWindowTitle('Classes: Copy Leaders')
+		self.show()
+
+	def cla_copy_leaders(self):
+		# - Init
+		source_path = self.edt_file_src.value.text()
+		destination_path = self.edt_file_dst.value.text()
+		source_classes, destination_classes = [], []
+
+		# - Parse files
+		if '.cla' in source_path and '.cla' in destination_path:
+			with cla.CLAparser(source_path) as reader:
+				for line in reader:
+					source_classes.append(line)
+
+			with cla.CLAparser(destination_path) as reader:
+				for line in reader:
+					destination_classes.append(line)
+		else:
+			output(2, app_name, 'Invalid source/destination path provided!')
+			return
+
+		# - Process classes
+		source_classes_dict, destination_classes_dict = dict(source_classes), dict(destination_classes) 
+
+		for src_class_name, src_class_data in source_classes_dict.items():
+			if src_class_name in destination_classes_dict:
+				# - Init
+				src_class_leader = src_class_data[0]
+				dst_class_data = destination_classes_dict[src_class_name]
+				
+				if src_class_leader not in dst_class_data and not self.opt_cla_add_leader.isChecked():
+					output(1, app_name, 'Destination class:{} is missing source leader: {}'.format(src_class_name, src_class_leader))
+					continue
+
+				# - Tidy up
+				dst_class_data = sorted(dst_class_data)
+
+				if src_class_leader in dst_class_data :
+					dst_leader_idx = dst_class_data.index(src_class_leader)
+					dst_class_data.pop(dst_leader_idx)
+
+				# - Add class leader (first in list) to destination class 
+				dst_class_data.insert(0, src_class_leader)
+				destination_classes_dict[src_class_name] = dst_class_data
+
+			else:
+				output(1, app_name, 'Destination class:{} is missing! {}'.format(src_class_name))
+
+		# - Save files
+		if self.opt_file_backup.isChecked():
+			os.rename(destination_path, destination_path.replace('.cla', '.bak'))
+
+		with cla.CLAparser(destination_path, 'w') as writer:
+				writer.dump(destination_classes_dict.items())
+
+		output(0, app_name, 'Copying class leaders from: {} to: {}'.format(source_path, destination_path))
+				
+
 # - Dialogs and Main -----------------------------------	
 class main_class_manager(QtWidgets.QMainWindow):
 	def __init__(self):
@@ -425,45 +555,60 @@ class main_class_manager(QtWidgets.QMainWindow):
 		self.setStatusBar(self.status_bar)
 
 		# - Menu bar
+		# -- File
 		self.menu_file = QtWidgets.QMenu('File', self)
 
-		# -- Actions
-		act_data_open_class = QtWidgets.QAction('Open Classes', self)
-		act_data_save_class = QtWidgets.QAction('Save Classes', self)
-		act_data_save_as_class = QtWidgets.QAction('Save Classes As...', self)
-		act_data_open_class.triggered.connect(self.file_open_classes)
-		act_data_save_class.triggered.connect(lambda: self.file_save_classes(False))
-		act_data_save_as_class.triggered.connect(lambda: self.file_save_classes(True))
+		# --- File Actions
+		file_act_data_open_class = QtWidgets.QAction('Open Classes', self)
+		file_act_data_save_class = QtWidgets.QAction('Save Classes', self)
+		file_act_data_save_as_class = QtWidgets.QAction('Save Classes As...', self)
+		file_act_data_open_class.triggered.connect(self.file_open_classes)
+		file_act_data_save_class.triggered.connect(lambda: self.file_save_classes(False))
+		file_act_data_save_as_class.triggered.connect(lambda: self.file_save_classes(True))
 		
-		act_data_open_comp = QtWidgets.QAction('Open Composition', self)
-		act_data_save_comp = QtWidgets.QAction('Save Composition', self)
-		act_data_save_as_comp = QtWidgets.QAction('Save Composition As...', self)
-		act_data_open_comp.triggered.connect(self.file_open_comp)
-		act_data_save_comp.triggered.connect(lambda: self.file_save_comp(False))
-		act_data_save_as_comp.triggered.connect(lambda: self.file_save_comp(True))
+		file_act_data_open_comp = QtWidgets.QAction('Open Composition', self)
+		file_act_data_save_comp = QtWidgets.QAction('Save Composition', self)
+		file_act_data_save_as_comp = QtWidgets.QAction('Save Composition As...', self)
+		file_act_data_open_comp.triggered.connect(self.file_open_comp)
+		file_act_data_save_comp.triggered.connect(lambda: self.file_save_comp(False))
+		file_act_data_save_as_comp.triggered.connect(lambda: self.file_save_comp(True))
 
-		act_data_save_pairs = QtWidgets.QAction('Save Pairs', self)
-		act_data_save_as_pairs = QtWidgets.QAction('Save Pairs As...', self)
-		act_data_save_pairs.triggered.connect(lambda: self.file_save_pairs(False))
-		act_data_save_as_pairs.triggered.connect(lambda: self.file_save_pairs(True))
+		file_act_data_save_pairs = QtWidgets.QAction('Save Pairs', self)
+		file_act_data_save_as_pairs = QtWidgets.QAction('Save Pairs As...', self)
+		file_act_data_save_pairs.triggered.connect(lambda: self.file_save_pairs(False))
+		file_act_data_save_as_pairs.triggered.connect(lambda: self.file_save_pairs(True))
 
-		self.menu_file.addAction(act_data_open_class)
-		self.menu_file.addAction(act_data_save_class)
-		self.menu_file.addAction(act_data_save_as_class)
+		self.menu_file.addAction(file_act_data_open_class)
+		self.menu_file.addAction(file_act_data_save_class)
+		self.menu_file.addAction(file_act_data_save_as_class)
 		self.menu_file.addSeparator()
-		self.menu_file.addAction(act_data_open_comp)
-		self.menu_file.addAction(act_data_save_comp)
-		self.menu_file.addAction(act_data_save_as_comp)
+		self.menu_file.addAction(file_act_data_open_comp)
+		self.menu_file.addAction(file_act_data_save_comp)
+		self.menu_file.addAction(file_act_data_save_as_comp)
 		self.menu_file.addSeparator()
-		self.menu_file.addAction(act_data_save_pairs)
-		self.menu_file.addAction(act_data_save_as_pairs)
+		self.menu_file.addAction(file_act_data_save_pairs)
+		self.menu_file.addAction(file_act_data_save_as_pairs)
 
-		# -- Set Menu
 		self.menuBar().addMenu(self.menu_file)
+		
+		# -- Tools
+		self.menu_tools = QtWidgets.QMenu('Tools', self)
+
+		# --- Tool actions
+		tool_act_cla_copy_leader = QtWidgets.QAction('Class: Copy leaders', self)
+		tool_act_cla_copy_leader.triggered.connect(lambda: self.simple_run_action('tool_cla_copy_leader'))
+		
+		self.menu_tools.addAction(tool_act_cla_copy_leader)
+		self.menuBar().addMenu(self.menu_tools)
+
 
 		# - Set
 		self.setWindowTitle('%s %s' %(app_name, app_version))
 		self.setGeometry(300, 100, 900, 720)
+
+	# - Actions ---------------------------------------------
+	def simple_run_action(self, tool_class):
+		self.run_action_dialog = eval('{}()'.format(tool_class))
 
 	# - File IO ---------------------------------------------
 	# -- Classes Reader
@@ -480,8 +625,6 @@ class main_class_manager(QtWidgets.QMainWindow):
 			if len(export_file[0]):	res_file_last_save['CLA'] = export_file
 		
 		export_class = self.class_manager.trw_source_classes.get_tree(False)
-
-		print(export_file)
 
 		if len(export_file[0]):
 			if '*.cla' in export_file[1]:
