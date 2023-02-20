@@ -19,7 +19,7 @@ from typerig.core.fileio import cla, krn
 from typerig.core.base.message import output
 
 # - Init ----------------------------
-app_name, app_version = 'FontRig | Kern Job Composer', '2.30'
+app_name, app_version = 'FontRig | Kern Job Composer', '2.31'
 
 # - Config ----------------------------
 cfg_trw_columns_class = ['Class', 'Members']
@@ -528,7 +528,7 @@ class tool_cla_copy_leader(QtWidgets.QDialog):
 				destination_classes_dict[src_class_name] = dst_class_data
 
 			else:
-				output(1, app_name, 'Destination class:{} is missing! {}'.format(src_class_name))
+				output(1, app_name, 'Destination class:{} is missing!'.format(src_class_name))
 
 		# - Save files
 		if self.opt_file_backup.isChecked():
