@@ -8,37 +8,19 @@
 # that you use it at your own risk!
 
 # - Dependencies --------------------------------
-from __future__ import absolute_import, print_function, unicode_literals
-
 __requires__ = ['fontTools']
 
-import os, glob, argparse, json
+import os, sys, argparse, json, pprint
+from inspect import getmembers
 
-from fontTools.misc.py23 import *
+#from fontTools.misc.py23 import *
 from fontTools import ttLib
 
 # -- String -------------------------------------
-__version__ = 1.0
+__version__ = 1.3
 
 tool_name = 'FR-RENAME'
 tool_description = 'FontRig | Rename a *.ttf or *.otf file'
-
-# -- Configuration
-# -- lookup_name: (parent, accessor, is_dict)
-lookup_dict = {	'cff_FamilyName':			('CFF', 0, True),
-				'cff_FullName':				('CFF', 0, True),
-				'cff_fontNames':			('CFF', None, None),
-				
-				'mac_font_family_name': 	('names', 1, False),
-				'mac_font_style_name': 		('names', 4, False),
-				'mac_postscript_name': 		('names', 6, False),
-				'mac_trademark':			('names', 7, False),
-				
-				'ms_font_family_name': 		('names', 15, False),
-				'ms_font_style_name': 		('names', 16, False),
-				'ms_font_full_name': 		('names', 18, False),
-				'ms_trademark': 			('names', 21, False),
-			}
 
 # - Helpers -------------------------------------
 def _output(i, message):
@@ -48,55 +30,127 @@ def _output(i, message):
 def _get_record(record_list, index):
 	for record in record_list:
 		if record.nameID == index:
-			return record
+			try:
+				return record.string.decode().replace('\x00','')
+
+			except UnicodeDecodeError:
+				return record.string
+
+def _set_record(record_list, index, value):
+	for record in record_list:
+		if record.nameID == index:
+			record.string = value
+
+def _get_properties(object):
+	return [name for name, value in getmembers(object, lambda x: isinstance(x, property))]
 
 # - Clases --------------------------------------
 class FRfontNames(object):
-	'''Fonts Names Object for dealing with nametables'''
+	'''Fonts Names Object for dealing with name tables'''
 
 	def __init__(self, file_path):
 		self.file_path = file_path
 		self.font = ttLib.TTFont(self.file_path)
-	
-	# - Internals
-	def __getitem__(self, item):
-		if item in lookup_dict.keys():
-			parent, accessor, is_dict = lookup_dict[item]
-			
-			try:
-				table = getattr(self.font, parent)
-
-				if is_dict:
-					return getattr(table, accessor)
-				else:
-					return _get_record(table, accessor)
-
-			except:
-				_output(3, 'Cannot access/read table: {}'.format(parent))
-
+		self.is_cff = 'CFF ' in self.font
 		
-	def __setitem__(self, item, value):
-		if item in lookup_dict.keys():
-			parent, accessor, is_dict = lookup_dict[item]
-			
-			try:
-				table = getattr(self.font, parent)
+	# - Properties -------------------------------------
+	@property
+	def cff_FamilyName(self):
+		if self.is_cff:
+			return	self.font['CFF '].cff[0].FamilyName
 
-				if is_dict:
-					setattr(table, accessor, value)
-				else:
-					setattr(_get_record(table, accessor), 'string', value)
+	@cff_FamilyName.setter
+	def cff_FamilyName(self, value):
+		if self.is_cff:
+			self.font['CFF '].cff[0].FamilyName = value
 
-			except:
-				_output(3, 'Cannot access/write to table: {}'.format(parent))
+	@property
+	def cff_FullName(self):
+		if self.is_cff:
+			return	self.font['CFF '].cff[0].FullName
 
-	# - Procedures 
+	@cff_FullName.setter
+	def cff_FullName(self, value):
+		if self.is_cff:
+			self.font['CFF '].cff[0].FullName = value
+
+	@property
+	def cff_fontNames(self):
+		if self.is_cff:
+			return	self.font['CFF '].cff.fontNames
+
+	@cff_fontNames.setter
+	def cff_fontNames(self, value):
+		if self.is_cff:
+			self.font['CFF '].cff.fontNames = value
+
+	@property
+	def font_family_name(self):
+		return 	_get_record(self.font['name'].names, 1)
+
+	@font_family_name.setter
+	def font_family_name(self, value):
+		_set_record(self.font['name'].names, 1, value)
+
+	@property
+	def font_style_name(self):
+		return 	_get_record(self.font['name'].names, 2)
+
+	@font_style_name.setter
+	def font_style_name(self, value):
+		_set_record(self.font['name'].names, 2, value)
+
+	@property
+	def font_full_name(self):
+		return 	_get_record(self.font['name'].names, 4)
+
+	@font_full_name.setter
+	def font_full_name(self, value):
+		_set_record(self.font['name'].names, 4, value)
+
+	@property
+	def postscript_name(self):
+		return 	_get_record(self.font['name'].names, 6)
+
+	@postscript_name.setter
+	def postscript_name(self, value):
+		_set_record(self.font['name'].names, 6, value.replace(' ', ''))
+
+	@property
+	def trademark(self):
+		return	_get_record(self.font['name'].names, 0)	
+
+	@trademark.setter
+	def trademark(self, value):
+		_set_record(self.font['name'].names, 0, value)	
+
+	# - Procedures ---------------------------------------
+	def build_names(self, name_string, style_string=''):
+		if not len(style_string):
+			if self.font_style_name is not None and len(self.font_style_name):
+				style_string = self.font_style_name
+		
+			else:
+			 	output(3, 'Missing font style name\nQuitting...')
+			 	sys.exit(1)
+
+		self.font_family_name = name_string # what about ID16?
+		self.font_full_name = '{} {}'.format(name_string, style_string)
+		self.postscript_name = '{}-{}'.format(name_string.replace(' ', ''), style_string.replace(' ', ''))
+
+		if self.is_cff:
+		    self.cff_FamilyName = self.font_family_name
+		    self.cff_FullName = self.font_full_name
+		    self.cff_fontNames = self.postscript_name
+
+
 	def save(self, output_path=None):
 		output_path = self.file_path if output_path is None else output_path
 		self.font.save(output_path)
 	
 	def dump(self):
-		return [(item, self[item]) for item in lookup_dict.keys()]
+		properties = _get_properties(FRfontNames)
+		return [(prop, getattr(self, prop)) for prop in properties]
 
 	def fromDict(self, names_dict:dict):
 		for item, value in names_dict.items():
@@ -121,7 +175,7 @@ arg_parser.add_argument('--name', '-n',
 						type=str,
 						metavar='path',
 						required=False,
-						help='Set new font name')
+						help='Auto build new font names and name tables')
 
 arg_parser.add_argument('--style', '-s',
 						type=str,
@@ -132,19 +186,19 @@ arg_parser.add_argument('--style', '-s',
 arg_parser.add_argument('--report-names', '-r',
 						action='store_true',
 						required=False,
-						help='Report font names and nametables')
+						help='Report font names and name tables')
 
 arg_parser.add_argument('--dump-names', '-d',
 						action='store_true',
 						required=False,
-						help='Dump font names and nametables')
+						help='Dump font names and name tables')
 
-for param, data in lookup_dict.items():
-	arg_parser.add_argument('--{}'.format(param),
+for prop in _get_properties(FRfontNames):
+	arg_parser.add_argument('--{}'.format(prop),
 							type=str,
 							metavar='str',
 							required=False,
-							help='Set font {} {} value'.format(data[0].upper(), param))	
+							help='Set font {} value'.format(prop))	
 
 arg_parser.add_argument('--version', '-v',
 						action="version",
@@ -175,29 +229,27 @@ font_names_data = FRfontNames(font_file)
 font_filename = os.path.split(font_file)[1]
 font_save_path = os.path.join(work_path, font_filename)
 
-font_names_data_dump = font_names_data.dump()
 changes_made = False
 
 # - Process
 if args.report_names:
-	report_string = '{deco}\nFont:\t{font}\n{deco}\n{metric}\n'.format(deco='-'*40, font=font_filename, metric='\n'.join(['{}\t{} : {}'.format(lookup_dict[item[0]],item[0],item[1]) for item in font_names_data_dump]))
+	report_string = '{deco}\nFont:\t{font}\n{deco}\n{names}\n'.format(deco='-'*40, font=font_filename, names='\n'.join(['{} : {}'.format(item[0],item[1]) for item in font_names_data.dump()]))
 	print(report_string)
-
+	
 elif args.dump_names:
 	font_names_data_dump_filename = os.path.join(work_path, os.path.splitext(font_filename)[0] + '-names-dump.json')
 	with open(font_names_data_dump_filename, 'w') as json_tree:
-		json_tree.write(json.dumps(font_names_data_dump))
+		json_tree.write(json.dumps(font_names_data.dump()))
 	
 	_output(0,'Saved font names dump: {}'.format(font_names_data_dump_filename))
 	
 else:
-	for param, loc in lookup_dict.items():
-		new_parameter_value = getattr(args, param)
+	if args.name is not None:
+		new_name = str(args.name)
+		new_style = str(args.style) if args.style is not None else ''
 		
-		if new_parameter_value is not None:
-			font_names_data[param] = new_parameter_value
-			changes_made = True
-			_output(0,'Font: {} Changed: {} to {}'.format(font_save_path, param, new_parameter_value))
+		font_names_data.build_names(args.name, new_style)
+		changes_made = True
 
 # - Save changes
 if changes_made:
