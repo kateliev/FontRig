@@ -17,7 +17,7 @@ from inspect import getmembers
 from fontTools import ttLib
 
 # -- String -------------------------------------
-__version__ = 1.3
+__version__ = 1.4
 
 tool_name = 'FR-RENAME'
 tool_description = 'FontRig | Rename a *.ttf or *.otf file'
@@ -173,13 +173,13 @@ arg_parser.add_argument('--output-path', '-o',
 
 arg_parser.add_argument('--name', '-n',
 						type=str,
-						metavar='path',
+						metavar='str',
 						required=False,
 						help='Auto build new font names and name tables')
 
 arg_parser.add_argument('--style', '-s',
 						type=str,
-						metavar='path',
+						metavar='str',
 						required=False,
 						help='Set new style name')
 
@@ -209,7 +209,7 @@ args = arg_parser.parse_args()
 
 # -- Paths and configuration
 font_file = args.File
-work_path = args.output_path if args.output_path is not None else os.path.split(font_file)[0]
+work_path = os.path.split(font_file)[0]
 
 # - Begin ----------------------------------------------------------
 _output(2, 'FontRig | {} ver. {}'.format(tool_name, __version__))
@@ -227,7 +227,7 @@ if not os.path.exists(work_path):
 # -- Process
 font_names_data = FRfontNames(font_file)
 font_filename = os.path.split(font_file)[1]
-font_save_path = os.path.join(work_path, font_filename)
+font_save_path = args.output_path if args.output_path else os.path.join(work_path, font_filename)
 
 changes_made = False
 
@@ -255,7 +255,6 @@ else:
 if changes_made:
 	font_names_data.save(font_save_path)
 	_output(0,'Saved Font: {}'.format(font_save_path))
-
 
 
 
