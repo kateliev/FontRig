@@ -17,7 +17,7 @@ from inspect import getmembers
 from fontTools import ttLib
 
 # -- String -------------------------------------
-__version__ = 1.4
+__version__ = 1.5
 
 tool_name = 'FR-RENAME'
 tool_description = 'FontRig | Rename a *.ttf or *.otf file'
@@ -30,11 +30,7 @@ def _output(i, message):
 def _get_record(record_list, index):
 	for record in record_list:
 		if record.nameID == index:
-			try:
-				return record.string.decode().replace('\x00','')
-
-			except UnicodeDecodeError:
-				return record.string
+			return record.string.decode(record.getEncoding())
 
 def _set_record(record_list, index, value):
 	for record in record_list:
