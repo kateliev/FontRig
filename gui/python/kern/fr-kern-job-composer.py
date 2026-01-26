@@ -19,7 +19,7 @@ from typerig.core.fileio import cla, krn
 from typerig.core.base.message import output
 
 # - Init ----------------------------
-app_name, app_version = 'FontRig | Kern Job Composer', '2.31'
+app_name, app_version = 'FontRig | Kern Job Composer', '2.32'
 
 # - Config ----------------------------
 cfg_trw_columns_class = ['Class', 'Members']
@@ -91,6 +91,9 @@ class trw_class_explorer(QtWidgets.QTreeWidget):
 		act_set1st = QtWidgets.QAction('1ST', self)
 		act_set2nd = QtWidgets.QAction('2ND', self)
 		act_setclass = QtWidgets.QAction('Class', self)
+		act_pasteSlash = QtWidgets.QAction('Paste /slash/separated', self)
+		act_pasteComma = QtWidgets.QAction('Paste "comma","separated"', self)
+		act_pasteNewline = QtWidgets.QAction('Paste newline separated', self)
 
 		self.context_menu.addAction(act_addItem)
 		self.context_menu.addAction(act_delItem)
@@ -100,6 +103,11 @@ class trw_class_explorer(QtWidgets.QTreeWidget):
 		self.context_menu.addAction(act_set1st)
 		self.context_menu.addAction(act_set2nd)
 		self.context_menu.addAction(act_setclass)
+		self.context_menu.addSeparator()
+		self.context_menu.addAction(act_pasteSlash)
+		self.context_menu.addAction(act_pasteComma)
+		self.context_menu.addAction(act_pasteNewline)
+		self.context_menu.addSeparator()
 
 		act_addItem.triggered.connect(lambda: self._addItem())
 		act_dupItem.triggered.connect(lambda: self._duplicateItems())
@@ -108,6 +116,9 @@ class trw_class_explorer(QtWidgets.QTreeWidget):
 		act_set1st.triggered.connect(lambda: self._setCheck(1))
 		act_set2nd.triggered.connect(lambda: self._setCheck(2))
 		act_setclass.triggered.connect(lambda: self._setClass())
+		act_pasteSlash.triggered.connect(lambda: self._pasteSlashSeparated())
+		act_pasteComma.triggered.connect(lambda: self._pasteCommaSeparated())
+		act_pasteNewline.triggered.connect(lambda: self._pasteNewlineSeparated())
 
 		self.setAlternatingRowColors(True)
 		self.expandAll()
@@ -171,6 +182,37 @@ class trw_class_explorer(QtWidgets.QTreeWidget):
 				ix = old_parent.indexOfChild(item)
 				item_without_parent = old_parent.takeChild(ix)
 				root.addChild(item_without_parent)
+
+	def _pasteSlashSeparated(self):
+		clipboard = QtWidgets.QApplication.clipboard()
+		text = clipboard.text().strip()
+		if text:
+			items = [item.strip() for item in text.split('/') if item.strip()]
+			parent = self.selectedItems()[0].parent() if len(self.selectedItems()) else None
+			for item in items:
+				self._addItem([item], parent, self.trw_checks)
+
+	def _pasteCommaSeparated(self):
+		clipboard = QtWidgets.QApplication.clipboard()
+		text = clipboard.text().strip()
+		if text:
+			import re
+			items = re.findall(r'"([^"]*)"', text)
+			if not items:
+				items = [item.strip().strip('"') for item in text.split(',') if item.strip()]
+			parent = self.selectedItems()[0].parent() if len(self.selectedItems()) else None
+			for item in items:
+				if item:
+					self._addItem([item], parent, self.trw_checks)
+
+	def _pasteNewlineSeparated(self):
+		clipboard = QtWidgets.QApplication.clipboard()
+		text = clipboard.text().strip()
+		if text:
+			items = [item.strip() for item in text.splitlines() if item.strip()]
+			parent = self.selectedItems()[0].parent() if len(self.selectedItems()) else None
+			for item in items:
+				self._addItem([item], parent, self.trw_checks)
 	
 	# - Event Handlers ----------------------
 	def contextMenuEvent(self, event):
@@ -736,5 +778,3 @@ main_app = QtWidgets.QApplication(sys.argv)
 main_dialog = main_class_manager()
 main_dialog.show()
 main_app.exec_()
-
-
