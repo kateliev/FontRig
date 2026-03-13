@@ -63,7 +63,6 @@ TRV.showGlyphWidget = function(name, layer, layerName) {
 	var rect = TRV._getWidgetRect(advW, 60);
 
 	widget.style.left = rect.left + 'px';
-	widget.style.top = rect.top + 'px';
 	widget.style.width = rect.width + 'px';
 
 	// Determine if we should stack vertically (when widget is narrow)
@@ -91,6 +90,10 @@ TRV.showGlyphWidget = function(name, layer, layerName) {
 	TRV._widgetSlot = name;
 
 	widget.classList.add('visible');
+
+	// Pin: bottom edge always 20px from canvas bottom
+	var h = TRV.dom.canvasWrap.clientHeight;
+	widget.style.top = (h - widget.offsetHeight - 20) + 'px';
 };
 
 TRV.hideGlyphWidget = function() {
@@ -124,7 +127,6 @@ TRV._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
 	var widget = document.createElement('div');
 	widget.className = 'glyph-widget glyph-widget--readonly visible';
 	widget.style.left = rect.left + 'px';
-	widget.style.top = rect.top + 'px';
 	widget.style.width = rect.width + 'px';
 	widget.dataset.glyphName = name;
 
@@ -141,6 +143,10 @@ TRV._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
 	widget.innerHTML = html;
 
 	container.appendChild(widget);
+
+	// Pin: bottom edge always 20px from canvas bottom
+	var h = TRV.dom.canvasWrap.clientHeight;
+	widget.style.top = (h - widget.offsetHeight - 20) + 'px';
 
 	// Stop propagation on the widget to prevent canvas click handling
 	widget.addEventListener('click', function(e) {
