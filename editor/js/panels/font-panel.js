@@ -169,29 +169,53 @@ TRV._fontPanelReceive = function(msg) {
 };
 
 // -- Queue thumbnail requests from detached panel --------------------
-TRV._thumbRequestQueue = [];
-TRV._thumbRequestRunning = false;
+TRV._thumbPanelQueue = [];
+TRV._thumbPanelRunning = false;
 
 TRV._sendThumbnailToPanel = function(name) {
-	// Load glyph if not cached
-	var cacheEntry = TRV.glyphCache.get(name);
-	var glyphData = cacheEntry ? cacheEntry.glyphData : null;
+	// Queue the request; actual work happens in the async processor
+	TRV._thumbPanelQueue.push(name);
+	TRV._processThumbPanelQueue();
+};
 
-	if (!glyphData) {
-		// Can't render without glyph data
-		TRV._fontPanelSendThumbnail(name, null);
-		return;
+TRV._processThumbPanelQueue = async function() {
+	if (TRV._thumbPanelRunning) return;
+	TRV._thumbPanelRunning = true;
+
+	while (TRV._thumbPanelQueue.length > 0) {
+		var name = TRV._thumbPanelQueue.shift();
+
+		// Check editing cache first
+		var cacheEntry = TRV.glyphCache.get(name);
+		var glyphData = cacheEntry ? cacheEntry.glyphData : null;
+
+		// Load from disk if not in cache
+		if (!glyphData) {
+			glyphData = await TRV.loadGlyphFile(name);
+		}
+
+		if (!glyphData) {
+			TRV._fontPanelSendThumbnail(name, null);
+			continue;
+		}
+
+		// Render to a temporary canvas
+		var cvs = document.createElement('canvas');
+		cvs.width = 48;
+		cvs.height = 64;
+		TRV._fontPanelRenderThumb(cvs, glyphData);
+
+		// Convert to data URL and send
+		var dataUrl = cvs.toDataURL('image/png');
+		TRV._fontPanelSendThumbnail(name, dataUrl);
+
+		// Yield every 8 thumbnails to keep UI responsive
+		if (TRV._thumbPanelQueue.length > 0 && TRV._thumbPanelQueue.length % 8 === 0) {
+			await new Promise(function(r) { requestAnimationFrame(r); });
+		}
 	}
 
-	// Render to a temporary canvas
-	var cvs = document.createElement('canvas');
-	cvs.width = 48;
-	cvs.height = 64;
-	TRV._fontPanelRenderThumb(cvs, glyphData);
-
-	// Convert to data URL
-	var dataUrl = cvs.toDataURL('image/png');
-	TRV._fontPanelSendThumbnail(name, dataUrl);
+	TRV._thumbPanelRunning = false;
 };
 
 // -- Render thumbnail to canvas (copied from font.js) ----------------------
@@ -270,8 +294,12 @@ TRV._fontPanelBuildPath = function(ctx, nodes, scale, ox, oy) {
 			i = (i + 1) % n;
 			count += 1;
 		}
+
+		i = (i + 1) % n;
 		count++;
 	}
+
+	ctx.closePath();
 };
 
 // -- Hook into existing functions to broadcast changes ---------------

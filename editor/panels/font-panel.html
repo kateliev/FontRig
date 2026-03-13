@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TR:EDIT | Font Panel</title>
+<title>FontRig | Font Panel</title>
 <link rel="stylesheet" href="../css/style.css">
 <style>
 	@font-face {
@@ -486,7 +486,7 @@ function processThumbQueue() {
 
 function receiveThumbnail(name, dataUrl) {
 	var el = document.querySelector('.glyph-entry[data-name="' + name + '"] canvas');
-	if (!el) return;
+	if (!el || !dataUrl) return;
 
 	var img = new Image();
 	img.onload = function() {
