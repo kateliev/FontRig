@@ -163,7 +163,7 @@ body {
 
 .tri {
 	font-family: 'TypeRig Icons';
-	font-size: 16px;
+	font-size: 18px;
 	line-height: 1;
 	font-style: normal;
 	font-weight: normal;
@@ -224,7 +224,7 @@ body {
 	color: var(--accent);
 }
 
-.tb-menu-item .tri { font-size: 14px; width: 16px; text-align: center; }
+.tb-menu-item .tri { font-size: 18px; width: 18px; text-align: center; }
 
 .tb-shortcut {
 	margin-left: auto;
@@ -242,7 +242,7 @@ body {
 /* -- Layer icon in toolbar ---------------------------------- */
 .tb-layer-icon {
 	color: var(--text-dim);
-	font-size: 14px;
+	font-size: 18px;
 	margin-right: -2px;
 }
 
@@ -273,7 +273,7 @@ body {
 }
 
 .tb-scope__btn .tri {
-	font-size: 14px;
+	font-size: 18px;
 	line-height: 1;
 }
 
@@ -289,7 +289,7 @@ body {
 
 #glyph-info {
 	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
-	font-size: 11px;
+	font-size: 12px;
 	color: var(--text-dim);
 	margin-left: 8px;
 }
@@ -448,6 +448,7 @@ body {
 	box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 	backdrop-filter: blur(4px);
 	pointer-events: auto;
+	min-width: 100px;
 }
 
 .glyph-widget.visible { display: flex; }
@@ -569,9 +570,9 @@ body {
 
 .glyph-widget .tri {
 	font-family: 'TypeRig Icons', sans-serif;
-	font-size: 12px;
+	font-size: 18px;
 	color: var(--accent);
-	width: 14px;
+	width: 18px;
 	text-align: center;
 }
 
@@ -603,7 +604,7 @@ body {
 }
 
 .glyph-widget input[type="number"] {
-	text-align: right;
+	text-align: left;
 	-moz-appearance: textfield;
 }
 
@@ -929,8 +930,8 @@ body {
 	background: var(--accent);
 }
 
-.xml-btn .tri { font-size: 11px; }
-.ctx-item .tri { font-size: 13px; margin-right: 6px; }
+.xml-btn .tri { font-size: 18px; }
+.ctx-item .tri { font-size: 18px; margin-right: 6px; }
 
 /* -- Node highlighting in textarea (via overlay) ------------ */
 #xml-highlight-overlay {
@@ -1767,7 +1768,7 @@ body {
 
 .trw-icon-font {
 	font-family: var(--trw-font-icon);
-	font-size: 14px;
+	font-size: 18px;
 	line-height: 1;
 	font-style: normal;
 	font-weight: normal;
@@ -1954,7 +1955,7 @@ body {
 }
 
 .trw-lsd__search .tri {
-	font-size: 13px;
+	font-size: 18px;
 	color: var(--trw-text-dim);
 }
 

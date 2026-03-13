@@ -33,19 +33,15 @@ TRV.layerSelection = {
 				var layer = TRV.state.glyphData.layers[i];
 				var lname = layer.name;
 
-				// Skip internal layers (names starting with #)
-				if (lname.charAt(0) === '#') continue;
+				// Skip hidden layers (names containing #)
+				if (lname.indexOf('#') !== -1) continue;
 
-				var ltype = 'Service';
-				if (TRV.isMaskLayer(lname)) {
+				// Determine type by prefix
+				var ltype = 'Master';
+				if (lname.toLowerCase().startsWith('mask.')) {
 					ltype = 'Mask';
-				} else if (TRV.font && TRV.font.masters) {
-					for (var m = 0; m < TRV.font.masters.length; m++) {
-						if (TRV.font.masters[m].layerName === lname) {
-							ltype = 'Master';
-							break;
-						}
-					}
+				} else if (lname.toLowerCase().startsWith('service.')) {
+					ltype = 'Service';
 				}
 
 				// Preserve previous checked state if layer name matches

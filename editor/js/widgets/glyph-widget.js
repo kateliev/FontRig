@@ -14,8 +14,8 @@ TRV._getWidgetRect = function(advW, verticalOffset) {
 	var state = TRV.state;
 
 	// Fixed size: half of advance width
-	var widgetW = advW * 0.5 * state.zoom;
-	var minW = 100;
+	var widgetW = 260 * state.zoom;
+	var minW = 80;
 	widgetW = Math.max(minW, widgetW);
 
 	// Center on middle of glyph (advance / 2)
@@ -60,14 +60,14 @@ TRV.showGlyphWidget = function(name, layer, layerName) {
 		if (code) unicode = 'U+' + code.toString(16).toUpperCase().padStart(4, '0');
 	}
 
-	var rect = TRV._getWidgetRect(advW, 12);
+	var rect = TRV._getWidgetRect(advW, 60);
 
 	widget.style.left = rect.left + 'px';
 	widget.style.top = rect.top + 'px';
 	widget.style.width = rect.width + 'px';
 
 	// Determine if we should stack vertically (when widget is narrow)
-	var stackFields = rect.width < 140;
+	var stackFields = rect.width < 220;
 
 	if (stackFields) {
 		widget.classList.add('gw-stacked');
@@ -117,7 +117,7 @@ TRV._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
 		if (code) unicode = 'U+' + code.toString(16).toUpperCase().padStart(4, '0');
 	}
 
-	var rect = TRV._getWidgetRect(advW, 12);
+	var rect = TRV._getWidgetRect(advW, 60);
 
 	var layerColor = TRV._getLayerColor(layerName, state.glyphData);
 
@@ -283,9 +283,9 @@ TRV._positionMultiViewWidget = function() {
 	var h = TRV.dom.canvasWrap.clientHeight;
 
 	// Position at bottom center
-	var widgetW = Math.min(250, w * 0.4);
+	var widgetW = Math.min(400, w * 0.4);
 	var widgetX = w / 2 - widgetW / 2;
-	var widgetY = h - 70;
+	var widgetY = h - 90;
 
 	// Position the main editable widget
 	widget.style.left = widgetX + 'px';
