@@ -1323,6 +1323,9 @@ if (ctxMenu) {
 		} else if (action === 'joinContour') {
 			TRV.pushUndo();
 			TRV.tryJoinEndpoints();
+		} else if (action === 'openContour') {
+			TRV.pushUndo();
+			TRV.openContourAtNode();
 		} else if (action === 'selectContour') {
 			if (pendingContourIdx >= 0) {
 				var ids = TRV.getContourNodeIds(pendingContourIdx);

@@ -249,8 +249,9 @@ TRV.keyMap = [
 	{ key: 'ArrowLeft',  hasSelection: true, action: 'moveLeft',  desc: 'Move selected left' },
 
 	// Node operations
-	{ key: 'Delete',     hasSelection: true, action: 'retractHandles', desc: 'Retract handles' },
+	{ key: 'Delete',     hasSelection: true, action: 'openContour',  desc: 'Open/split contour at node' },
 	{ key: 'Backspace',  hasSelection: true, action: 'deleteNode',   desc: 'Delete node' },
+	{ key: 'Shift+Delete', hasSelection: true, action: 'retractHandles', desc: 'Retract handles' },
 	{ key: 'j',          hasSelection: true, action: 'joinContour',  desc: 'Join/close contour at endpoint' },
 ];
 
