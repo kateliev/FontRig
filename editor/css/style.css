@@ -246,6 +246,47 @@ body {
 	margin-right: -2px;
 }
 
+/* -- Scope toggle groups ------------------------------------ */
+.tb-scope {
+	display: inline-flex;
+	align-items: center;
+	gap: 1px;
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 1px;
+}
+
+.tb-scope__btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 24px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: 3px;
+	color: var(--text-dim);
+	cursor: pointer;
+	transition: all 0.12s ease;
+}
+
+.tb-scope__btn .tri {
+	font-size: 14px;
+	line-height: 1;
+}
+
+.tb-scope__btn:hover {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+
+.tb-scope__btn.active {
+	background: var(--accent-bg);
+	color: var(--accent);
+}
+
 #glyph-info {
 	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
 	font-size: 11px;
@@ -1785,4 +1826,170 @@ body {
 
 .trw-row > .trw-label {
 	min-width: 60px;
+}
+
+/* -- Check Table Widget ----------------------------------------- */
+.trw-check-table {
+	overflow: auto;
+	max-height: 400px;
+	border: 1px solid var(--trw-border);
+	border-radius: var(--trw-radius);
+}
+
+.trw-check-table__table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 11px;
+}
+
+.trw-check-table__table thead {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+
+.trw-check-table__table th {
+	background: var(--trw-bg-tertiary);
+	color: var(--trw-text-dim);
+	font-weight: 500;
+	text-align: left;
+	padding: 5px 8px;
+	border-bottom: 1px solid var(--trw-border);
+	user-select: none;
+	white-space: nowrap;
+}
+
+.trw-check-table__th-check {
+	width: 28px;
+	text-align: center !important;
+}
+
+.trw-check-table__table td {
+	padding: 3px 8px;
+	color: var(--trw-text-secondary);
+	border-bottom: 1px solid var(--trw-border-subtle);
+}
+
+.trw-check-table__table tr:last-child td {
+	border-bottom: none;
+}
+
+.trw-check-table__table tbody tr:hover td {
+	background: var(--trw-bg-hover);
+	color: var(--trw-text);
+}
+
+.trw-check-table__td-check {
+	width: 28px;
+	text-align: center;
+}
+
+.trw-check-table__checkbox {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 14px;
+	height: 14px;
+	border: 1px solid var(--trw-border);
+	border-radius: 3px;
+	background: var(--trw-bg-input);
+	cursor: pointer;
+	vertical-align: middle;
+	position: relative;
+	transition: all var(--trw-transition);
+}
+
+.trw-check-table__checkbox:checked {
+	background: var(--trw-accent-dim);
+	border-color: var(--trw-accent);
+}
+
+.trw-check-table__checkbox:checked::after {
+	content: '';
+	position: absolute;
+	left: 3px;
+	top: 1px;
+	width: 5px;
+	height: 8px;
+	border: solid var(--trw-text);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+}
+
+.trw-check-table__checkbox:hover {
+	border-color: var(--trw-accent);
+}
+
+/* -- Layer Select Dialog ---------------------------------------- */
+.trw-lsd__body {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.trw-lsd__toolbar {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+}
+
+.trw-lsd__type-btn--master {
+	color: #50c878 !important;
+	border-color: rgba(0,255,0,0.2) !important;
+}
+
+.trw-lsd__type-btn--mask {
+	color: #ff6b6b !important;
+	border-color: rgba(255,0,0,0.2) !important;
+}
+
+.trw-lsd__type-btn--service {
+	color: #5b9def !important;
+	border-color: rgba(0,0,255,0.2) !important;
+}
+
+.trw-lsd__search {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.trw-lsd__search .tri {
+	font-size: 13px;
+	color: var(--trw-text-dim);
+}
+
+.trw-lsd__search-input {
+	flex: 1;
+	height: 24px;
+	padding: 0 6px;
+	background: var(--trw-bg-input);
+	border: 1px solid var(--trw-border);
+	border-radius: var(--trw-radius);
+	color: var(--trw-text);
+	font-family: var(--trw-font);
+	font-size: 11px;
+	outline: none;
+	transition: border-color var(--trw-transition);
+}
+
+.trw-lsd__search-input:focus {
+	border-color: var(--trw-border-focus);
+}
+
+.trw-lsd__search-input::placeholder {
+	color: var(--trw-text-placeholder);
+}
+
+/* -- Field Dialog shared styles --------------------------------- */
+.trw-field-dlg__body {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.trw-field-dlg__msg {
+	margin: 0;
+	font-size: 12px;
+	color: var(--trw-text-secondary);
+	line-height: 1.4;
 }

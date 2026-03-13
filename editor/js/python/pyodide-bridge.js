@@ -170,8 +170,18 @@ TRV.pyBridge = {
 				'from typerig.core.objects.array import PointArray',
 				'from typerig.core.fileio.xmlio import XMLSerializable',
 				'',
-				'# Glyph variable — synced with viewer',
-				'glyph = None',
+			'# Glyph variable — synced with viewer',
+			'glyph = None',
+			'',
+			'# Layer selection — synced from Layer Select dialog',
+			'selected_layers = []   # list of checked layer names',
+			'layer_info = []        # [{ name, type, checked }, ...]',
+			'',
+			'# Scope — synced from Toolbar Controller',
+			'scope_layers = []      # resolved layer names for current scope',
+			'scope_glyphs = []      # resolved glyph names for current scope',
+			'scope_layer_mode = "masters"   # "active" | "masters" | "selected"',
+			'scope_glyph_mode = "active"    # "active" | "window" | "selection"',
 				'',
 				'# -- Selection bridge helpers --',
 				'def _set_selection(id_list, layer_name=None):',
@@ -209,11 +219,13 @@ TRV.pyBridge = {
 				'\t\t\tci += 1',
 				'\treturn result',
 				'',
-				'print("TypeRig core ready — Python", sys.version.split()[0])',
-				'print("Available: Node, Contour, Shape, Layer, Glyph, Anchor")',
-				'print("           Transform, DeltaScale, Point, Line, PointArray")',
-				'print("Selection: glyph.selected_nodes, node.selected")',
-				'print()',
+			'print("TypeRig core ready — Python", sys.version.split()[0])',
+			'print("Available: Node, Contour, Shape, Layer, Glyph, Anchor")',
+			'print("           Transform, DeltaScale, Point, Line, PointArray")',
+			'print("Selection: glyph.selected_nodes, node.selected")',
+			'print("Layers:   selected_layers, layer_info")',
+			'print("Scope:    scope_layers, scope_glyphs, scope_layer_mode, scope_glyph_mode")',
+			'print()',
 			].join('\n'));
 
 			this.ready = true;
@@ -251,6 +263,39 @@ TRV.pyBridge = {
 			'_set_selection(_sel_ids.to_py(), _sel_layer)\n' +
 			'del _sel_ids, _sel_layer\n'
 		);
+
+		// Sync layer selection: TRV.layerSelection → Python selected_layers
+		if (TRV.layerSelection && TRV.layerSelection.layers.length > 0) {
+			var checkedNames = TRV.layerSelection.getChecked();
+			var layerInfo = TRV.layerSelection.layers.map(function(l) {
+				return { name: l.name, type: l.type, checked: l.checked };
+			});
+			this.pyodide.globals.set('_layer_sel', checkedNames);
+			this.pyodide.globals.set('_layer_info', JSON.stringify(layerInfo));
+			this.pyodide.runPython(
+				'import json as _json\n' +
+				'selected_layers = list(_layer_sel.to_py())\n' +
+				'layer_info = _json.loads(_layer_info)\n' +
+				'del _layer_sel, _layer_info, _json\n'
+			);
+		}
+
+		// Sync scope: TRV.scope → Python scope_layers / scope_glyphs
+		if (TRV.scope) {
+			var scopeLayerNames = TRV.scope.getLayers();
+			var scopeGlyphNames = TRV.scope.getGlyphs();
+			this.pyodide.globals.set('_scope_layers', scopeLayerNames);
+			this.pyodide.globals.set('_scope_glyphs', scopeGlyphNames);
+			this.pyodide.globals.set('_scope_layer_mode', TRV.scope.layerMode);
+			this.pyodide.globals.set('_scope_glyph_mode', TRV.scope.glyphMode);
+			this.pyodide.runPython(
+				'scope_layers = list(_scope_layers.to_py())\n' +
+				'scope_glyphs = list(_scope_glyphs.to_py())\n' +
+				'scope_layer_mode = str(_scope_layer_mode)\n' +
+				'scope_glyph_mode = str(_scope_glyph_mode)\n' +
+				'del _scope_layers, _scope_glyphs, _scope_layer_mode, _scope_glyph_mode\n'
+			);
+		}
 	},
 
 	// -- Sync Python glyph → viewer state --------------------------------

@@ -56,6 +56,34 @@
 		<span class="tri tb-layer-icon">layer_active</span>
 		<select id="layer-select" title="Layer"><option value="">-- no glyph --</option></select>
 
+		<!-- Layer scope: which layers do operations affect? -->
+		<div class="tb-scope" id="scope-layers">
+			<button class="tb-scope__btn" id="scope-layer-active" title="Active layer only" data-scope="active">
+				<span class="tri">layer_active</span>
+			</button>
+			<button class="tb-scope__btn active" id="scope-layer-masters" title="All master layers" data-scope="masters">
+				<span class="tri">layer_master</span>
+			</button>
+			<button class="tb-scope__btn" id="scope-layer-selected" title="Selected layers (opens dialog)" data-scope="selected">
+				<span class="tri">select_option</span>
+			</button>
+		</div>
+
+		<div class="separator"></div>
+
+		<!-- Glyph scope: which glyphs do operations affect? -->
+		<div class="tb-scope" id="scope-glyphs">
+			<button class="tb-scope__btn active" id="scope-glyph-active" title="Active glyph only" data-scope="active">
+				<span class="tri">glyph_active</span>
+			</button>
+			<button class="tb-scope__btn" id="scope-glyph-window" title="Glyphs in workspace strip" data-scope="window">
+				<span class="tri">select_window</span>
+			</button>
+			<button class="tb-scope__btn" id="scope-glyph-selection" title="Font panel selection" data-scope="selection">
+				<span class="tri">select_glyph</span>
+			</button>
+		</div>
+
 		<div class="separator"></div>
 
 		<!-- Viewport controls -->
@@ -261,6 +289,9 @@
 <script src="js/data/serializer.js"></script>
 <script src="js/data/font.js"></script>
 <script src="js/geometry/geometry.js"></script>
+<script src="js/widgets/trw-widgets.js"></script>
+<script src="js/dialogs/trw-dialogs.js"></script>
+<script src="js/dialogs/trw-toolbar-controller.js"></script>
 <script src="js/drawing/drawing.js"></script>
 <script src="js/widgets/glyph-widget.js"></script>
 <script src="js/widgets/multi-view.js"></script>

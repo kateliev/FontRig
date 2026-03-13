@@ -862,3 +862,181 @@ TRW.Section = function(titleText) {
 	sec.appendChild(t);
 	return sec;
 };
+
+// ===================================================================
+// CHECK TABLE WIDGET
+// ===================================================================
+// Table with a checkbox in the first column and optional row coloring.
+// Mirrors TRCheckTableView from the Python/Qt codebase.
+//
+// opts.columns  — array of column header strings (excluding the check column)
+// opts.rows     — array of { data: [col0, col1, ...], checked: bool, color: string|null }
+// opts.colorMap — optional { 'value': 'rgba(...)' } for auto-coloring by a column value
+// opts.colorCol — column index to match against colorMap (default: last column)
+// opts.onChange — fn(rowIdx, checked) called when a checkbox toggles
+// ===================================================================
+TRW.CheckTableWidget = function(opts) {
+	opts = opts || {};
+
+	var wrap = document.createElement('div');
+	wrap.className = 'trw-check-table';
+
+	var table = document.createElement('table');
+	table.className = 'trw-check-table__table';
+
+	var _columns = opts.columns || [];
+	var _rows = opts.rows || [];
+	var _colorMap = opts.colorMap || {};
+	var _colorCol = opts.colorCol !== undefined ? opts.colorCol : _columns.length - 1;
+	var _onChange = opts.onChange || null;
+	var _hiddenRows = {};  // row index → true if hidden by filter
+
+	function render() {
+		table.innerHTML = '';
+
+		// -- Header
+		var thead = document.createElement('thead');
+		var htr = document.createElement('tr');
+
+		var thCheck = document.createElement('th');
+		thCheck.className = 'trw-check-table__th-check';
+		thCheck.textContent = '';
+		htr.appendChild(thCheck);
+
+		for (var c = 0; c < _columns.length; c++) {
+			var th = document.createElement('th');
+			th.textContent = _columns[c];
+			htr.appendChild(th);
+		}
+		thead.appendChild(htr);
+		table.appendChild(thead);
+
+		// -- Body
+		var tbody = document.createElement('tbody');
+
+		for (var r = 0; r < _rows.length; r++) {
+			(function(idx) {
+				var rowData = _rows[idx];
+				var tr = document.createElement('tr');
+				tr.dataset.rowIdx = idx;
+
+				if (_hiddenRows[idx]) tr.style.display = 'none';
+
+				// Row background color
+				var bgColor = rowData.color || null;
+				if (!bgColor && _colorMap) {
+					var val = rowData.data[_colorCol];
+					if (val && _colorMap[val]) bgColor = _colorMap[val];
+				}
+				if (bgColor) tr.style.backgroundColor = bgColor;
+
+				// Checkbox cell
+				var tdCheck = document.createElement('td');
+				tdCheck.className = 'trw-check-table__td-check';
+				var cb = document.createElement('input');
+				cb.type = 'checkbox';
+				cb.className = 'trw-check-table__checkbox';
+				cb.checked = !!rowData.checked;
+				cb.addEventListener('change', function() {
+					rowData.checked = cb.checked;
+					if (_onChange) _onChange(idx, cb.checked);
+				});
+				tdCheck.appendChild(cb);
+				tr.appendChild(tdCheck);
+
+				// Data cells
+				for (var c = 0; c < rowData.data.length; c++) {
+					var td = document.createElement('td');
+					td.textContent = rowData.data[c] != null ? rowData.data[c] : '';
+					tr.appendChild(td);
+				}
+
+				tbody.appendChild(tr);
+			})(r);
+		}
+
+		table.appendChild(tbody);
+	}
+
+	render();
+	wrap.appendChild(table);
+
+	// -- API --
+
+	// Set/replace all row data and re-render
+	wrap.setData = function(columns, rows) {
+		_columns = columns;
+		_rows = rows;
+		_hiddenRows = {};
+		render();
+	};
+
+	// Get all rows (with .checked state)
+	wrap.getRows = function() { return _rows; };
+
+	// Get array of checked row indices
+	wrap.getCheckedIndices = function() {
+		var result = [];
+		for (var i = 0; i < _rows.length; i++) {
+			if (_rows[i].checked) result.push(i);
+		}
+		return result;
+	};
+
+	// Get array of checked row data arrays
+	wrap.getCheckedData = function() {
+		var result = [];
+		for (var i = 0; i < _rows.length; i++) {
+			if (_rows[i].checked) result.push(_rows[i].data);
+		}
+		return result;
+	};
+
+	// Check/uncheck all visible rows
+	wrap.checkAll = function(checked) {
+		for (var i = 0; i < _rows.length; i++) {
+			if (!_hiddenRows[i]) _rows[i].checked = checked;
+		}
+		render();
+	};
+
+	// Toggle (swap) check state of all visible rows
+	wrap.swapChecks = function() {
+		for (var i = 0; i < _rows.length; i++) {
+			if (!_hiddenRows[i]) _rows[i].checked = !_rows[i].checked;
+		}
+		render();
+	};
+
+	// Check/uncheck only rows matching a value in a given column
+	wrap.checkByColumn = function(col, value, checked) {
+		for (var i = 0; i < _rows.length; i++) {
+			if (!_hiddenRows[i] && _rows[i].data[col] === value) {
+				_rows[i].checked = checked;
+			}
+		}
+		render();
+	};
+
+	// Filter rows: hide those where column `col` doesn't contain `text`
+	wrap.filter = function(col, text) {
+		var q = (text || '').toLowerCase();
+		_hiddenRows = {};
+		for (var i = 0; i < _rows.length; i++) {
+			var val = String(_rows[i].data[col] || '').toLowerCase();
+			if (q && val.indexOf(q) < 0) _hiddenRows[i] = true;
+		}
+		render();
+	};
+
+	// Clear all filters
+	wrap.clearFilter = function() {
+		_hiddenRows = {};
+		render();
+	};
+
+	wrap.refresh = render;
+	wrap.table = table;
+
+	return wrap;
+};
