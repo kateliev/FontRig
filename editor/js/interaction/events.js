@@ -731,6 +731,27 @@ document.getElementById('btn-popout').addEventListener('click', function() {
 	TRV.detachPanel();
 });
 
+// Font panel button
+document.getElementById('btn-font-panel').addEventListener('click', function(e) {
+	// Shift+click → toggle detach
+	if (e.shiftKey || TRV.fontPanelBridge.isDetached) {
+		if (TRV.fontPanelBridge.isDetached) {
+			TRV.attachFontPanel();
+		} else {
+			TRV.detachFontPanel();
+		}
+		return;
+	}
+
+	// Just focus the detached panel if already detached
+	if (TRV.fontPanelBridge.isDetached && TRV.fontPanelBridge.detachedWindow) {
+		TRV.fontPanelBridge.detachedWindow.focus();
+	} else {
+		// Open detached font panel
+		TRV.detachFontPanel();
+	}
+});
+
 // -- View mode buttons (1x1, 2x1, 2x2) -----------------------------
 function setViewMode(cols, rows) {
 	const btn1x1 = document.getElementById('btn-view-1x1');

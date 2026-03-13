@@ -15,10 +15,63 @@ TRV.pyBridge = {
 	// -- Configuration ---------------------------------------------------
 	config: {
 		repo: 'kateliev/TypeRig',
-			'# TypeRig — browser stub\n__version__ = "web"\n',
-			'# TypeRig / Core — browser stub\n',
-			'# TypeRig / Core / Func — browser stub\n',
-			'# TypeRig / Core / FileIO — browser stub\n',
+		branch: 'master',
+		basePath: 'Lib',
+	},
+
+	// -- File manifest: only pure-Python core files ------------------------
+	// Package __init__ files are stubbed to avoid pulling proxy/FL deps.
+	manifest: [
+		// Core objects
+		'typerig/core/objects/atom.py',
+		'typerig/core/objects/collection.py',
+		'typerig/core/objects/point.py',
+		'typerig/core/objects/line.py',
+		'typerig/core/objects/cubicbezier.py',
+		'typerig/core/objects/quadraticbezier.py',
+		'typerig/core/objects/transform.py',
+		'typerig/core/objects/utils.py',
+		'typerig/core/objects/array.py',
+		'typerig/core/objects/matrix.py',
+		'typerig/core/objects/node.py',
+		'typerig/core/objects/contour.py',
+		'typerig/core/objects/shape.py',
+		'typerig/core/objects/sdf.py',
+		'typerig/core/objects/anchor.py',
+		'typerig/core/objects/layer.py',
+		'typerig/core/objects/glyph.py',
+		'typerig/core/objects/delta.py',
+		'typerig/core/objects/hobbyspline.py',
+
+		// Core functions
+		'typerig/core/func/math.py',
+		'typerig/core/func/transform.py',
+		'typerig/core/func/utils.py',
+		'typerig/core/func/geometry.py',
+
+		// File I/O
+		'typerig/core/fileio/xmlio.py',
+	],
+
+	// -- Stub __init__.py contents -----------------------------------------
+	// We stub these to avoid importing proxy/FL-dependent subpackages
+	stubs: {
+		'typerig/__init__.py': '# TypeRig — browser stub\n__version__ = "web"\n',
+
+		'typerig/core/__init__.py': '# TypeRig / Core — browser stub\n',
+
+		'typerig/core/objects/__init__.py': 
+			'from .node import Node\n' +
+			'from .contour import Contour\n' +
+			'from .shape import Shape\n' +
+			'from .layer import Layer\n' +
+			'from .glyph import Glyph\n' +
+			'from .anchor import Anchor\n' +
+			'__all__ = ["Node", "Contour", "Shape", "Layer", "Glyph", "Anchor"]\n',
+
+		'typerig/core/func/__init__.py': '# TypeRig / Core / Func — browser stub\n',
+
+		'typerig/core/fileio/__init__.py': '# TypeRig / Core / FileIO — browser stub\n',
 	},
 
 	// -- Build raw GitHub URL -------------------------------------------
@@ -66,27 +119,45 @@ TRV.pyBridge = {
 				this.pyodide.FS.writeFile(sitePackages + path, this.stubs[path]);
 			}
 
-			// 5. Fetch real module files from GitHub (parallel)
-			log('Fetching TypeRig core (' + this.manifest.length + ' files)…');
-
-			var fetches = this.manifest.map(function(filePath) {
-				return fetch(TRV.pyBridge._rawUrl(filePath))
-					.then(function(r) {
-						if (!r.ok) throw new Error(filePath + ': ' + r.status);
-						return r.text();
-					})
-					.then(function(text) {
-						return { path: filePath, text: text };
-					});
-			});
-
-			var results = await Promise.all(fetches);
-
-			for (var j = 0; j < results.length; j++) {
-				this.pyodide.FS.writeFile(sitePackages + results[j].path, results[j].text);
+			// 5. Create directories for manifest modules
+			var manifestDirs = {};
+			for (var i = 0; i < this.manifest.length; i++) {
+				var parts = this.manifest[i].split('/');
+				for (var j = 1; j < parts.length; j++) {
+					var dir = parts.slice(0, j).join('/');
+					manifestDirs[dir] = true;
+				}
+			}
+			for (var dirPath in manifestDirs) {
+				try { this.pyodide.FS.mkdirTree(sitePackages + dirPath); }
+				catch (e) { /* already exists */ }
 			}
 
-			log('TypeRig core installed (' + results.length + ' modules).');
+			// 6. Fetch real module files from GitHub (if manifest provided)
+			if (this.manifest && this.manifest.length > 0) {
+				log('Fetching TypeRig core (' + this.manifest.length + ' files)…');
+
+				var fetches = this.manifest.map(function(filePath) {
+					return fetch(TRV.pyBridge._rawUrl(filePath))
+						.then(function(r) {
+							if (!r.ok) throw new Error(filePath + ': ' + r.status);
+							return r.text();
+						})
+						.then(function(text) {
+							return { path: filePath, text: text };
+						});
+				});
+
+				var results = await Promise.all(fetches);
+
+				for (var j = 0; j < results.length; j++) {
+					this.pyodide.FS.writeFile(sitePackages + results[j].path, results[j].text);
+				}
+
+				log('TypeRig core installed (' + results.length + ' modules).');
+			} else {
+				log('No TypeRig core manifest — using stubs only.');
+			}
 
 			// 6. Bootstrap: import core, set up bridge helpers
 			this.pyodide.runPython([

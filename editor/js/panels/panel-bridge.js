@@ -34,7 +34,7 @@ if (typeof TRV !== 'undefined') {
 		var left = window.screenX + window.innerWidth;
 		var top = window.screenY;
 		TRV.panelBridge.detachedWindow = window.open(
-			'panel.html', 'trv-panel',
+			'panels/xml-panel.html', 'trv-panel',
 			'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
 			',menubar=no,toolbar=no,status=no'
 		);
