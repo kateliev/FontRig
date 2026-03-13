@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — On-stem measurement
+// FontRig — On-stem measurement
 // ===================================================================
 // Approach B: perpendicular to nearest contour wall, with H/V fallback.
 // Reuses TRV._evalCubic, _evalLine, _nearestOnSegment, getContourSegments.

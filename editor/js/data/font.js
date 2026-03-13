@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Font-level operations (.trfont)
+// FontRig — Font-level operations (.trfont)
 // ===================================================================
 // Handles .trfont folder open/save via File System Access API.
 // Lazy glyph loading with LRU cache and per-glyph undo stacks.

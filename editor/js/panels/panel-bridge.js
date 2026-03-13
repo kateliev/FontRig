@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Panel Bridge
+// FontRig — Panel Bridge
 // ===================================================================
 // BroadcastChannel communication between main window and detached panel.
 // Both windows load this file. Role determined by TRV.panelBridge.role.

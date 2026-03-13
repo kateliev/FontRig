@@ -1,5 +1,5 @@
 
-// TypeRig Glyph Viewer — Multi-Layer Grid View
+// FontRig — Multi-Layer Grid View
 // Two rendering modes:
 //   Split  — independent clipped cells, each a mini viewport
 //   Joined — layers placed side by side on a shared baseline,

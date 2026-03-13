@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Drawing Theme / Color Palette
+// FontRig — Drawing Theme / Color Palette
 // ===================================================================
 // All canvas drawing colors in one place.
 // CSS colors live in style.css; this file covers canvas rendering only.

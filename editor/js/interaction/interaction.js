@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Interaction Helpers
+// FontRig — Interaction Helpers
 // ===================================================================
 'use strict';
 

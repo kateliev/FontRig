@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Event Handlers
+// FontRig — Event Handlers
 // ===================================================================
 // DOM event wiring. Key/toolbar bindings defined in bindings.js.
 // ===================================================================

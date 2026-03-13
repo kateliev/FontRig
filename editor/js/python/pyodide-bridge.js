@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Pyodide Bridge
+// FontRig — Pyodide Bridge
 // ===================================================================
 // Loads CPython via WebAssembly (Pyodide CDN), fetches TypeRig core
 // from GitHub, and provides the JS ↔ Python interface.
@@ -15,66 +15,9 @@ TRV.pyBridge = {
 	// -- Configuration ---------------------------------------------------
 	config: {
 		repo: 'kateliev/TypeRig',
-		branch: 'master',
-		basePath: 'Lib',
-	},
-
-	// -- File manifest: only pure-Python core files ----------------------
-	// Package __init__ files are stubbed to avoid pulling proxy/FL deps.
-	manifest: [
-		// Core objects
-		'typerig/core/objects/atom.py',
-		'typerig/core/objects/collection.py',
-		'typerig/core/objects/point.py',
-		'typerig/core/objects/line.py',
-		'typerig/core/objects/cubicbezier.py',
-		'typerig/core/objects/quadraticbezier.py',
-		'typerig/core/objects/transform.py',
-		'typerig/core/objects/utils.py',
-		'typerig/core/objects/array.py',
-		'typerig/core/objects/matrix.py',
-		'typerig/core/objects/node.py',
-		'typerig/core/objects/contour.py',
-		'typerig/core/objects/shape.py',
-		'typerig/core/objects/sdf.py',
-		'typerig/core/objects/anchor.py',
-		'typerig/core/objects/layer.py',
-		'typerig/core/objects/glyph.py',
-		'typerig/core/objects/delta.py',
-		'typerig/core/objects/hobbyspline.py',
-
-		// Core functions
-		'typerig/core/func/math.py',
-		'typerig/core/func/transform.py',
-		'typerig/core/func/utils.py',
-		'typerig/core/func/geometry.py',
-
-		// File I/O
-		'typerig/core/fileio/xmlio.py',
-	],
-
-	// -- Stub __init__.py contents ---------------------------------------
-	// We stub these to avoid importing proxy/FL-dependent subpackages
-	stubs: {
-		'typerig/__init__.py':
 			'# TypeRig — browser stub\n__version__ = "web"\n',
-
-		'typerig/core/__init__.py':
 			'# TypeRig / Core — browser stub\n',
-
-		'typerig/core/objects/__init__.py':
-			'from .node import Node\n' +
-			'from .contour import Contour\n' +
-			'from .shape import Shape\n' +
-			'from .layer import Layer\n' +
-			'from .glyph import Glyph\n' +
-			'from .anchor import Anchor\n' +
-			'__all__ = ["Node", "Contour", "Shape", "Layer", "Glyph", "Anchor"]\n',
-
-		'typerig/core/func/__init__.py':
 			'# TypeRig / Core / Func — browser stub\n',
-
-		'typerig/core/fileio/__init__.py':
 			'# TypeRig / Core / FileIO — browser stub\n',
 	},
 

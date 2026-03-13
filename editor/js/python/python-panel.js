@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Python Panel
+// FontRig — Python Panel
 // ===================================================================
 // REPL interface: code input, output history, tab switching.
 // Depends on pyodide-bridge.js for execution.

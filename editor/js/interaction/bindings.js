@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Input Bindings
+// FontRig — Input Bindings
 // ===================================================================
 // All keyboard shortcuts, mouse actions, and toolbar button bindings
 // in one place. Events.js wires DOM listeners that dispatch here.

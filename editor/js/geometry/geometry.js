@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Geometry & Node Helpers
+// FontRig — Geometry & Node Helpers
 // ===================================================================
 'use strict';
 

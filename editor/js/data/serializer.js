@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — XML Serializer
+// FontRig — XML Serializer
 // ===================================================================
 // Note: live XML sync removed. Use TRV.xmlRefresh() to regenerate
 // XML from data, and TRV.xmlApply() to parse XML back into data.

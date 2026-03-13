@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Transform Frame
+// FontRig — Transform Frame
 // ===================================================================
 // Scale, rotate, skew selected nodes via an interactive bounding frame.
 // Modes: scale (default) → rotate → skew (cycle via double-click).

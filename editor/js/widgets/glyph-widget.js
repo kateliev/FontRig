@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — Glyph Widget
+// FontRig — Glyph Widget
 // ===================================================================
 // HTML overlay widgets for glyph strip view.
 // Shows editable widget for active glyph, read-only for others.

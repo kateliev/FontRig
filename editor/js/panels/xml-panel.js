@@ -1,5 +1,5 @@
 // ===================================================================
-// TypeRig Glyph Viewer — XML Panel
+// FontRig — XML Panel
 // ===================================================================
 // XML sync model: manual Refresh (data→XML) and Apply (XML→data).
 // No live sync during editing — canvas is the source of truth.
