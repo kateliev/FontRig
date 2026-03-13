@@ -4,74 +4,22 @@
 // Qt-style widget factories for dark-themed web UIs.
 // All widgets return plain DOM elements; no framework dependency.
 //
-// Icon system: TRW.icon(name) returns an SVG element.
-// To switch to a custom icon font later, override TRW.icon().
+// Icon system: Uses TypeRig Icons ligature font via the 'tri' class.
+// TRW.icon(name) creates <span class="tri">name</span>.
 // ===================================================================
 'use strict';
 
 var TRW = TRW || {};
 
-// -- Configuration --------------------------------------------------
-TRW.config = {
-	iconFont: 'TypeRig Icons',
-};
-
-// TypeRig Icons glyph map - icon names as they appear in the font
-TRW.iconGlyphs = {
-	plus:          'add',
-	minus:         'remove',
-	chevronDown:   'arrow_down',
-	chevronRight:  'arrow_right',
-	chevronUp:     'arrow_up',
-	close:         'close',
-	check:         'check',
-	search:        'search',
-	sliders:       'settings',
-	doubleLeft:    'collapse_left',
-	doubleRight:   'expand_right',
-	arrowLeft:     'arrow_left',
-	arrowRight:    'arrow_right',
-};
-
-TRW.iconFontClass = 'tri';
-
-// SVG fallback paths (used when icon font not available)
-TRW.iconPaths = {
-	plus:          'M12 5v14M5 12h14',
-	minus:         'M5 12h14',
-	chevronDown:   'M6 9l6 6 6-6',
-	chevronRight:  'M9 6l6 6-6 6',
-	chevronUp:     'M6 15l6-6 6 6',
-	close:         'M18 6L6 18M6 6l12 12',
-	check:         'M5 12l5 5L20 7',
-	search:        'M11 4a7 7 0 110 14 7 7 0 010-14zM18 18l3 3',
-	sliders:      'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
-	doubleLeft:   'M11 17l-5-5 5-5M18 17l-5-5 5-5',
-	doubleRight:  'M13 7l5 5-5 5M6 7l5 5-5 5',
-	arrowLeft:    'M19 12H5M12 5l-7 7 7 7',
-	arrowRight:   'M5 12h14M12 5l7 7-7 7',
-};
-
-// Create an icon element by name
+// ===================================================================
+// ICON SYSTEM — TypeRig Icons ligature font
+// ===================================================================
 TRW.icon = function(name) {
-	// If icon font is configured, use a span with the tri class
-	if (TRW.config.iconFont && TRW.iconGlyphs[name]) {
-		var span = document.createElement('span');
-		span.className = TRW.iconFontClass || 'trw-icon';
-		span.textContent = TRW.iconGlyphs[name];
-		return span;
-	}
-
-	// Default: inline SVG fallback
-	var path = TRW.iconPaths[name];
-	if (!path) return null;
-
-	var wrap = document.createElement('span');
-	wrap.className = 'trw-icon';
-	wrap.innerHTML = '<svg viewBox="0 0 24 24">' +
-		'<path d="' + path + '"/>' +
-		'</svg>';
-	return wrap;
+	if (!name) return null;
+	var span = document.createElement('span');
+	span.className = 'tri';
+	span.textContent = name;
+	return span;
 };
 
 // ===================================================================

@@ -252,7 +252,7 @@ TRW.LayerSelectDialog = function(opts) {
 	toolbar.className = 'trw-lsd__toolbar';
 
 	var btnSelectAll = TRW.Button(null, {
-		icon: 'check', tooltip: 'Select all (Shift+Click to deselect all)',
+		icon: 'select_all', tooltip: 'Select all (Shift+Click to deselect all)',
 		compact: true,
 		onClick: function(e) {
 			var uncheck = e && e.shiftKey;
@@ -262,7 +262,7 @@ TRW.LayerSelectDialog = function(opts) {
 	});
 
 	var btnSwap = TRW.Button(null, {
-		icon: 'sliders', tooltip: 'Swap selection',
+		icon: 'select_swap', tooltip: 'Swap selection',
 		compact: true,
 		onClick: function() {
 			checkTable.swapChecks();
@@ -274,8 +274,8 @@ TRW.LayerSelectDialog = function(opts) {
 	var btnMasters = null, btnMasks = null, btnServices = null;
 
 	if (mode === 0) {
-		btnMasters = TRW.Button('M', {
-			compact: true, tooltip: 'Select Masters (Shift+Click to deselect)',
+		btnMasters = TRW.Button(null, {
+			icon: 'layer_master', compact: true, tooltip: 'Select Masters (Shift+Click to deselect)',
 			onClick: function(e) {
 				var uncheck = e && e.shiftKey;
 				checkTable.checkByColumn(1, 'Master', !uncheck);
@@ -284,8 +284,8 @@ TRW.LayerSelectDialog = function(opts) {
 		});
 		btnMasters.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--master');
 
-		btnMasks = TRW.Button('K', {
-			compact: true, tooltip: 'Select Masks (Shift+Click to deselect)',
+		btnMasks = TRW.Button(null, {
+			icon: 'layer_mask', compact: true, tooltip: 'Select Masks (Shift+Click to deselect)',
 			onClick: function(e) {
 				var uncheck = e && e.shiftKey;
 				checkTable.checkByColumn(1, 'Mask', !uncheck);
@@ -294,8 +294,8 @@ TRW.LayerSelectDialog = function(opts) {
 		});
 		btnMasks.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--mask');
 
-		btnServices = TRW.Button('S', {
-			compact: true, tooltip: 'Select Services (Shift+Click to deselect)',
+		btnServices = TRW.Button(null, {
+			icon: 'layer_service', compact: true, tooltip: 'Select Services (Shift+Click to deselect)',
 			onClick: function(e) {
 				var uncheck = e && e.shiftKey;
 				checkTable.checkByColumn(1, 'Service', !uncheck);
@@ -306,7 +306,7 @@ TRW.LayerSelectDialog = function(opts) {
 	}
 
 	var btnRefresh = TRW.Button(null, {
-		icon: 'sliders', tooltip: 'Refresh layer list',
+		icon: 'refresh', tooltip: 'Refresh layer list',
 		compact: true,
 		onClick: function() {
 			TRV.layerSelection.refresh(mode);
