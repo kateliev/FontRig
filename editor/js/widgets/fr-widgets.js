@@ -28,12 +28,12 @@ FRWidget.icon = function(name) {
 FRWidget.Label = function(text, opts) {
 	opts = opts || {};
 	var el = document.createElement('span');
-	el.className = 'trw-label';
+	el.className = 'frw-label';
 	el.textContent = text;
 
-	if (opts.heading) el.classList.add('trw-label--heading');
-	if (opts.mono)    el.classList.add('trw-label--mono');
-	if (opts.dim)     el.classList.add('trw-label--dim');
+	if (opts.heading) el.classList.add('frw-label--heading');
+	if (opts.mono)    el.classList.add('frw-label--mono');
+	if (opts.dim)     el.classList.add('frw-label--dim');
 	if (opts.tooltip) el.title = opts.tooltip;
 
 	return el;
@@ -45,7 +45,7 @@ FRWidget.Label = function(text, opts) {
 FRWidget.Button = function(text, opts) {
 	opts = opts || {};
 	var el = document.createElement('button');
-	el.className = 'trw-btn';
+	el.className = 'frw-btn';
 	el.type = 'button';
 
 	if (opts.icon) {
@@ -59,9 +59,9 @@ FRWidget.Button = function(text, opts) {
 		el.appendChild(span);
 	}
 
-	if (!text && opts.icon) el.classList.add('trw-btn--icon');
-	if (opts.primary)       el.classList.add('trw-btn--primary');
-	if (opts.compact)       el.classList.add('trw-btn--compact');
+	if (!text && opts.icon) el.classList.add('frw-btn--icon');
+	if (opts.primary)       el.classList.add('frw-btn--primary');
+	if (opts.compact)       el.classList.add('frw-btn--compact');
 	if (opts.tooltip)       el.title = opts.tooltip;
 	if (opts.disabled)      el.disabled = true;
 	if (opts.onClick)       el.addEventListener('click', opts.onClick);
@@ -75,7 +75,7 @@ FRWidget.Button = function(text, opts) {
 FRWidget.ToggleButton = function(text, opts) {
 	opts = opts || {};
 	var el = FRWidget.Button(text, opts);
-	el.classList.add('trw-toggle');
+	el.classList.add('frw-toggle');
 
 	if (opts.active) el.classList.add('active');
 
@@ -105,27 +105,27 @@ FRWidget.SpinBox = function(opts) {
 	var _onChange = opts.onChange || null;
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-spinbox';
+	wrap.className = 'frw-spinbox';
 
 	var btnDec = document.createElement('button');
-	btnDec.className = 'trw-spinbox__btn trw-spinbox__btn--dec';
+	btnDec.className = 'frw-spinbox__btn frw-spinbox__btn--dec';
 	btnDec.type = 'button';
 	btnDec.textContent = '\u2212'; // minus sign
 
 	var input = document.createElement('input');
-	input.className = 'trw-spinbox__input';
+	input.className = 'frw-spinbox__input';
 	input.type = 'text';
 	input.value = val;
 
 	var suffixEl = null;
 	if (opts.suffix) {
 		suffixEl = document.createElement('span');
-		suffixEl.className = 'trw-spinbox__suffix';
+		suffixEl.className = 'frw-spinbox__suffix';
 		suffixEl.textContent = opts.suffix;
 	}
 
 	var btnInc = document.createElement('button');
-	btnInc.className = 'trw-spinbox__btn trw-spinbox__btn--inc';
+	btnInc.className = 'frw-spinbox__btn frw-spinbox__btn--inc';
 	btnInc.type = 'button';
 	btnInc.textContent = '+';
 
@@ -179,27 +179,27 @@ FRWidget.DoubleSpinBox = function(opts) {
 	var _onChange = opts.onChange || null;
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-spinbox';
+	wrap.className = 'frw-spinbox';
 
 	var btnDec = document.createElement('button');
-	btnDec.className = 'trw-spinbox__btn trw-spinbox__btn--dec';
+	btnDec.className = 'frw-spinbox__btn frw-spinbox__btn--dec';
 	btnDec.type = 'button';
 	btnDec.textContent = '\u2212';
 
 	var input = document.createElement('input');
-	input.className = 'trw-spinbox__input';
+	input.className = 'frw-spinbox__input';
 	input.type = 'text';
 	input.value = val.toFixed(decimals);
 
 	var suffixEl = null;
 	if (opts.suffix) {
 		suffixEl = document.createElement('span');
-		suffixEl.className = 'trw-spinbox__suffix';
+		suffixEl.className = 'frw-spinbox__suffix';
 		suffixEl.textContent = opts.suffix;
 	}
 
 	var btnInc = document.createElement('button');
-	btnInc.className = 'trw-spinbox__btn trw-spinbox__btn--inc';
+	btnInc.className = 'frw-spinbox__btn frw-spinbox__btn--inc';
 	btnInc.type = 'button';
 	btnInc.textContent = '+';
 
@@ -247,14 +247,14 @@ FRWidget.EditField = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-edit';
+	wrap.className = 'frw-edit';
 
 	var input = document.createElement('input');
-	input.className = 'trw-edit__input';
+	input.className = 'frw-edit__input';
 	input.type = 'text';
 	if (opts.value)       input.value = opts.value;
 	if (opts.placeholder) input.placeholder = opts.placeholder;
-	if (opts.mono)        input.classList.add('trw-edit__input--mono');
+	if (opts.mono)        input.classList.add('frw-edit__input--mono');
 	if (opts.onChange)    input.addEventListener('input', function() { opts.onChange(input.value); });
 
 	wrap.appendChild(input);
@@ -276,10 +276,10 @@ FRWidget.ComboBox = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-combo';
+	wrap.className = 'frw-combo';
 
 	var select = document.createElement('select');
-	select.className = 'trw-combo__select';
+	select.className = 'frw-combo__select';
 
 	var items = opts.items || [];
 	for (var i = 0; i < items.length; i++) {
@@ -316,7 +316,7 @@ FRWidget.ListWidget = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-list';
+	wrap.className = 'frw-list';
 	if (opts.height) wrap.style.maxHeight = opts.height;
 
 	var _selected = -1;
@@ -330,7 +330,7 @@ FRWidget.ListWidget = function(opts) {
 
 		if (data.length === 0) {
 			var empty = document.createElement('div');
-			empty.className = 'trw-list__item trw-list__item--empty';
+			empty.className = 'frw-list__item frw-list__item--empty';
 			empty.textContent = opts.emptyText || '(empty)';
 			wrap.appendChild(empty);
 			return;
@@ -339,7 +339,7 @@ FRWidget.ListWidget = function(opts) {
 		for (var i = 0; i < data.length; i++) {
 			(function(idx) {
 				var item = document.createElement('div');
-				item.className = 'trw-list__item';
+				item.className = 'frw-list__item';
 				item.textContent = data[idx];
 				if (idx === _selected) item.classList.add('active');
 
@@ -381,15 +381,15 @@ FRWidget.SliderCtrl = function(opts) {
 	var _onChange = opts.onChange || null;
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-slider-ctrl';
+	wrap.className = 'frw-slider-ctrl';
 
 	// -- Top row: label + spinbox + ±1/±10 buttons
 	var topRow = document.createElement('div');
-	topRow.className = 'trw-slider-ctrl__top';
+	topRow.className = 'frw-slider-ctrl__top';
 
 	if (opts.label) {
 		var lbl = document.createElement('span');
-		lbl.className = 'trw-slider-ctrl__label';
+		lbl.className = 'frw-slider-ctrl__label';
 		lbl.textContent = opts.label;
 		topRow.appendChild(lbl);
 	}
@@ -427,15 +427,15 @@ FRWidget.SliderCtrl = function(opts) {
 
 	// -- Bottom row: min field + slider + max field
 	var trackRow = document.createElement('div');
-	trackRow.className = 'trw-slider-ctrl__track-row';
+	trackRow.className = 'frw-slider-ctrl__track-row';
 
 	var edtMin = document.createElement('input');
-	edtMin.className = 'trw-slider-ctrl__minmax';
+	edtMin.className = 'frw-slider-ctrl__minmax';
 	edtMin.type = 'text';
 	edtMin.value = min;
 
 	var slider = document.createElement('input');
-	slider.className = 'trw-slider-ctrl__slider';
+	slider.className = 'frw-slider-ctrl__slider';
 	slider.type = 'range';
 	slider.min = min;
 	slider.max = max;
@@ -443,7 +443,7 @@ FRWidget.SliderCtrl = function(opts) {
 	slider.value = val;
 
 	var edtMax = document.createElement('input');
-	edtMax.className = 'trw-slider-ctrl__minmax';
+	edtMax.className = 'frw-slider-ctrl__minmax';
 	edtMax.type = 'text';
 	edtMax.value = max;
 
@@ -500,7 +500,7 @@ FRWidget.SliderCtrl = function(opts) {
 FRWidget.TreeWidget = function(opts) {
 	opts = opts || {};
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-tree';
+	wrap.className = 'frw-tree';
 
 	var _data = opts.data || [];
 	var _onChange = opts.onChange || null;
@@ -514,11 +514,11 @@ FRWidget.TreeWidget = function(opts) {
 
 			// Parent node
 			var row = document.createElement('div');
-			row.className = 'trw-tree__node';
+			row.className = 'frw-tree__node';
 
 			if (node.children && node.children.length > 0) {
 				var toggle = document.createElement('span');
-				toggle.className = 'trw-tree__toggle' + (isExpanded ? ' expanded' : '');
+				toggle.className = 'frw-tree__toggle' + (isExpanded ? ' expanded' : '');
 				toggle.textContent = '\u25B6'; // right triangle
 				row.appendChild(toggle);
 
@@ -531,7 +531,7 @@ FRWidget.TreeWidget = function(opts) {
 				})(i);
 			} else {
 				var spacer = document.createElement('span');
-				spacer.className = 'trw-tree__toggle';
+				spacer.className = 'frw-tree__toggle';
 				row.appendChild(spacer);
 			}
 
@@ -552,7 +552,7 @@ FRWidget.TreeWidget = function(opts) {
 				for (var c = 0; c < node.children.length; c++) {
 					var child = node.children[c];
 					var childRow = document.createElement('div');
-					childRow.className = 'trw-tree__node trw-tree__node--child';
+					childRow.className = 'frw-tree__node frw-tree__node--child';
 
 					var childLabel = document.createElement('span');
 					childLabel.textContent = child.label || child.text || '';
@@ -585,7 +585,7 @@ FRWidget.TreeWidget = function(opts) {
 FRWidget.TableWidget = function(opts) {
 	opts = opts || {};
 	var table = document.createElement('table');
-	table.className = 'trw-table';
+	table.className = 'frw-table';
 
 	var _columns = opts.columns || [];
 	var _rows = opts.rows || [];
@@ -646,7 +646,7 @@ FRWidget.SpinButton = function(buttonText, opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-spin-button';
+	wrap.className = 'frw-spin-button';
 
 	var spin = FRWidget.SpinBox({
 		min: opts.min, max: opts.max,
@@ -656,7 +656,7 @@ FRWidget.SpinButton = function(buttonText, opts) {
 	});
 
 	var btn = document.createElement('button');
-	btn.className = 'trw-spin-button__action';
+	btn.className = 'frw-spin-button__action';
 	btn.type = 'button';
 	btn.textContent = buttonText;
 	if (opts.onClick) btn.addEventListener('click', function() {
@@ -682,7 +682,7 @@ FRWidget.FlowRibbon = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-ribbon';
+	wrap.className = 'frw-ribbon';
 
 	// API: add widgets to the ribbon
 	wrap.addWidget = function(widget) {
@@ -692,7 +692,7 @@ FRWidget.FlowRibbon = function(opts) {
 
 	wrap.addSeparator = function() {
 		var sep = document.createElement('div');
-		sep.className = 'trw-separator';
+		sep.className = 'frw-separator';
 		wrap.appendChild(sep);
 		return wrap;
 	};
@@ -707,21 +707,21 @@ FRWidget.Dialog = function(opts) {
 	opts = opts || {};
 
 	var backdrop = document.createElement('div');
-	backdrop.className = 'trw-dialog-backdrop';
+	backdrop.className = 'frw-dialog-backdrop';
 
 	var dialog = document.createElement('div');
-	dialog.className = 'trw-dialog';
+	dialog.className = 'frw-dialog';
 
 	// Header
 	var header = document.createElement('div');
-	header.className = 'trw-dialog__header';
+	header.className = 'frw-dialog__header';
 
 	var title = document.createElement('span');
-	title.className = 'trw-dialog__title';
+	title.className = 'frw-dialog__title';
 	title.textContent = opts.title || 'Dialog';
 
 	var closeBtn = document.createElement('button');
-	closeBtn.className = 'trw-dialog__close';
+	closeBtn.className = 'frw-dialog__close';
 	closeBtn.type = 'button';
 	closeBtn.textContent = '\u00D7'; // ×
 
@@ -731,7 +731,7 @@ FRWidget.Dialog = function(opts) {
 
 	// Body
 	var body = document.createElement('div');
-	body.className = 'trw-dialog__body';
+	body.className = 'frw-dialog__body';
 
 	if (typeof opts.body === 'string') {
 		body.innerHTML = opts.body;
@@ -744,7 +744,7 @@ FRWidget.Dialog = function(opts) {
 	// Footer (optional buttons)
 	if (opts.buttons) {
 		var footer = document.createElement('div');
-		footer.className = 'trw-dialog__footer';
+		footer.className = 'frw-dialog__footer';
 
 		for (var i = 0; i < opts.buttons.length; i++) {
 			var bCfg = opts.buttons[i];
@@ -795,7 +795,7 @@ FRWidget.Dialog = function(opts) {
 // ===================================================================
 FRWidget.Row = function(labelText, widget) {
 	var row = document.createElement('div');
-	row.className = 'trw-row';
+	row.className = 'frw-row';
 	row.appendChild(FRWidget.Label(labelText));
 	row.appendChild(widget);
 	return row;
@@ -803,9 +803,9 @@ FRWidget.Row = function(labelText, widget) {
 
 FRWidget.Section = function(titleText) {
 	var sec = document.createElement('div');
-	sec.className = 'trw-section';
+	sec.className = 'frw-section';
 	var t = document.createElement('span');
-	t.className = 'trw-section__title';
+	t.className = 'frw-section__title';
 	t.textContent = titleText;
 	sec.appendChild(t);
 	return sec;
@@ -827,10 +827,10 @@ FRWidget.CheckTableWidget = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
-	wrap.className = 'trw-check-table';
+	wrap.className = 'frw-check-table';
 
 	var table = document.createElement('table');
-	table.className = 'trw-check-table__table';
+	table.className = 'frw-check-table__table';
 
 	var _columns = opts.columns || [];
 	var _rows = opts.rows || [];
@@ -847,7 +847,7 @@ FRWidget.CheckTableWidget = function(opts) {
 		var htr = document.createElement('tr');
 
 		var thCheck = document.createElement('th');
-		thCheck.className = 'trw-check-table__th-check';
+		thCheck.className = 'frw-check-table__th-check';
 		thCheck.textContent = '';
 		htr.appendChild(thCheck);
 
@@ -880,10 +880,10 @@ FRWidget.CheckTableWidget = function(opts) {
 
 				// Checkbox cell
 				var tdCheck = document.createElement('td');
-				tdCheck.className = 'trw-check-table__td-check';
+				tdCheck.className = 'frw-check-table__td-check';
 				var cb = document.createElement('input');
 				cb.type = 'checkbox';
-				cb.className = 'trw-check-table__checkbox';
+				cb.className = 'frw-check-table__checkbox';
 				cb.checked = !!rowData.checked;
 				cb.addEventListener('change', function() {
 					rowData.checked = cb.checked;

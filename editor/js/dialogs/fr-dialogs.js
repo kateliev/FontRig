@@ -2,7 +2,7 @@
 // TypeRig Dialogs (FRWidget) — Dialog Library
 // ===================================================================
 // Ports of TypeRig proxy/fl/gui/dialogs.py for the web editor.
-// All dialogs reuse FRWidget widget factories from trw-widgets.js and
+// All dialogs reuse FRWidget widget factories from frw-widgets.js and
 // the base FRWidget.Dialog modal shell.
 //
 // Shared state: FontRig.layerSelection is the persistent layer-check
@@ -245,7 +245,7 @@ FRWidget.LayerSelectDialog = function(opts) {
 
 	// -- Action toolbar
 	var toolbar = document.createElement('div');
-	toolbar.className = 'trw-lsd__toolbar';
+	toolbar.className = 'frw-lsd__toolbar';
 
 	var btnSelectAll = FRWidget.Button(null, {
 		icon: 'select_all', tooltip: 'Select all (Shift+Click to deselect all)',
@@ -278,7 +278,7 @@ FRWidget.LayerSelectDialog = function(opts) {
 				syncFromTable();
 			}
 		});
-		btnMasters.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--master');
+		btnMasters.classList.add('frw-lsd__type-btn', 'frw-lsd__type-btn--master');
 
 		btnMasks = FRWidget.Button(null, {
 			icon: 'layer_mask', compact: true, tooltip: 'Select Masks (Shift+Click to deselect)',
@@ -288,7 +288,7 @@ FRWidget.LayerSelectDialog = function(opts) {
 				syncFromTable();
 			}
 		});
-		btnMasks.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--mask');
+		btnMasks.classList.add('frw-lsd__type-btn', 'frw-lsd__type-btn--mask');
 
 		btnServices = FRWidget.Button(null, {
 			icon: 'layer_service', compact: true, tooltip: 'Select Services (Shift+Click to deselect)',
@@ -298,7 +298,7 @@ FRWidget.LayerSelectDialog = function(opts) {
 				syncFromTable();
 			}
 		});
-		btnServices.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--service');
+		btnServices.classList.add('frw-lsd__type-btn', 'frw-lsd__type-btn--service');
 	}
 
 	var btnRefresh = FRWidget.Button(null, {
@@ -320,13 +320,13 @@ FRWidget.LayerSelectDialog = function(opts) {
 	if (btnServices) toolbar.appendChild(btnServices);
 
 	var spacer = document.createElement('span');
-	spacer.className = 'trw-spacer';
+	spacer.className = 'frw-spacer';
 	toolbar.appendChild(spacer);
 	toolbar.appendChild(btnRefresh);
 
 	// -- Search field
 	var searchRow = document.createElement('div');
-	searchRow.className = 'trw-lsd__search';
+	searchRow.className = 'frw-lsd__search';
 
 	var searchLabel = FRWidget.Label('', { dim: true });
 	searchLabel.className = 'tri';
@@ -334,7 +334,7 @@ FRWidget.LayerSelectDialog = function(opts) {
 
 	var searchInput = document.createElement('input');
 	searchInput.type = 'text';
-	searchInput.className = 'trw-lsd__search-input';
+	searchInput.className = 'frw-lsd__search-input';
 	searchInput.placeholder = 'Filter: Layer Name';
 	searchInput.addEventListener('input', function() {
 		checkTable.filter(0, searchInput.value);
@@ -354,7 +354,7 @@ FRWidget.LayerSelectDialog = function(opts) {
 
 	// -- Assemble body
 	var body = document.createElement('div');
-	body.className = 'trw-lsd__body';
+	body.className = 'frw-lsd__body';
 	body.appendChild(toolbar);
 	body.appendChild(searchRow);
 	body.appendChild(checkTable);
@@ -378,8 +378,8 @@ FRWidget.LayerSelectDialog = function(opts) {
 	});
 
 	// Override min/max width for this dialog
-	dlg.el.querySelector('.trw-dialog').style.minWidth = '320px';
-	dlg.el.querySelector('.trw-dialog').style.maxWidth = '440px';
+	dlg.el.querySelector('.frw-dialog').style.minWidth = '320px';
+	dlg.el.querySelector('.frw-dialog').style.maxWidth = '440px';
 
 	// Public API: expose refresh
 	dlg.refresh = function() {
@@ -414,11 +414,11 @@ FRWidget.InputDialog = function(opts) {
 	});
 
 	var body = document.createElement('div');
-	body.className = 'trw-field-dlg__body';
+	body.className = 'frw-field-dlg__body';
 
 	if (opts.message) {
 		var msg = document.createElement('p');
-		msg.className = 'trw-field-dlg__msg';
+		msg.className = 'frw-field-dlg__msg';
 		msg.textContent = opts.message;
 		body.appendChild(msg);
 	}
@@ -451,11 +451,11 @@ FRWidget.DualInputDialog = function(opts) {
 	var fieldB = FRWidget.EditField({ value: opts.valueBottom || '', placeholder: opts.placeholderBottom || '' });
 
 	var body = document.createElement('div');
-	body.className = 'trw-field-dlg__body';
+	body.className = 'frw-field-dlg__body';
 
 	if (opts.message) {
 		var msg = document.createElement('p');
-		msg.className = 'trw-field-dlg__msg';
+		msg.className = 'frw-field-dlg__msg';
 		msg.textContent = opts.message;
 		body.appendChild(msg);
 	}
@@ -499,11 +499,11 @@ FRWidget.SpinDialog = function(opts) {
 	var spin = isFloat ? FRWidget.DoubleSpinBox(spinOpts) : FRWidget.SpinBox(spinOpts);
 
 	var body = document.createElement('div');
-	body.className = 'trw-field-dlg__body';
+	body.className = 'frw-field-dlg__body';
 
 	if (opts.message) {
 		var msg = document.createElement('p');
-		msg.className = 'trw-field-dlg__msg';
+		msg.className = 'frw-field-dlg__msg';
 		msg.textContent = opts.message;
 		body.appendChild(msg);
 	}
@@ -538,11 +538,11 @@ FRWidget.MultiSpinDialog = function(opts) {
 	var spinners = {};
 
 	var body = document.createElement('div');
-	body.className = 'trw-field-dlg__body';
+	body.className = 'frw-field-dlg__body';
 
 	if (opts.message) {
 		var msg = document.createElement('p');
-		msg.className = 'trw-field-dlg__msg';
+		msg.className = 'frw-field-dlg__msg';
 		msg.textContent = opts.message;
 		body.appendChild(msg);
 	}
@@ -611,11 +611,11 @@ FRWidget.SliderDialog = function(opts) {
 	});
 
 	var body = document.createElement('div');
-	body.className = 'trw-field-dlg__body';
+	body.className = 'frw-field-dlg__body';
 
 	if (opts.message) {
 		var msg = document.createElement('p');
-		msg.className = 'trw-field-dlg__msg';
+		msg.className = 'frw-field-dlg__msg';
 		msg.textContent = opts.message;
 		body.appendChild(msg);
 	}
@@ -656,11 +656,11 @@ FRWidget.ComboDialog = function(opts) {
 	});
 
 	var body = document.createElement('div');
-	body.className = 'trw-field-dlg__body';
+	body.className = 'frw-field-dlg__body';
 
 	if (opts.message) {
 		var msg = document.createElement('p');
-		msg.className = 'trw-field-dlg__msg';
+		msg.className = 'frw-field-dlg__msg';
 		msg.textContent = opts.message;
 		body.appendChild(msg);
 	}

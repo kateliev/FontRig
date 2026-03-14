@@ -6,9 +6,9 @@
 // editor toolbar and manages the Layer Select dialog lifecycle.
 //
 // Depends on:
-//   - FontRig.scope           (trw-dialogs.js)
-//   - FontRig.layerSelection  (trw-dialogs.js)
-//   - FRWidget.LayerSelectDialog (trw-dialogs.js)
+//   - FontRig.scope           (frw-dialogs.js)
+//   - FontRig.layerSelection  (frw-dialogs.js)
+//   - FRWidget.LayerSelectDialog (frw-dialogs.js)
 //   - DOM: #scope-layers, #scope-glyphs button groups (index.html)
 // ===================================================================
 'use strict';
