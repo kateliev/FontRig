@@ -7,24 +7,24 @@
 // ===================================================================
 'use strict';
 
-TRV.buildXmlPanel = function() {
-	if (!TRV.state.rawXml) {
-		TRV.dom.xmlContent.value = '';
-		TRV.dom.xmlNodeCount.textContent = '';
+FontRig.buildXmlPanel = function() {
+	if (!FontRig.state.rawXml) {
+		FontRig.dom.xmlContent.value = '';
+		FontRig.dom.xmlNodeCount.textContent = '';
 		return;
 	}
 
-	const formatted = TRV.formatXml(TRV.state.rawXml);
-	TRV.dom.xmlContent.value = formatted;
+	const formatted = FontRig.formatXml(FontRig.state.rawXml);
+	FontRig.dom.xmlContent.value = formatted;
 
-	TRV.rebuildLineMaps(formatted);
-	TRV.updateNodeCount();
-	TRV.setParseStatus(true);
+	FontRig.rebuildLineMaps(formatted);
+	FontRig.updateNodeCount();
+	FontRig.setParseStatus(true);
 };
 
-TRV.rebuildLineMaps = function(text) {
-	TRV.xmlLineNodeMap = {};
-	TRV.xmlNodeLineMap = {};
+FontRig.rebuildLineMaps = function(text) {
+	FontRig.xmlLineNodeMap = {};
+	FontRig.xmlNodeLineMap = {};
 
 	const lines = text.split('\n');
 	let globalContourIdx = 0;
@@ -42,49 +42,49 @@ TRV.rebuildLineMaps = function(text) {
 			inContour = false;
 		} else if (inContour && line.startsWith('<node ')) {
 			const id = `c${globalContourIdx}_n${nodeIdx}`;
-			TRV.xmlLineNodeMap[i] = id;
-			TRV.xmlNodeLineMap[id] = i;
+			FontRig.xmlLineNodeMap[i] = id;
+			FontRig.xmlNodeLineMap[id] = i;
 			nodeIdx++;
 		}
 	}
 };
 
-TRV.updateNodeCount = function() {
-	const layer = TRV.getActiveLayer();
+FontRig.updateNodeCount = function() {
+	const layer = FontRig.getActiveLayer();
 	if (layer) {
-		const allNodes = TRV.getAllNodes(layer);
+		const allNodes = FontRig.getAllNodes(layer);
 		const onCount = allNodes.filter(n => n.type === 'on').length;
 		const offCount = allNodes.length - onCount;
-		TRV.dom.xmlNodeCount.textContent = `${onCount} on / ${offCount} off`;
+		FontRig.dom.xmlNodeCount.textContent = `${onCount} on / ${offCount} off`;
 	} else {
-		TRV.dom.xmlNodeCount.textContent = '';
+		FontRig.dom.xmlNodeCount.textContent = '';
 	}
 };
 
-TRV.setParseStatus = function(ok, msg) {
-	const el = TRV.dom.parseStatus;
+FontRig.setParseStatus = function(ok, msg) {
+	const el = FontRig.dom.parseStatus;
 	if (ok) {
 		el.textContent = 'OK';
 		el.className = 'parse-status ok';
-		TRV.dom.xmlContent.classList.remove('has-error');
+		FontRig.dom.xmlContent.classList.remove('has-error');
 	} else {
 		el.textContent = msg || 'Error';
 		el.className = 'parse-status error';
-		TRV.dom.xmlContent.classList.add('has-error');
+		FontRig.dom.xmlContent.classList.add('has-error');
 	}
 };
 
 // Highlight first selected node in XML textarea (for multi-selection,
 // scroll to first; all are conceptually selected).
 // Direction: canvas → XML (one way only)
-TRV.highlightXmlNode = function(nodeId) {
-	if (!TRV.state.showXml) return;
+FontRig.highlightXmlNode = function(nodeId) {
+	if (!FontRig.state.showXml) return;
 	if (!nodeId) return;
 
-	const lineIdx = TRV.xmlNodeLineMap[nodeId];
+	const lineIdx = FontRig.xmlNodeLineMap[nodeId];
 	if (lineIdx === undefined) return;
 
-	const textarea = TRV.dom.xmlContent;
+	const textarea = FontRig.dom.xmlContent;
 	const text = textarea.value;
 	const lines = text.split('\n');
 
@@ -105,64 +105,64 @@ TRV.highlightXmlNode = function(nodeId) {
 // -- Refresh: glyph data → XML textarea -----------------------------
 // Regenerates XML from the current in-memory glyph, replacing
 // whatever is in the textarea. Called by Refresh button.
-TRV.xmlRefresh = function() {
-	if (!TRV.state.glyphData) return;
-	const newXml = TRV.glyphToXml(TRV.state.glyphData);
-	TRV.state.rawXml = newXml;
+FontRig.xmlRefresh = function() {
+	if (!FontRig.state.glyphData) return;
+	const newXml = FontRig.glyphToXml(FontRig.state.glyphData);
+	FontRig.state.rawXml = newXml;
 
-	const formatted = TRV.formatXml(newXml);
-	TRV.dom.xmlContent.value = formatted;
-	TRV.rebuildLineMaps(formatted);
-	TRV.updateNodeCount();
-	TRV.setParseStatus(true);
+	const formatted = FontRig.formatXml(newXml);
+	FontRig.dom.xmlContent.value = formatted;
+	FontRig.rebuildLineMaps(formatted);
+	FontRig.updateNodeCount();
+	FontRig.setParseStatus(true);
 };
 
 // -- Apply: XML textarea → glyph data ------------------------------
 // Parses the textarea content and replaces the in-memory glyph.
 // Called by Apply button or Ctrl+Enter in the XML textarea.
-TRV.xmlApply = function() {
-	const xmlString = TRV.dom.xmlContent.value;
+FontRig.xmlApply = function() {
+	const xmlString = FontRig.dom.xmlContent.value;
 
 	try {
-		const newGlyph = TRV.parseGlyphXML(xmlString);
+		const newGlyph = FontRig.parseGlyphXML(xmlString);
 
-		TRV.state.glyphData = newGlyph;
-		TRV.state.rawXml = xmlString;
+		FontRig.state.glyphData = newGlyph;
+		FontRig.state.rawXml = xmlString;
 
 		// Update layer selector if layers changed
-		const currentLayer = TRV.state.activeLayer;
-		TRV.dom.layerSelect.innerHTML = '';
+		const currentLayer = FontRig.state.activeLayer;
+		FontRig.dom.layerSelect.innerHTML = '';
 		for (const layer of newGlyph.layers) {
 			const opt = document.createElement('option');
 			opt.value = layer.name;
 			opt.textContent = layer.name || '(unnamed)';
-			TRV.dom.layerSelect.appendChild(opt);
+			FontRig.dom.layerSelect.appendChild(opt);
 		}
 
 		if (newGlyph.layers.find(l => l.name === currentLayer)) {
-			TRV.dom.layerSelect.value = currentLayer;
-			TRV.state.activeLayer = currentLayer;
+			FontRig.dom.layerSelect.value = currentLayer;
+			FontRig.state.activeLayer = currentLayer;
 		} else if (newGlyph.layers.length > 0) {
-			TRV.state.activeLayer = newGlyph.layers[0].name;
-			TRV.dom.layerSelect.value = TRV.state.activeLayer;
+			FontRig.state.activeLayer = newGlyph.layers[0].name;
+			FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 		}
 
 		let infoHtml = `<span>${newGlyph.name || '?'}</span>`;
 		if (newGlyph.unicodes) infoHtml += ` U+${newGlyph.unicodes}`;
-		TRV.dom.glyphInfo.innerHTML = infoHtml;
+		FontRig.dom.glyphInfo.innerHTML = infoHtml;
 
-		TRV.rebuildLineMaps(xmlString);
-		TRV.updateNodeCount();
-		TRV.setParseStatus(true);
-		TRV.draw();
+		FontRig.rebuildLineMaps(xmlString);
+		FontRig.updateNodeCount();
+		FontRig.setParseStatus(true);
+		FontRig.draw();
 
 	} catch (e) {
-		TRV.setParseStatus(false, 'Parse error');
+		FontRig.setParseStatus(false, 'Parse error');
 	}
 };
 
 // -- XML formatter --------------------------------------------------
-TRV.formatXml = function(xml) {
+FontRig.formatXml = function(xml) {
 	let result = '';
 	let indent = 0;
 	const tab = '  ';

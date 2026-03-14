@@ -6,9 +6,9 @@
 // editor toolbar and manages the Layer Select dialog lifecycle.
 //
 // Depends on:
-//   - TRV.scope           (trw-dialogs.js)
-//   - TRV.layerSelection  (trw-dialogs.js)
-//   - TRW.LayerSelectDialog (trw-dialogs.js)
+//   - FontRig.scope           (trw-dialogs.js)
+//   - FontRig.layerSelection  (trw-dialogs.js)
+//   - FRWidget.LayerSelectDialog (trw-dialogs.js)
 //   - DOM: #scope-layers, #scope-glyphs button groups (index.html)
 // ===================================================================
 'use strict';
@@ -28,11 +28,11 @@
 
 	function ensureLayerDialog() {
 		if (!layerDlg) {
-			layerDlg = TRW.LayerSelectDialog({
+			layerDlg = FRWidget.LayerSelectDialog({
 				mode: 0,
 				onChange: function(checkedNames) {
 					// Notify any external listeners
-					if (TRV.scope._onChange) TRV.scope._onChange();
+					if (FontRig.scope._onChange) FontRig.scope._onChange();
 				},
 				onClose: function() {
 					// Don't switch away from 'selected' mode on close —
@@ -67,7 +67,7 @@
 		var mode = activateExclusive(layerBtns, btn);
 		if (!mode) return;
 
-		TRV.scope.layerMode = mode;
+		FontRig.scope.layerMode = mode;
 
 		if (mode === 'selected') {
 			// Open / refresh the Layer Select dialog
@@ -79,7 +79,7 @@
 			if (layerDlg) layerDlg.close();
 		}
 
-		if (TRV.scope._onChange) TRV.scope._onChange();
+		if (FontRig.scope._onChange) FontRig.scope._onChange();
 	});
 
 	// -- Glyph scope events -----------------------------------------------
@@ -90,24 +90,24 @@
 		var mode = activateExclusive(glyphBtns, btn);
 		if (!mode) return;
 
-		TRV.scope.glyphMode = mode;
+		FontRig.scope.glyphMode = mode;
 
 		// When switching glyph mode, also refresh the layer dialog's mode
 		// (mode 0 = glyph layers, mode 1 = font masters only)
-		if (layerDlg && TRV.scope.layerMode === 'selected') {
+		if (layerDlg && FontRig.scope.layerMode === 'selected') {
 			var dlgMode = (mode === 'active') ? 0 : 1;
-			TRV.layerSelection.refresh(dlgMode);
+			FontRig.layerSelection.refresh(dlgMode);
 			layerDlg.refresh();
 		}
 
-		if (TRV.scope._onChange) TRV.scope._onChange();
+		if (FontRig.scope._onChange) FontRig.scope._onChange();
 	});
 
-	// -- Public API on TRV ------------------------------------------------
+	// -- Public API on FontRig ------------------------------------------------
 	// Allow other code to programmatically open the layer dialog
-	TRV.openLayerSelect = function() {
+	FontRig.openLayerSelect = function() {
 		// Switch to 'selected' mode
-		TRV.scope.layerMode = 'selected';
+		FontRig.scope.layerMode = 'selected';
 
 		// Update button visuals
 		for (var i = 0; i < layerBtns.length; i++) {
@@ -120,7 +120,7 @@
 	};
 
 	// Allow reading the resolved scope from anywhere
-	TRV.getScopeLayers = function() { return TRV.scope.getLayers(); };
-	TRV.getScopeGlyphs = function() { return TRV.scope.getGlyphs(); };
+	FontRig.getScopeLayers = function() { return FontRig.scope.getLayers(); };
+	FontRig.getScopeGlyphs = function() { return FontRig.scope.getGlyphs(); };
 
 })();

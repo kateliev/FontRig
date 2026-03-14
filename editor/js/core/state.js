@@ -3,7 +3,7 @@
 // ===================================================================
 'use strict';
 
-const TRV = {
+const FontRig = {
 	// -- Application state ----------------------------------------------
 	state: {
 		glyphData: null,       // parsed glyph object
@@ -65,7 +65,7 @@ const TRV = {
 };
 
 // Populate DOM refs after DOM is ready
-TRV.dom = {
+FontRig.dom = {
 	canvas:         document.getElementById('glyph-canvas'),
 	ctx:            document.getElementById('glyph-canvas').getContext('2d'),
 	canvasWrap:     document.getElementById('canvas-wrap'),

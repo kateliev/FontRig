@@ -7,17 +7,17 @@
 'use strict';
 
 // -- Panel tab switching ------------------------------------------------
-TRV.initPanelTabs = function() {
+FontRig.initPanelTabs = function() {
 	const tabs = document.querySelectorAll('.panel-tab');
 	tabs.forEach(function(tab) {
 		tab.addEventListener('click', function() {
-			TRV.switchPanelTab(this.dataset.panel);
+			FontRig.switchPanelTab(this.dataset.panel);
 		});
 	});
 };
 
-TRV.switchPanelTab = function(tabName) {
-	TRV.state.activePanel = tabName;
+FontRig.switchPanelTab = function(tabName) {
+	FontRig.state.activePanel = tabName;
 
 	// Update tab buttons
 	document.querySelectorAll('.panel-tab').forEach(function(tab) {
@@ -36,8 +36,8 @@ TRV.switchPanelTab = function(tabName) {
 	if (pyInfo) pyInfo.style.display = tabName === 'python' ? '' : 'none';
 
 	// Rebuild XML panel content if switching to XML tab
-	if (tabName === 'xml' && TRV.state.showXml) {
-		TRV.buildXmlPanel();
+	if (tabName === 'xml' && FontRig.state.showXml) {
+		FontRig.buildXmlPanel();
 	}
 
 	// Focus input if switching to Python
@@ -48,7 +48,7 @@ TRV.switchPanelTab = function(tabName) {
 };
 
 // -- Python REPL --------------------------------------------------------
-TRV.pyPanel = {
+FontRig.pyPanel = {
 	history: [],
 	historyIdx: -1,
 
@@ -58,33 +58,33 @@ TRV.pyPanel = {
 		const output = document.getElementById('py-output');
 		const input = document.getElementById('py-input');
 
-		if (TRV.pyBridge.ready) return;
-		if (TRV.pyBridge.loading) return;
+		if (FontRig.pyBridge.ready) return;
+		if (FontRig.pyBridge.loading) return;
 
 		btn.textContent = 'Loading…';
 		btn.disabled = true;
 
-		await TRV.pyBridge.init(function(msg) {
-			TRV.pyPanel.appendOutput(msg, 'info');
+		await FontRig.pyBridge.init(function(msg) {
+			FontRig.pyPanel.appendOutput(msg, 'info');
 		});
 
-		if (TRV.pyBridge.ready) {
+		if (FontRig.pyBridge.ready) {
 			btn.style.display = 'none';
 			input.disabled = false;
 			input.placeholder = '>>> Python — Shift+Enter to run';
 			input.focus();
 
 			// Sync current glyph if loaded
-			if (TRV.state.glyphData) {
-				TRV.pyBridge.syncToPython();
-				TRV.pyPanel.appendOutput('glyph synced from viewer.', 'info');
+			if (FontRig.state.glyphData) {
+				FontRig.pyBridge.syncToPython();
+				FontRig.pyPanel.appendOutput('glyph synced from viewer.', 'info');
 			}
 
-			TRV.pyPanel.updateStatus('ready');
+			FontRig.pyPanel.updateStatus('ready');
 		} else {
 			btn.textContent = 'Retry Init';
 			btn.disabled = false;
-			TRV.pyPanel.updateStatus('error');
+			FontRig.pyPanel.updateStatus('error');
 		}
 	},
 
@@ -95,30 +95,30 @@ TRV.pyPanel = {
 		if (!code) return;
 
 		// Show input in output area
-		TRV.pyPanel.appendOutput(code, 'input');
+		FontRig.pyPanel.appendOutput(code, 'input');
 
 		// Save to history
 		this.history.push(code);
 		this.historyIdx = this.history.length;
 
 		// Run
-		const result = TRV.pyBridge.run(code);
+		const result = FontRig.pyBridge.run(code);
 
 		if (result.output) {
-			TRV.pyPanel.appendOutput(result.output, 'output');
+			FontRig.pyPanel.appendOutput(result.output, 'output');
 		}
 
 		if (result.error) {
-			TRV.pyPanel.appendOutput(result.error, 'error');
+			FontRig.pyPanel.appendOutput(result.error, 'error');
 		}
 
 		if (result.glyphChanged) {
-			TRV.pyPanel.appendOutput('↻ glyph updated in viewer', 'info');
+			FontRig.pyPanel.appendOutput('↻ glyph updated in viewer', 'info');
 		}
 
 		// Clear input
 		input.value = '';
-		TRV.pyPanel.autoResize(input);
+		FontRig.pyPanel.autoResize(input);
 	},
 
 	// -- Output helpers -------------------------------------------------
@@ -158,7 +158,7 @@ TRV.pyPanel = {
 
 		const input = document.getElementById('py-input');
 		input.value = this.history[this.historyIdx] || '';
-		TRV.pyPanel.autoResize(input);
+		FontRig.pyPanel.autoResize(input);
 	},
 
 	historyDown: function() {
@@ -172,7 +172,7 @@ TRV.pyPanel = {
 		} else {
 			input.value = this.history[this.historyIdx] || '';
 		}
-		TRV.pyPanel.autoResize(input);
+		FontRig.pyPanel.autoResize(input);
 	},
 
 	// -- Status indicator -----------------------------------------------
@@ -199,7 +199,7 @@ TRV.pyPanel = {
 };
 
 // -- Wire Python panel events -------------------------------------------
-TRV.wirePythonPanel = function() {
+FontRig.wirePythonPanel = function() {
 	const input = document.getElementById('py-input');
 	const initBtn = document.getElementById('py-init-btn');
 	const clearBtn = document.getElementById('py-clear-btn');
@@ -210,7 +210,7 @@ TRV.wirePythonPanel = function() {
 	input.addEventListener('keydown', function(e) {
 		if (e.key === 'Enter' && e.shiftKey) {
 			e.preventDefault();
-			TRV.pyPanel.execute();
+			FontRig.pyPanel.execute();
 		}
 
 		// Arrow up in empty single-line input → history
@@ -218,7 +218,7 @@ TRV.wirePythonPanel = function() {
 			const pos = input.selectionStart;
 			if (pos === 0) {
 				e.preventDefault();
-				TRV.pyPanel.historyUp();
+				FontRig.pyPanel.historyUp();
 			}
 		}
 
@@ -227,27 +227,27 @@ TRV.wirePythonPanel = function() {
 			const pos = input.selectionStart;
 			if (pos === input.value.length) {
 				e.preventDefault();
-				TRV.pyPanel.historyDown();
+				FontRig.pyPanel.historyDown();
 			}
 		}
 	});
 
 	// Auto-resize on input
 	input.addEventListener('input', function() {
-		TRV.pyPanel.autoResize(this);
+		FontRig.pyPanel.autoResize(this);
 	});
 
 	// Init button
 	if (initBtn) {
 		initBtn.addEventListener('click', function() {
-			TRV.pyPanel.init();
+			FontRig.pyPanel.init();
 		});
 	}
 
 	// Clear button
 	if (clearBtn) {
 		clearBtn.addEventListener('click', function() {
-			TRV.pyPanel.clearOutput();
+			FontRig.pyPanel.clearOutput();
 		});
 	}
 };

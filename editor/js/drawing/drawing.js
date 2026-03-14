@@ -1,15 +1,15 @@
 // ===================================================================
 // FontRig — Canvas Drawing
 // ===================================================================
-// All color values come from TRV.theme (theme.js).
+// All color values come from FontRig.theme (theme.js).
 // ===================================================================
 'use strict';
 
 // ===================================================================
 // Layer Render
 // ===================================================================
-TRV.renderLayer = function(layer, opts) {
-	const state = TRV.state;
+FontRig.renderLayer = function(layer, opts) {
+	const state = FontRig.state;
 	const preview = state.previewMode;
 	const isActive = opts && opts.isActive;
 	const canvasW = opts && opts.canvasW;
@@ -17,58 +17,58 @@ TRV.renderLayer = function(layer, opts) {
 
 	// Mask layer
 	if (!preview && state.showMask) {
-		const mask = TRV.getMaskFor(layer.name);
-		if (mask) TRV.drawMaskContours(mask);
+		const mask = FontRig.getMaskFor(layer.name);
+		if (mask) FontRig.drawMaskContours(mask);
 	}
 
 	// Contours + measurements
-	TRV.drawContours(layer);
-	TRV.drawStemMeasurement(layer);
+	FontRig.drawContours(layer);
+	FontRig.drawStemMeasurement(layer);
 
 	// Metrics
 	if (!preview && state.showMetrics) {
-		TRV.drawMetrics(layer, canvasW, canvasH);
+		FontRig.drawMetrics(layer, canvasW, canvasH);
 	}
 
 	// Preview nodes
 	if (preview) {
-		TRV.drawPreviewNodes(layer);
+		FontRig.drawPreviewNodes(layer);
 	}
 
 	// Nodes
 	if (!preview && state.showNodes) {
-		TRV.drawStackedWarnings(layer);
-		TRV.drawSelectedSegments(layer);
-		TRV.drawNodes(layer);
+		FontRig.drawStackedWarnings(layer);
+		FontRig.drawSelectedSegments(layer);
+		FontRig.drawNodes(layer);
 	}
 
 	// Anchors
 	if (!preview && state.showAnchors) {
-		TRV.drawAnchors(layer);
+		FontRig.drawAnchors(layer);
 	}
 
 	// Selection overlay
 	if (!preview && isActive && state.isSelecting) {
-		TRV.drawSelectionOverlay();
+		FontRig.drawSelectionOverlay();
 	}
 
 	// Transform frame
-	if (!preview && isActive && TRV.tf.active) {
-		TRV.drawTransformFrame();
+	if (!preview && isActive && FontRig.tf.active) {
+		FontRig.drawTransformFrame();
 	}
 
 	// Layer label
 	if (!preview) {
-		TRV.drawLayerLabel(layer);
+		FontRig.drawLayerLabel(layer);
 	}
 };
 
 // ===================================================================
 // Glyph Render
 // ===================================================================
-TRV.draw = function() {
-	const { canvas, ctx, canvasWrap } = TRV.dom;
-	const state = TRV.state;
+FontRig.draw = function() {
+	const { canvas, ctx, canvasWrap } = FontRig.dom;
+	const state = FontRig.state;
 	const dpr = window.devicePixelRatio || 1;
 	const w = canvasWrap.clientWidth;
 	const h = canvasWrap.clientHeight;
@@ -81,31 +81,31 @@ TRV.draw = function() {
 
 	// Clear — preview mode: white bg, black fill, no decorations
 	var preview = state.previewMode;
-	var t = TRV.getCurrentTheme();
-	ctx.fillStyle = preview ? t.bgPreview : TRV.getBgColor();
+	var t = FontRig.getCurrentTheme();
+	ctx.fillStyle = preview ? t.bgPreview : FontRig.getBgColor();
 	ctx.fillRect(0, 0, w, h);
 
 	// Update glyph widget (works in all modes)
-	TRV.updateGlyphWidget();
+	FontRig.updateGlyphWidget();
 
 	if (!state.glyphData) return;
 
 	// Multi-view: delegate to split or joined renderer
 	if (state.multiView || state.glyphViewMode) {
-		if (state.glyphViewMode && TRV.font) {
-			TRV.drawGlyphStrip(w, h);
+		if (state.glyphViewMode && FontRig.font) {
+			FontRig.drawGlyphStrip(w, h);
 		} else if (state.joinedView) {
-			TRV.drawJoinedView(w, h);
+			FontRig.drawJoinedView(w, h);
 		} else {
-			TRV.drawSplitView(w, h);
+			FontRig.drawSplitView(w, h);
 		}
 		return;
 	}
 
-	const layer = TRV.getActiveLayer();
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
-	TRV.renderLayer(layer, {
+	FontRig.renderLayer(layer, {
 					isActive: true,
 					canvasW: w,
 					canvasH: h
@@ -114,14 +114,14 @@ TRV.draw = function() {
 };
 
 // -- Metrics --------------------------------------------------------
-TRV.drawMetrics = function(layer, w, h) {
-	const ctx = TRV.dom.ctx;
-	const t = TRV.getCurrentTheme().metrics;
+FontRig.drawMetrics = function(layer, w, h) {
+	const ctx = FontRig.dom.ctx;
+	const t = FontRig.getCurrentTheme().metrics;
 	const advW = layer.width;
 	const advH = layer.height;
 
 	// Baseline (y=0)
-	const baseY = TRV.glyphToScreen(0, 0).y;
+	const baseY = FontRig.glyphToScreen(0, 0).y;
 	ctx.strokeStyle = t.baseline;
 	ctx.lineWidth = t.lineWidth || 1;
 	ctx.setLineDash(t.baselineDash || [6, 4]);
@@ -132,7 +132,7 @@ TRV.drawMetrics = function(layer, w, h) {
 	ctx.setLineDash([]);
 
 	// Advance height line (y=advH)
-	const topY = TRV.glyphToScreen(0, advH).y;
+	const topY = FontRig.glyphToScreen(0, advH).y;
 	ctx.strokeStyle = t.baseline;
 	ctx.setLineDash(t.baselineDash || [6, 4]);
 	ctx.beginPath();
@@ -142,8 +142,8 @@ TRV.drawMetrics = function(layer, w, h) {
 	ctx.setLineDash([]);
 
 	// Font-level metrics (ascender, descender, x-height, cap-height)
-	if (TRV.font) {
-		var fm = TRV.font.metrics;
+	if (FontRig.font) {
+		var fm = FontRig.font.metrics;
 		var fmLines = [
 			{ y: fm.ascender,  label: 'Asc',  color: t.fontMetricsColors.ascender },
 			{ y: fm.descender, label: 'Desc', color: t.fontMetricsColors.descender },
@@ -152,7 +152,7 @@ TRV.drawMetrics = function(layer, w, h) {
 		];
 		ctx.lineWidth = t.lineWidth || 1;
 		for (var i = 0; i < fmLines.length; i++) {
-			var fy = TRV.glyphToScreen(0, fmLines[i].y).y;
+			var fy = FontRig.glyphToScreen(0, fmLines[i].y).y;
 			ctx.strokeStyle = fmLines[i].color;
 			ctx.setLineDash(t.fontMetricsDash || [3, 5]);
 			ctx.beginPath();
@@ -169,14 +169,14 @@ TRV.drawMetrics = function(layer, w, h) {
 	}
 
 	// LSB line (x=0) — solid within UPM, fade beyond
-	const lsbX = TRV.glyphToScreen(0, 0).x;
-	var descY = TRV.font ? TRV.font.metrics.descender : -200;
-	var ascY = TRV.font ? TRV.font.metrics.ascender : 800;
+	const lsbX = FontRig.glyphToScreen(0, 0).x;
+	var descY = FontRig.font ? FontRig.font.metrics.descender : -200;
+	var ascY = FontRig.font ? FontRig.font.metrics.ascender : 800;
 	var fadeMargin = (ascY - descY) * 0.4;
-	var sbTop = TRV.glyphToScreen(0, ascY + fadeMargin).y;
-	var sbAscY = TRV.glyphToScreen(0, ascY).y;
-	var sbDescY = TRV.glyphToScreen(0, descY).y;
-	var sbBot = TRV.glyphToScreen(0, descY - fadeMargin).y;
+	var sbTop = FontRig.glyphToScreen(0, ascY + fadeMargin).y;
+	var sbAscY = FontRig.glyphToScreen(0, ascY).y;
+	var sbDescY = FontRig.glyphToScreen(0, descY).y;
+	var sbBot = FontRig.glyphToScreen(0, descY - fadeMargin).y;
 
 	var lsbGrad = ctx.createLinearGradient(0, sbTop, 0, sbBot);
 	lsbGrad.addColorStop(0, 'rgba(255,120,80,0)');
@@ -193,7 +193,7 @@ TRV.drawMetrics = function(layer, w, h) {
 	ctx.setLineDash([]);
 
 	// RSB / Advance width line — solid within UPM, fade beyond
-	const rsbX = TRV.glyphToScreen(advW, 0).x;
+	const rsbX = FontRig.glyphToScreen(advW, 0).x;
 	var rsbGrad = ctx.createLinearGradient(0, sbTop, 0, sbBot);
 	rsbGrad.addColorStop(0, 'rgba(91,157,235,0)');
 	rsbGrad.addColorStop((sbAscY - sbTop) / (sbBot - sbTop), t.advance);
@@ -227,13 +227,13 @@ TRV.drawMetrics = function(layer, w, h) {
 };
 
 // -- Contours -------------------------------------------------------
-TRV.drawContours = function(layer) {
-	const ctx = TRV.dom.ctx;
-	const t = TRV.getCurrentTheme().contour;
-	var preview = TRV.state.previewMode;
+FontRig.drawContours = function(layer) {
+	const ctx = FontRig.dom.ctx;
+	const t = FontRig.getCurrentTheme().contour;
+	var preview = FontRig.state.previewMode;
 
 	// Preview mode: always filled, black on white
-	if (preview || TRV.state.filled) {
+	if (preview || FontRig.state.filled) {
 		// Filled mode: closed contours in ONE path; nonzero winding rule
 		// Same-direction contours fill solid, opposite-direction hollows out
 		ctx.beginPath();
@@ -241,7 +241,7 @@ TRV.drawContours = function(layer) {
 			for (const contour of shape.contours) {
 				if (contour.nodes.length === 0) continue;
 				if (!contour.closed) continue; // open contours are not filled
-				TRV.buildContourPath(contour);
+				FontRig.buildContourPath(contour);
 			}
 		}
 		ctx.fillStyle = preview ? '#000000' : t.fill;
@@ -258,7 +258,7 @@ TRV.drawContours = function(layer) {
 				for (const contour of shape.contours) {
 					if (contour.nodes.length === 0 || contour.closed) continue;
 					ctx.beginPath();
-					TRV.buildContourPath(contour);
+					FontRig.buildContourPath(contour);
 					ctx.strokeStyle = t.strokePlain || t.stroke;
 					ctx.lineWidth = (t.lineWidth || 1) + 0.5;
 					ctx.stroke();
@@ -271,7 +271,7 @@ TRV.drawContours = function(layer) {
 			for (const contour of shape.contours) {
 				if (contour.nodes.length === 0) continue;
 				ctx.beginPath();
-				TRV.buildContourPath(contour);
+				FontRig.buildContourPath(contour);
 				ctx.strokeStyle = t.strokePlain;
 				ctx.lineWidth = 1.5;
 				ctx.stroke();
@@ -280,8 +280,8 @@ TRV.drawContours = function(layer) {
 	}
 };
 
-TRV.buildContourPath = function(contour) {
-	const ctx = TRV.dom.ctx;
+FontRig.buildContourPath = function(contour) {
+	const ctx = FontRig.dom.ctx;
 	const nodes = contour.nodes;
 	if (nodes.length === 0) return;
 
@@ -294,7 +294,7 @@ TRV.buildContourPath = function(contour) {
 		if (nodes[j].type === 'on') { firstOn = j; break; }
 	}
 
-	const sp = TRV.glyphToScreen(nodes[firstOn].x, nodes[firstOn].y);
+	const sp = FontRig.glyphToScreen(nodes[firstOn].x, nodes[firstOn].y);
 	ctx.moveTo(sp.x, sp.y);
 
 	let i = (firstOn + 1) % n;
@@ -304,7 +304,7 @@ TRV.buildContourPath = function(contour) {
 		const node = nodes[i];
 
 		if (node.type === 'on') {
-			const p = TRV.glyphToScreen(node.x, node.y);
+			const p = FontRig.glyphToScreen(node.x, node.y);
 			ctx.lineTo(p.x, p.y);
 
 		} else if (node.type === 'curve') {
@@ -312,9 +312,9 @@ TRV.buildContourPath = function(contour) {
 			const bcp1 = node;
 			const bcp2 = nodes[(i + 1) % n];
 			const onCurve = nodes[(i + 2) % n];
-			const p1 = TRV.glyphToScreen(bcp1.x, bcp1.y);
-			const p2 = TRV.glyphToScreen(bcp2.x, bcp2.y);
-			const p3 = TRV.glyphToScreen(onCurve.x, onCurve.y);
+			const p1 = FontRig.glyphToScreen(bcp1.x, bcp1.y);
+			const p2 = FontRig.glyphToScreen(bcp2.x, bcp2.y);
+			const p3 = FontRig.glyphToScreen(onCurve.x, onCurve.y);
 			ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
 			i = (i + 2) % n;
 			count += 2;
@@ -323,8 +323,8 @@ TRV.buildContourPath = function(contour) {
 			// Quadratic: single off-curve then on-curve
 			const offNode = node;
 			const onCurve = nodes[(i + 1) % n];
-			const p1 = TRV.glyphToScreen(offNode.x, offNode.y);
-			const p2 = TRV.glyphToScreen(onCurve.x, onCurve.y);
+			const p1 = FontRig.glyphToScreen(offNode.x, offNode.y);
+			const p2 = FontRig.glyphToScreen(onCurve.x, onCurve.y);
 			ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
 			i = (i + 1) % n;
 			count += 1;
@@ -339,9 +339,9 @@ TRV.buildContourPath = function(contour) {
 
 
 // -- Highlighted segments (between selected on-curves) --------------
-TRV.drawSelectedSegments = function(layer) {
-	var ctx = TRV.dom.ctx;
-	var sel = TRV.state.selectedNodeIds;
+FontRig.drawSelectedSegments = function(layer) {
+	var ctx = FontRig.dom.ctx;
+	var sel = FontRig.state.selectedNodeIds;
 	if (sel.size === 0) return;
 
 	var ci = 0;
@@ -349,7 +349,7 @@ TRV.drawSelectedSegments = function(layer) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
 			var contour = shape.contours[ki];
-			var segs = TRV.getContourSegments(contour);
+			var segs = FontRig.getContourSegments(contour);
 
 			for (var gi = 0; gi < segs.length; gi++) {
 				var seg = segs[gi];
@@ -362,20 +362,20 @@ TRV.drawSelectedSegments = function(layer) {
 				ctx.save();
 				ctx.beginPath();
 
-				var sp = TRV.glyphToScreen(seg.pts[0].x, seg.pts[0].y);
+				var sp = FontRig.glyphToScreen(seg.pts[0].x, seg.pts[0].y);
 				ctx.moveTo(sp.x, sp.y);
 
 				if (seg.type === 'line') {
-					var ep = TRV.glyphToScreen(seg.pts[1].x, seg.pts[1].y);
+					var ep = FontRig.glyphToScreen(seg.pts[1].x, seg.pts[1].y);
 					ctx.lineTo(ep.x, ep.y);
 				} else if (seg.type === 'cubic') {
-					var p1 = TRV.glyphToScreen(seg.pts[1].x, seg.pts[1].y);
-					var p2 = TRV.glyphToScreen(seg.pts[2].x, seg.pts[2].y);
-					var p3 = TRV.glyphToScreen(seg.pts[3].x, seg.pts[3].y);
+					var p1 = FontRig.glyphToScreen(seg.pts[1].x, seg.pts[1].y);
+					var p2 = FontRig.glyphToScreen(seg.pts[2].x, seg.pts[2].y);
+					var p3 = FontRig.glyphToScreen(seg.pts[3].x, seg.pts[3].y);
 					ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
 				} else if (seg.type === 'quadratic') {
-					var p1 = TRV.glyphToScreen(seg.pts[1].x, seg.pts[1].y);
-					var p2 = TRV.glyphToScreen(seg.pts[2].x, seg.pts[2].y);
+					var p1 = FontRig.glyphToScreen(seg.pts[1].x, seg.pts[1].y);
+					var p2 = FontRig.glyphToScreen(seg.pts[2].x, seg.pts[2].y);
 					ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
 				}
 
@@ -401,9 +401,9 @@ TRV.drawSelectedSegments = function(layer) {
 // -- Stacked node warning glow --------------------------------------
 // Highlights nodes that overlap or are within 2 units of another node.
 // Static red glow — no animation.
-TRV.drawStackedWarnings = function(layer) {
-	var ctx = TRV.dom.ctx;
-	var allNodes = TRV.getAllNodes(layer);
+FontRig.drawStackedWarnings = function(layer) {
+	var ctx = FontRig.dom.ctx;
+	var allNodes = FontRig.getAllNodes(layer);
 	var n = allNodes.length;
 	if (n < 2) return;
 
@@ -425,7 +425,7 @@ TRV.drawStackedWarnings = function(layer) {
 	ctx.save();
 	for (var idx of stacked) {
 		var node = allNodes[idx];
-		var sp = TRV.glyphToScreen(node.x, node.y);
+		var sp = FontRig.glyphToScreen(node.x, node.y);
 
 		ctx.beginPath();
 		ctx.arc(sp.x, sp.y, 12, 0, Math.PI * 2);
@@ -441,10 +441,10 @@ TRV.drawStackedWarnings = function(layer) {
 };
 
 // -- Nodes & handles ------------------------------------------------
-TRV.drawNodes = function(layer) {
-	const ctx = TRV.dom.ctx;
-	const sel = TRV.state.selectedNodeIds;
-	const tn = TRV.getCurrentTheme().node;
+FontRig.drawNodes = function(layer) {
+	const ctx = FontRig.dom.ctx;
+	const sel = FontRig.state.selectedNodeIds;
+	const tn = FontRig.getCurrentTheme().node;
 
 	// First pass: draw handle lines
 	// Cubic BCPs connect to their parent on-curve only, NOT to each other
@@ -459,14 +459,14 @@ TRV.drawNodes = function(layer) {
 				const node = nodes[ni];
 
 				if (node.type === 'curve') {
-					const sp = TRV.glyphToScreen(node.x, node.y);
+					const sp = FontRig.glyphToScreen(node.x, node.y);
 					const prevIdx = (ni - 1 + n) % n;
 					const nextIdx = (ni + 1) % n;
 					const prev = nodes[prevIdx];
 					const next = nodes[nextIdx];
 
 					if (prev.type === 'on') {
-						const pp = TRV.glyphToScreen(prev.x, prev.y);
+						const pp = FontRig.glyphToScreen(prev.x, prev.y);
 						ctx.strokeStyle = tn.handleLine;
 						ctx.lineWidth = tn.handleWidth;
 						ctx.beginPath();
@@ -476,7 +476,7 @@ TRV.drawNodes = function(layer) {
 					}
 
 					if (next.type === 'on') {
-						const np = TRV.glyphToScreen(next.x, next.y);
+						const np = FontRig.glyphToScreen(next.x, next.y);
 						ctx.strokeStyle = tn.handleLine;
 						ctx.lineWidth = tn.handleWidth;
 						ctx.beginPath();
@@ -486,12 +486,12 @@ TRV.drawNodes = function(layer) {
 					}
 
 				} else if (node.type === 'off') {
-					const sp = TRV.glyphToScreen(node.x, node.y);
+					const sp = FontRig.glyphToScreen(node.x, node.y);
 					const prevIdx = (ni - 1 + n) % n;
 					const nextIdx = (ni + 1) % n;
 
 					if (nodes[prevIdx].type === 'on') {
-						const pp = TRV.glyphToScreen(nodes[prevIdx].x, nodes[prevIdx].y);
+						const pp = FontRig.glyphToScreen(nodes[prevIdx].x, nodes[prevIdx].y);
 						ctx.strokeStyle = tn.handleLine;
 						ctx.lineWidth = tn.handleWidth;
 						ctx.beginPath();
@@ -501,7 +501,7 @@ TRV.drawNodes = function(layer) {
 					}
 
 					if (nodes[nextIdx].type === 'on') {
-						const np = TRV.glyphToScreen(nodes[nextIdx].x, nodes[nextIdx].y);
+						const np = FontRig.glyphToScreen(nodes[nextIdx].x, nodes[nextIdx].y);
 						ctx.strokeStyle = tn.handleLine;
 						ctx.lineWidth = tn.handleWidth;
 						ctx.beginPath();
@@ -541,7 +541,7 @@ TRV.drawNodes = function(layer) {
 				}
 
 				const id = `c${ci}_n${ni}`;
-				const sp = TRV.glyphToScreen(node.x, node.y);
+				const sp = FontRig.glyphToScreen(node.x, node.y);
 				const isSelected = sel.has(id);
 				const r = isSelected ? tn.radius + 1 : tn.radius;
 
@@ -589,8 +589,8 @@ TRV.drawNodes = function(layer) {
 
 			const startNode = nodes[firstOn];
 			const nextNode = nodes[(firstOn + 1) % n];
-			const sp = TRV.glyphToScreen(startNode.x, startNode.y);
-			const np = TRV.glyphToScreen(nextNode.x, nextNode.y);
+			const sp = FontRig.glyphToScreen(startNode.x, startNode.y);
+			const np = FontRig.glyphToScreen(nextNode.x, nextNode.y);
 
 			// Direction angle from start towards next node
 			const dx = np.x - sp.x;
@@ -627,16 +627,16 @@ TRV.drawNodes = function(layer) {
 // -- Preview mode: proximity-reveal nodes ---------------------------
 // Draws nodes/handles with opacity based on distance to cursor.
 // Closer = brighter; beyond REVEAL_RADIUS = invisible.
-TRV.PREVIEW_REVEAL_RADIUS = 120; // screen pixels
+FontRig.PREVIEW_REVEAL_RADIUS = 120; // screen pixels
 
-TRV.drawPreviewNodes = function(layer) {
-	var mouse = TRV.state.previewMouse;
+FontRig.drawPreviewNodes = function(layer) {
+	var mouse = FontRig.state.previewMouse;
 	if (!mouse) return;
 
-	var ctx = TRV.dom.ctx;
-	var sel = TRV.state.selectedNodeIds;
-	var tn = TRV.getCurrentTheme().node;
-	var radius = TRV.PREVIEW_REVEAL_RADIUS;
+	var ctx = FontRig.dom.ctx;
+	var sel = FontRig.state.selectedNodeIds;
+	var tn = FontRig.getCurrentTheme().node;
+	var radius = FontRig.PREVIEW_REVEAL_RADIUS;
 	var savedAlpha = ctx.globalAlpha;
 
 	// Helper: distance-based alpha (quadratic falloff)
@@ -661,7 +661,7 @@ TRV.drawPreviewNodes = function(layer) {
 				var node = nodes[ni];
 				if (node.type !== 'curve' && node.type !== 'off') continue;
 
-				var sp = TRV.glyphToScreen(node.x, node.y);
+				var sp = FontRig.glyphToScreen(node.x, node.y);
 				var a = nodeAlpha(sp);
 				if (a <= 0) continue;
 
@@ -673,7 +673,7 @@ TRV.drawPreviewNodes = function(layer) {
 				var nextIdx = (ni + 1) % n;
 
 				if (nodes[prevIdx].type === 'on') {
-					var pp = TRV.glyphToScreen(nodes[prevIdx].x, nodes[prevIdx].y);
+					var pp = FontRig.glyphToScreen(nodes[prevIdx].x, nodes[prevIdx].y);
 					ctx.beginPath();
 					ctx.moveTo(pp.x, pp.y);
 					ctx.lineTo(sp.x, sp.y);
@@ -681,7 +681,7 @@ TRV.drawPreviewNodes = function(layer) {
 				}
 
 				if (nodes[nextIdx].type === 'on') {
-					var np = TRV.glyphToScreen(nodes[nextIdx].x, nodes[nextIdx].y);
+					var np = FontRig.glyphToScreen(nodes[nextIdx].x, nodes[nextIdx].y);
 					ctx.beginPath();
 					ctx.moveTo(sp.x, sp.y);
 					ctx.lineTo(np.x, np.y);
@@ -714,7 +714,7 @@ TRV.drawPreviewNodes = function(layer) {
 
 				if (ni === n - 1 && node.x === startNode.x && node.y === startNode.y) continue;
 
-				var sp = TRV.glyphToScreen(node.x, node.y);
+				var sp = FontRig.glyphToScreen(node.x, node.y);
 				var a = nodeAlpha(sp);
 				if (a <= 0) continue;
 
@@ -769,11 +769,11 @@ TRV.drawPreviewNodes = function(layer) {
 
 			var startNode = nodes[firstOn];
 			var nextNode = nodes[(firstOn + 1) % n];
-			var sp = TRV.glyphToScreen(startNode.x, startNode.y);
+			var sp = FontRig.glyphToScreen(startNode.x, startNode.y);
 			var a = nodeAlpha(sp);
 			if (a <= 0) { ci++; continue; }
 
-			var np = TRV.glyphToScreen(nextNode.x, nextNode.y);
+			var np = FontRig.glyphToScreen(nextNode.x, nextNode.y);
 			var dx = np.x - sp.x;
 			var dy = np.y - sp.y;
 			var angle = Math.atan2(dy, dx);
@@ -806,13 +806,13 @@ TRV.drawPreviewNodes = function(layer) {
 };
 
 // -- Anchors --------------------------------------------------------
-TRV.drawAnchors = function(layer) {
+FontRig.drawAnchors = function(layer) {
 	if (!layer.anchors || layer.anchors.length === 0) return;
-	const ctx = TRV.dom.ctx;
-	const ta = TRV.getCurrentTheme().anchor;
+	const ctx = FontRig.dom.ctx;
+	const ta = FontRig.getCurrentTheme().anchor;
 
 	for (const anchor of layer.anchors) {
-		const sp = TRV.glyphToScreen(anchor.x, anchor.y);
+		const sp = FontRig.glyphToScreen(anchor.x, anchor.y);
 		const size = 6;
 
 		ctx.fillStyle = ta.fill;
@@ -845,10 +845,10 @@ TRV.drawAnchors = function(layer) {
 };
 
 // -- Selection overlay (rect or lasso) ------------------------------
-TRV.drawSelectionOverlay = function() {
-	const ctx = TRV.dom.ctx;
-	const state = TRV.state;
-	const ts = TRV.getCurrentTheme().selection;
+FontRig.drawSelectionOverlay = function() {
+	const ctx = FontRig.dom.ctx;
+	const state = FontRig.state;
+	const ts = FontRig.getCurrentTheme().selection;
 
 	ctx.save();
 
@@ -906,17 +906,17 @@ TRV.drawSelectionOverlay = function() {
 };
 
 // -- Mask contours (underneath main layer) --------------------------
-TRV.drawMaskContours = function(maskLayer) {
+FontRig.drawMaskContours = function(maskLayer) {
 	if (!maskLayer) return;
-	const ctx = TRV.dom.ctx;
-	const tm = TRV.getCurrentTheme().mask;
+	const ctx = FontRig.dom.ctx;
+	const tm = FontRig.getCurrentTheme().mask;
 
 	for (const shape of maskLayer.shapes) {
 		for (const contour of shape.contours) {
 			if (contour.nodes.length === 0) continue;
 
 			ctx.beginPath();
-			TRV.buildContourPath(contour);
+			FontRig.buildContourPath(contour);
 
 			ctx.strokeStyle = tm.stroke;
 			ctx.lineWidth = tm.lineWidth;
@@ -926,20 +926,20 @@ TRV.drawMaskContours = function(maskLayer) {
 };
 
 // -- Layer name label (filled badge, centered below baseline) -------
-TRV.drawLayerLabel = function(layer) {
-	const ctx = TRV.dom.ctx;
-	const tl = TRV.getCurrentTheme().label;
-	if (!TRV.state.glyphData) return;
+FontRig.drawLayerLabel = function(layer) {
+	const ctx = FontRig.dom.ctx;
+	const tl = FontRig.getCurrentTheme().label;
+	if (!FontRig.state.glyphData) return;
 
-	const layers = TRV.state.glyphData.layers;
+	const layers = FontRig.state.glyphData.layers;
 	const idx = layers.indexOf(layer);
-	const color = TRV.getLayerColor(idx >= 0 ? idx : 0);
+	const color = FontRig.getLayerColor(idx >= 0 ? idx : 0);
 	const name = layer.name || '(unnamed)';
 
 	// Position: centered on advance width, below baseline
 	const cx = layer.width / 2;
 	const labelGy = -30; // 30 units below baseline
-	const pos = TRV.glyphToScreen(cx, labelGy);
+	const pos = FontRig.glyphToScreen(cx, labelGy);
 
 	ctx.font = tl.font;
 	const textW = ctx.measureText(name).width;

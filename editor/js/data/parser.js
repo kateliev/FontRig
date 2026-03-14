@@ -7,7 +7,7 @@
 
 // Parse a transform matrix() attribute string: 'matrix(a b c d e f)'
 // Returns a 6-element array or null if not a valid matrix string
-TRV.parseTransformAttr = function(str) {
+FontRig.parseTransformAttr = function(str) {
 	if (!str) return null;
 	const m = str.match(/^matrix\(([^)]+)\)$/);
 	if (!m) return null;
@@ -18,7 +18,7 @@ TRV.parseTransformAttr = function(str) {
 
 // ------------------------------------------------------------------
 
-TRV.parseGlyphXML = function(xmlString) {
+FontRig.parseGlyphXML = function(xmlString) {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(xmlString, 'text/xml');
 	const parseError = doc.querySelector('parsererror');
@@ -37,13 +37,13 @@ TRV.parseGlyphXML = function(xmlString) {
 	};
 
 	for (const layerEl of glyphEl.querySelectorAll(':scope > layer')) {
-		glyph.layers.push(TRV.parseLayer(layerEl));
+		glyph.layers.push(FontRig.parseLayer(layerEl));
 	}
 
 	return glyph;
 };
 
-TRV.parseLayer = function(el) {
+FontRig.parseLayer = function(el) {
 	const layer = {
 		name: el.getAttribute('name') || '',
 		identifier: el.getAttribute('identifier') || '',
@@ -63,14 +63,14 @@ TRV.parseLayer = function(el) {
 	// Parse lib for any remaining custom data; also check legacy stx/sty in lib
 	const libEl = el.querySelector(':scope > lib');
 	if (libEl) {
-		layer.lib = TRV.parsePlistDict(libEl.querySelector('dict'));
+		layer.lib = FontRig.parsePlistDict(libEl.querySelector('dict'));
 		// Legacy: lib-stored stx/sty (only if not already set from attribute)
 		if (layer.stx === undefined && layer.lib.stx !== undefined) layer.stx = layer.lib.stx;
 		if (layer.sty === undefined && layer.lib.sty !== undefined) layer.sty = layer.lib.sty;
 	}
 
 	for (const shapeEl of el.querySelectorAll(':scope > shape')) {
-		layer.shapes.push(TRV.parseShape(shapeEl));
+		layer.shapes.push(FontRig.parseShape(shapeEl));
 	}
 
 	for (const anchorEl of el.querySelectorAll(':scope > anchor')) {
@@ -84,7 +84,7 @@ TRV.parseLayer = function(el) {
 	return layer;
 };
 
-TRV.parseShape = function(el) {
+FontRig.parseShape = function(el) {
 	const shape = {
 		name: el.getAttribute('name') || '',
 		identifier: el.getAttribute('identifier') || '',
@@ -96,12 +96,12 @@ TRV.parseShape = function(el) {
 	// transform — compact: matrix() attribute; legacy fallback: lib array
 	const txAttr = el.getAttribute('transform');
 	if (txAttr !== null) {
-		shape.transform = TRV.parseTransformAttr(txAttr);
+		shape.transform = FontRig.parseTransformAttr(txAttr);
 	}
 
 	const libEl = el.querySelector(':scope > lib');
 	if (libEl) {
-		shape.lib = TRV.parsePlistDict(libEl.querySelector('dict'));
+		shape.lib = FontRig.parsePlistDict(libEl.querySelector('dict'));
 		// Legacy: lib-stored transform array
 		if (shape.transform === null && Array.isArray(shape.lib.transform) && shape.lib.transform.length === 6) {
 			shape.transform = shape.lib.transform;
@@ -109,13 +109,13 @@ TRV.parseShape = function(el) {
 	}
 
 	for (const contourEl of el.querySelectorAll(':scope > contour')) {
-		shape.contours.push(TRV.parseContour(contourEl));
+		shape.contours.push(FontRig.parseContour(contourEl));
 	}
 
 	return shape;
 };
 
-TRV.parseContour = function(el) {
+FontRig.parseContour = function(el) {
 	const contour = {
 		name: el.getAttribute('name') || '',
 		identifier: el.getAttribute('identifier') || '',
@@ -139,7 +139,7 @@ TRV.parseContour = function(el) {
 
 	const libEl = el.querySelector(':scope > lib');
 	if (libEl) {
-		const libData = TRV.parsePlistDict(libEl.querySelector('dict'));
+		const libData = FontRig.parsePlistDict(libEl.querySelector('dict'));
 		// Legacy: lib-stored closed/clockwise (only if not already set from attribute)
 		if (closedAttr === null && libData.closed !== undefined) contour.closed = libData.closed;
 		if (cwAttr === null && libData.clockwise !== undefined) contour.clockwise = libData.clockwise;
@@ -158,7 +158,7 @@ TRV.parseContour = function(el) {
 	return contour;
 };
 
-TRV.parsePlistDict = function(dictEl) {
+FontRig.parsePlistDict = function(dictEl) {
 	if (!dictEl) return {};
 	const result = {};
 	const children = Array.from(dictEl.children);
@@ -168,7 +168,7 @@ TRV.parsePlistDict = function(dictEl) {
 			const key = children[i].textContent;
 			i++;
 			if (i < children.length) {
-				result[key] = TRV.parsePlistValue(children[i]);
+				result[key] = FontRig.parsePlistValue(children[i]);
 			}
 		}
 		i++;
@@ -176,15 +176,15 @@ TRV.parsePlistDict = function(dictEl) {
 	return result;
 };
 
-TRV.parsePlistValue = function(el) {
+FontRig.parsePlistValue = function(el) {
 	switch (el.tagName) {
 		case 'true': return true;
 		case 'false': return false;
 		case 'integer': return parseInt(el.textContent);
 		case 'real': return parseFloat(el.textContent);
 		case 'string': return el.textContent || '';
-		case 'array': return Array.from(el.children).map(TRV.parsePlistValue);
-		case 'dict': return TRV.parsePlistDict(el);
+		case 'array': return Array.from(el.children).map(FontRig.parsePlistValue);
+		case 'dict': return FontRig.parsePlistDict(el);
 		default: return null;
 	}
 };

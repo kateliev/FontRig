@@ -1109,8 +1109,8 @@ body {
 #layer-select:focus { border-color: var(--accent-dim); }
 
 /* ===================================================================
-   TypeRig Widgets (TRW) — Reusable UI Gadget Library
-   Imported from TRWidgets - for modification and reuse
+   TypeRig Widgets (FRWidget) — Reusable UI Gadget Library
+   Imported from FRWidgetidgets - for modification and reuse
    =================================================================== */
 
 :root {
@@ -1137,7 +1137,7 @@ body {
 	--trw-radius-lg: 6px;
 	--trw-font: 'DM Sans', system-ui, sans-serif;
 	--trw-font-mono: 'JetBrains Mono', monospace;
-	--trw-font-icon: 'TRW Icons', var(--trw-font-mono);
+	--trw-font-icon: 'FRWidget Icons', var(--trw-font-mono);
 	--trw-transition: 0.12s ease;
 	--trw-shadow: 0 4px 16px rgba(0,0,0,0.35);
 	--trw-shadow-sm: 0 2px 6px rgba(0,0,0,0.25);

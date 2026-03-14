@@ -1,11 +1,11 @@
 // ===================================================================
-// TypeRig Dialogs (TRW) — Dialog Library
+// TypeRig Dialogs (FRWidget) — Dialog Library
 // ===================================================================
 // Ports of TypeRig proxy/fl/gui/dialogs.py for the web editor.
-// All dialogs reuse TRW widget factories from trw-widgets.js and
-// the base TRW.Dialog modal shell.
+// All dialogs reuse FRWidget widget factories from trw-widgets.js and
+// the base FRWidget.Dialog modal shell.
 //
-// Shared state: TRV.layerSelection is the persistent layer-check
+// Shared state: FontRig.layerSelection is the persistent layer-check
 // state that both JS code and the Python bridge can consume.
 // ===================================================================
 'use strict';
@@ -14,10 +14,10 @@
 // SHARED LAYER SELECTION STATE
 // ===================================================================
 // Persistent across dialog open/close. Any code can read
-// TRV.layerSelection.getChecked() to get the list of layer names
+// FontRig.layerSelection.getChecked() to get the list of layer names
 // the user has ticked. The Python bridge syncs this automatically.
 // -------------------------------------------------------------------
-TRV.layerSelection = {
+FontRig.layerSelection = {
 	layers: [],          // [{ name: str, type: str, checked: bool }, ...]
 	_onChange: null,      // external listener
 
@@ -27,10 +27,10 @@ TRV.layerSelection = {
 
 		if (mode === undefined) mode = 0;
 
-		if (mode === 0 && TRV.state.glyphData) {
+		if (mode === 0 && FontRig.state.glyphData) {
 			// Mode 0: all layers from the active glyph
-			for (var i = 0; i < TRV.state.glyphData.layers.length; i++) {
-				var layer = TRV.state.glyphData.layers[i];
+			for (var i = 0; i < FontRig.state.glyphData.layers.length; i++) {
+				var layer = FontRig.state.glyphData.layers[i];
 				var lname = layer.name;
 
 				// Skip hidden layers (names containing #)
@@ -45,18 +45,18 @@ TRV.layerSelection = {
 				}
 
 				// Preserve previous checked state if layer name matches
-				var prev = TRV.layerSelection._findByName(lname);
+				var prev = FontRig.layerSelection._findByName(lname);
 				layers.push({
 					name: lname,
 					type: ltype,
 					checked: prev ? prev.checked : false
 				});
 			}
-		} else if (TRV.font && TRV.font.masters) {
+		} else if (FontRig.font && FontRig.font.masters) {
 			// Mode 1+: only font masters
-			for (var m = 0; m < TRV.font.masters.length; m++) {
-				var master = TRV.font.masters[m];
-				var prev = TRV.layerSelection._findByName(master.layerName);
+			for (var m = 0; m < FontRig.font.masters.length; m++) {
+				var master = FontRig.font.masters[m];
+				var prev = FontRig.layerSelection._findByName(master.layerName);
 				layers.push({
 					name: master.layerName,
 					type: 'Master',
@@ -65,7 +65,7 @@ TRV.layerSelection = {
 			}
 		}
 
-		TRV.layerSelection.layers = layers;
+		FontRig.layerSelection.layers = layers;
 	},
 
 	// Get array of checked layer names
@@ -121,30 +121,30 @@ TRV.layerSelection = {
 //   'window'    — all glyphs in the workspace strip
 //   'selection' — all glyphs selected in the font/glyph panel
 // -------------------------------------------------------------------
-TRV.scope = {
+FontRig.scope = {
 	layerMode: 'masters',
 	glyphMode: 'active',
 	_onChange: null,
 
 	// Resolve layerMode to an array of layer names for the active glyph
 	getLayers: function() {
-		var mode = TRV.scope.layerMode;
+		var mode = FontRig.scope.layerMode;
 
 		if (mode === 'active') {
-			return TRV.state.activeLayer ? [TRV.state.activeLayer] : [];
+			return FontRig.state.activeLayer ? [FontRig.state.activeLayer] : [];
 		}
 
 		if (mode === 'masters') {
-			if (!TRV.font || !TRV.font.masters) return TRV.state.activeLayer ? [TRV.state.activeLayer] : [];
+			if (!FontRig.font || !FontRig.font.masters) return FontRig.state.activeLayer ? [FontRig.state.activeLayer] : [];
 			var names = [];
-			for (var i = 0; i < TRV.font.masters.length; i++) {
-				names.push(TRV.font.masters[i].layerName);
+			for (var i = 0; i < FontRig.font.masters.length; i++) {
+				names.push(FontRig.font.masters[i].layerName);
 			}
 			return names;
 		}
 
 		if (mode === 'selected') {
-			return TRV.layerSelection.getChecked();
+			return FontRig.layerSelection.getChecked();
 		}
 
 		return [];
@@ -152,32 +152,32 @@ TRV.scope = {
 
 	// Resolve glyphMode to an array of glyph names
 	getGlyphs: function() {
-		var mode = TRV.scope.glyphMode;
+		var mode = FontRig.scope.glyphMode;
 
 		if (mode === 'active') {
-			return TRV.activeGlyph ? [TRV.activeGlyph] : [];
+			return FontRig.activeGlyph ? [FontRig.activeGlyph] : [];
 		}
 
 		if (mode === 'window') {
 			// Workspace strip glyphs
-			if (TRV.workspace && TRV.workspace.glyphs && TRV.workspace.glyphs.length > 0) {
-				return TRV.workspace.glyphs.slice();
+			if (FontRig.workspace && FontRig.workspace.glyphs && FontRig.workspace.glyphs.length > 0) {
+				return FontRig.workspace.glyphs.slice();
 			}
 			// Fallback: active glyph only
-			return TRV.activeGlyph ? [TRV.activeGlyph] : [];
+			return FontRig.activeGlyph ? [FontRig.activeGlyph] : [];
 		}
 
 		if (mode === 'selection') {
 			// Glyphs selected in the font panel (checked/highlighted entries)
 			var list = document.getElementById('glyph-list');
-			if (!list) return TRV.activeGlyph ? [TRV.activeGlyph] : [];
+			if (!list) return FontRig.activeGlyph ? [FontRig.activeGlyph] : [];
 
 			var names = [];
 			var entries = list.querySelectorAll('.glyph-entry.active, .glyph-entry.in-strip');
 			for (var i = 0; i < entries.length; i++) {
 				if (entries[i].dataset.name) names.push(entries[i].dataset.name);
 			}
-			return names.length > 0 ? names : (TRV.activeGlyph ? [TRV.activeGlyph] : []);
+			return names.length > 0 ? names : (FontRig.activeGlyph ? [FontRig.activeGlyph] : []);
 		}
 
 		return [];
@@ -192,20 +192,20 @@ TRV.scope = {
 // Opens a non-modal dialog with a CheckTableWidget showing layers.
 //
 // Usage:
-//   var dlg = TRW.LayerSelectDialog({ mode: 0 });
+//   var dlg = FRWidget.LayerSelectDialog({ mode: 0 });
 //   dlg.open();
-//   // later: TRV.layerSelection.getChecked()
+//   // later: FontRig.layerSelection.getChecked()
 //
 // opts.mode     — 0 = all glyph layers (with types), 1+ = masters only
 // opts.onClose  — callback when dialog is dismissed
 // opts.onChange  — callback(checkedNames) when selection changes
 // -------------------------------------------------------------------
-TRW.LayerSelectDialog = function(opts) {
+FRWidget.LayerSelectDialog = function(opts) {
 	opts = opts || {};
 	var mode = opts.mode !== undefined ? opts.mode : 0;
 
 	// Refresh shared state
-	TRV.layerSelection.refresh(mode);
+	FontRig.layerSelection.refresh(mode);
 
 	// -- Color map for layer types (matching the Python original)
 	var colorMap = {
@@ -217,8 +217,8 @@ TRW.LayerSelectDialog = function(opts) {
 	// -- Build table rows from shared state
 	function buildRows() {
 		var rows = [];
-		for (var i = 0; i < TRV.layerSelection.layers.length; i++) {
-			var l = TRV.layerSelection.layers[i];
+		for (var i = 0; i < FontRig.layerSelection.layers.length; i++) {
+			var l = FontRig.layerSelection.layers[i];
 			rows.push({
 				data: [l.name, l.type],
 				checked: l.checked,
@@ -229,17 +229,17 @@ TRW.LayerSelectDialog = function(opts) {
 	}
 
 	// -- Check table
-	var checkTable = TRW.CheckTableWidget({
+	var checkTable = FRWidget.CheckTableWidget({
 		columns: ['Layer Name', 'Layer Type'],
 		rows: buildRows(),
 		colorMap: colorMap,
 		colorCol: 1,
 		onChange: function(rowIdx, checked) {
 			// Sync back to shared state
-			if (TRV.layerSelection.layers[rowIdx]) {
-				TRV.layerSelection.layers[rowIdx].checked = checked;
+			if (FontRig.layerSelection.layers[rowIdx]) {
+				FontRig.layerSelection.layers[rowIdx].checked = checked;
 			}
-			if (opts.onChange) opts.onChange(TRV.layerSelection.getChecked());
+			if (opts.onChange) opts.onChange(FontRig.layerSelection.getChecked());
 		}
 	});
 
@@ -247,7 +247,7 @@ TRW.LayerSelectDialog = function(opts) {
 	var toolbar = document.createElement('div');
 	toolbar.className = 'trw-lsd__toolbar';
 
-	var btnSelectAll = TRW.Button(null, {
+	var btnSelectAll = FRWidget.Button(null, {
 		icon: 'select_all', tooltip: 'Select all (Shift+Click to deselect all)',
 		compact: true,
 		onClick: function(e) {
@@ -257,7 +257,7 @@ TRW.LayerSelectDialog = function(opts) {
 		}
 	});
 
-	var btnSwap = TRW.Button(null, {
+	var btnSwap = FRWidget.Button(null, {
 		icon: 'select_swap', tooltip: 'Swap selection',
 		compact: true,
 		onClick: function() {
@@ -270,7 +270,7 @@ TRW.LayerSelectDialog = function(opts) {
 	var btnMasters = null, btnMasks = null, btnServices = null;
 
 	if (mode === 0) {
-		btnMasters = TRW.Button(null, {
+		btnMasters = FRWidget.Button(null, {
 			icon: 'layer_master', compact: true, tooltip: 'Select Masters (Shift+Click to deselect)',
 			onClick: function(e) {
 				var uncheck = e && e.shiftKey;
@@ -280,7 +280,7 @@ TRW.LayerSelectDialog = function(opts) {
 		});
 		btnMasters.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--master');
 
-		btnMasks = TRW.Button(null, {
+		btnMasks = FRWidget.Button(null, {
 			icon: 'layer_mask', compact: true, tooltip: 'Select Masks (Shift+Click to deselect)',
 			onClick: function(e) {
 				var uncheck = e && e.shiftKey;
@@ -290,7 +290,7 @@ TRW.LayerSelectDialog = function(opts) {
 		});
 		btnMasks.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--mask');
 
-		btnServices = TRW.Button(null, {
+		btnServices = FRWidget.Button(null, {
 			icon: 'layer_service', compact: true, tooltip: 'Select Services (Shift+Click to deselect)',
 			onClick: function(e) {
 				var uncheck = e && e.shiftKey;
@@ -301,11 +301,11 @@ TRW.LayerSelectDialog = function(opts) {
 		btnServices.classList.add('trw-lsd__type-btn', 'trw-lsd__type-btn--service');
 	}
 
-	var btnRefresh = TRW.Button(null, {
+	var btnRefresh = FRWidget.Button(null, {
 		icon: 'refresh', tooltip: 'Refresh layer list',
 		compact: true,
 		onClick: function() {
-			TRV.layerSelection.refresh(mode);
+			FontRig.layerSelection.refresh(mode);
 			checkTable.setData(
 				['Layer Name', 'Layer Type'],
 				buildRows()
@@ -328,7 +328,7 @@ TRW.LayerSelectDialog = function(opts) {
 	var searchRow = document.createElement('div');
 	searchRow.className = 'trw-lsd__search';
 
-	var searchLabel = TRW.Label('', { dim: true });
+	var searchLabel = FRWidget.Label('', { dim: true });
 	searchLabel.className = 'tri';
 	searchLabel.textContent = 'search';
 
@@ -340,7 +340,7 @@ TRW.LayerSelectDialog = function(opts) {
 		checkTable.filter(0, searchInput.value);
 	});
 
-	var searchClear = TRW.Button(null, {
+	var searchClear = FRWidget.Button(null, {
 		icon: 'close', compact: true, tooltip: 'Clear search',
 		onClick: function() {
 			searchInput.value = '';
@@ -363,15 +363,15 @@ TRW.LayerSelectDialog = function(opts) {
 	function syncFromTable() {
 		var rows = checkTable.getRows();
 		for (var i = 0; i < rows.length; i++) {
-			if (TRV.layerSelection.layers[i]) {
-				TRV.layerSelection.layers[i].checked = rows[i].checked;
+			if (FontRig.layerSelection.layers[i]) {
+				FontRig.layerSelection.layers[i].checked = rows[i].checked;
 			}
 		}
-		if (opts.onChange) opts.onChange(TRV.layerSelection.getChecked());
+		if (opts.onChange) opts.onChange(FontRig.layerSelection.getChecked());
 	}
 
 	// -- Create dialog shell
-	var dlg = TRW.Dialog({
+	var dlg = FRWidget.Dialog({
 		title: 'Select Layers',
 		body: body,
 		onClose: opts.onClose
@@ -383,13 +383,13 @@ TRW.LayerSelectDialog = function(opts) {
 
 	// Public API: expose refresh
 	dlg.refresh = function() {
-		TRV.layerSelection.refresh(mode);
+		FontRig.layerSelection.refresh(mode);
 		checkTable.setData(['Layer Name', 'Layer Type'], buildRows());
 	};
 
 	// Expose shared state accessor
 	dlg.getChecked = function() {
-		return TRV.layerSelection.getChecked();
+		return FontRig.layerSelection.getChecked();
 	};
 
 	return dlg;
@@ -403,12 +403,12 @@ TRW.LayerSelectDialog = function(opts) {
 // field value on OK, or null on Cancel/close.
 //
 // Usage:
-//   TRW.InputDialog({ title: '...', message: '...', label: '...' })
+//   FRWidget.InputDialog({ title: '...', message: '...', label: '...' })
 //     .then(function(value) { ... });
 // -------------------------------------------------------------------
-TRW.InputDialog = function(opts) {
+FRWidget.InputDialog = function(opts) {
 	opts = opts || {};
-	var field = TRW.EditField({
+	var field = FRWidget.EditField({
 		value: opts.value || '',
 		placeholder: opts.placeholder || ''
 	});
@@ -423,10 +423,10 @@ TRW.InputDialog = function(opts) {
 		body.appendChild(msg);
 	}
 
-	body.appendChild(TRW.Row(opts.label || 'Value', field));
+	body.appendChild(FRWidget.Row(opts.label || 'Value', field));
 
 	return new Promise(function(resolve) {
-		var dlg = TRW.Dialog({
+		var dlg = FRWidget.Dialog({
 			title: opts.title || 'Input',
 			body: body,
 			buttons: [
@@ -445,10 +445,10 @@ TRW.InputDialog = function(opts) {
 // ===================================================================
 // Port of TR2FieldDLG. Resolves with [topValue, bottomValue] or null.
 // -------------------------------------------------------------------
-TRW.DualInputDialog = function(opts) {
+FRWidget.DualInputDialog = function(opts) {
 	opts = opts || {};
-	var fieldT = TRW.EditField({ value: opts.valueTop || '', placeholder: opts.placeholderTop || '' });
-	var fieldB = TRW.EditField({ value: opts.valueBottom || '', placeholder: opts.placeholderBottom || '' });
+	var fieldT = FRWidget.EditField({ value: opts.valueTop || '', placeholder: opts.placeholderTop || '' });
+	var fieldB = FRWidget.EditField({ value: opts.valueBottom || '', placeholder: opts.placeholderBottom || '' });
 
 	var body = document.createElement('div');
 	body.className = 'trw-field-dlg__body';
@@ -460,11 +460,11 @@ TRW.DualInputDialog = function(opts) {
 		body.appendChild(msg);
 	}
 
-	body.appendChild(TRW.Row(opts.labelTop || 'Field 1', fieldT));
-	body.appendChild(TRW.Row(opts.labelBottom || 'Field 2', fieldB));
+	body.appendChild(FRWidget.Row(opts.labelTop || 'Field 1', fieldT));
+	body.appendChild(FRWidget.Row(opts.labelBottom || 'Field 2', fieldB));
 
 	return new Promise(function(resolve) {
-		var dlg = TRW.Dialog({
+		var dlg = FRWidget.Dialog({
 			title: opts.title || 'Input',
 			body: body,
 			buttons: [
@@ -483,7 +483,7 @@ TRW.DualInputDialog = function(opts) {
 // ===================================================================
 // Port of TR1SpinDLG. Resolves with the numeric value or null.
 // -------------------------------------------------------------------
-TRW.SpinDialog = function(opts) {
+FRWidget.SpinDialog = function(opts) {
 	opts = opts || {};
 	var isFloat = opts.decimals && opts.decimals > 0;
 
@@ -496,7 +496,7 @@ TRW.SpinDialog = function(opts) {
 
 	if (isFloat) spinOpts.decimals = opts.decimals;
 
-	var spin = isFloat ? TRW.DoubleSpinBox(spinOpts) : TRW.SpinBox(spinOpts);
+	var spin = isFloat ? FRWidget.DoubleSpinBox(spinOpts) : FRWidget.SpinBox(spinOpts);
 
 	var body = document.createElement('div');
 	body.className = 'trw-field-dlg__body';
@@ -508,10 +508,10 @@ TRW.SpinDialog = function(opts) {
 		body.appendChild(msg);
 	}
 
-	body.appendChild(TRW.Row(opts.label || 'Value', spin));
+	body.appendChild(FRWidget.Row(opts.label || 'Value', spin));
 
 	return new Promise(function(resolve) {
-		var dlg = TRW.Dialog({
+		var dlg = FRWidget.Dialog({
 			title: opts.title || 'Spin',
 			body: body,
 			buttons: [
@@ -532,7 +532,7 @@ TRW.SpinDialog = function(opts) {
 //   { 'Radius': { min, max, value, step, decimals }, ... }
 // Resolves with an object { 'Radius': value, ... } or null.
 // -------------------------------------------------------------------
-TRW.MultiSpinDialog = function(opts) {
+FRWidget.MultiSpinDialog = function(opts) {
 	opts = opts || {};
 	var fields = opts.fields || {};
 	var spinners = {};
@@ -562,13 +562,13 @@ TRW.MultiSpinDialog = function(opts) {
 
 		if (isFloat) spinOpts.decimals = cfg.decimals;
 
-		var spin = isFloat ? TRW.DoubleSpinBox(spinOpts) : TRW.SpinBox(spinOpts);
+		var spin = isFloat ? FRWidget.DoubleSpinBox(spinOpts) : FRWidget.SpinBox(spinOpts);
 		spinners[key] = spin;
-		body.appendChild(TRW.Row(key, spin));
+		body.appendChild(FRWidget.Row(key, spin));
 	}
 
 	return new Promise(function(resolve) {
-		var dlg = TRW.Dialog({
+		var dlg = FRWidget.Dialog({
 			title: opts.title || 'Values',
 			body: body,
 			buttons: [
@@ -595,12 +595,12 @@ TRW.MultiSpinDialog = function(opts) {
 // ===================================================================
 // SLIDER DIALOG
 // ===================================================================
-// Port of TR1SliderDLG. Uses TRW.SliderCtrl. Resolves with value or null.
+// Port of TR1SliderDLG. Uses FRWidget.SliderCtrl. Resolves with value or null.
 // -------------------------------------------------------------------
-TRW.SliderDialog = function(opts) {
+FRWidget.SliderDialog = function(opts) {
 	opts = opts || {};
 
-	var slider = TRW.SliderCtrl({
+	var slider = FRWidget.SliderCtrl({
 		label: opts.label || '',
 		min: opts.min !== undefined ? opts.min : 0,
 		max: opts.max !== undefined ? opts.max : 100,
@@ -623,7 +623,7 @@ TRW.SliderDialog = function(opts) {
 	body.appendChild(slider);
 
 	return new Promise(function(resolve) {
-		var dlg = TRW.Dialog({
+		var dlg = FRWidget.Dialog({
 			title: opts.title || 'Slider',
 			body: body,
 			buttons: [
@@ -643,15 +643,15 @@ TRW.SliderDialog = function(opts) {
 // Port of TR2ComboDLG. Resolves with { text, selectedIndex, selectedValue }
 // or null on cancel.
 // -------------------------------------------------------------------
-TRW.ComboDialog = function(opts) {
+FRWidget.ComboDialog = function(opts) {
 	opts = opts || {};
 
-	var field = TRW.EditField({
+	var field = FRWidget.EditField({
 		value: opts.value || '',
 		placeholder: opts.placeholder || ''
 	});
 
-	var combo = TRW.ComboBox({
+	var combo = FRWidget.ComboBox({
 		items: opts.items || []
 	});
 
@@ -665,11 +665,11 @@ TRW.ComboDialog = function(opts) {
 		body.appendChild(msg);
 	}
 
-	body.appendChild(TRW.Row(opts.labelField || 'Value', field));
-	body.appendChild(TRW.Row(opts.labelCombo || 'Select', combo));
+	body.appendChild(FRWidget.Row(opts.labelField || 'Value', field));
+	body.appendChild(FRWidget.Row(opts.labelCombo || 'Select', combo));
 
 	return new Promise(function(resolve) {
-		var dlg = TRW.Dialog({
+		var dlg = FRWidget.Dialog({
 			title: opts.title || 'Select',
 			body: body,
 			buttons: [

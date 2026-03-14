@@ -6,15 +6,15 @@
 // -- Cycle through layers -------------------------------------------
 // Rotates the active cell's layer in gridLayers (multi-view/strip).
 // Falls back to global activeLayer rotation in single view.
-TRV.cycleLayer = function(direction) {
-	var state = TRV.state;
+FontRig.cycleLayer = function(direction) {
+	var state = FontRig.state;
 	var glyphData = state.glyphData;
 	if (!glyphData) return;
 
 	// Build valid (non-mask) layer indices
 	var valid = [];
 	for (var i = 0; i < glyphData.layers.length; i++) {
-		if (!TRV.isMaskLayer(glyphData.layers[i].name)) valid.push(i);
+		if (!FontRig.isMaskLayer(glyphData.layers[i].name)) valid.push(i);
 	}
 	if (valid.length <= 1) return;
 
@@ -30,7 +30,7 @@ TRV.cycleLayer = function(direction) {
 		state.gridLayers[r][c] = valid[pos];
 
 		state.activeLayer = glyphData.layers[valid[pos]].name;
-		TRV.dom.layerSelect.value = state.activeLayer;
+		FontRig.dom.layerSelect.value = state.activeLayer;
 	} else {
 		// Single view: rotate global activeLayer
 		var names = valid.map(function(i) { return glyphData.layers[i].name; });
@@ -38,16 +38,16 @@ TRV.cycleLayer = function(direction) {
 		if (idx < 0) idx = 0;
 		idx = ((idx + direction) % names.length + names.length) % names.length;
 		state.activeLayer = names[idx];
-		TRV.dom.layerSelect.value = state.activeLayer;
+		FontRig.dom.layerSelect.value = state.activeLayer;
 	}
 
 	state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // Helper: get layer object by name from glyphData
-TRV.getLayerByName = function(glyphData, name) {
+FontRig.getLayerByName = function(glyphData, name) {
 	if (!glyphData) return null;
 	for (var i = 0; i < glyphData.layers.length; i++) {
 		if (glyphData.layers[i].name === name) return glyphData.layers[i];
@@ -56,12 +56,12 @@ TRV.getLayerByName = function(glyphData, name) {
 };
 
 // -- Hit test: which strip slot/cell was clicked --------------------
-TRV.getStripSlotAt = function(sx, sy) {
-	var layout = TRV.getGlyphStripLayout();
-	var state = TRV.state;
+FontRig.getStripSlotAt = function(sx, sy) {
+	var layout = FontRig.getGlyphStripLayout();
+	var state = FontRig.state;
 
 	// Convert screen to glyph x
-	var gp = TRV.screenToGlyph(sx, sy);
+	var gp = FontRig.screenToGlyph(sx, sy);
 
 	for (var si = 0; si < layout.slots.length; si++) {
 		var slot = layout.slots[si];
@@ -69,10 +69,10 @@ TRV.getStripSlotAt = function(sx, sy) {
 		if (slot.active && (slot.cols > 1 || slot.rows > 1)) {
 			// Check each cell of expanded active glyph
 			// In base-pan glyph space: row r baseline is at y = r * rowH
-			var desc = TRV.font ? Math.abs(TRV.font.metrics.descender) : 200;
+			var desc = FontRig.font ? Math.abs(FontRig.font.metrics.descender) : 200;
 			for (var r = 0; r < slot.rows; r++) {
 				for (var c = 0; c < slot.cols; c++) {
-					var cx = slot.x + c * (slot.advW + TRV.getCurrentTheme().grid.stripGap);
+					var cx = slot.x + c * (slot.advW + FontRig.getCurrentTheme().grid.stripGap);
 					var cellYlo = r * layout.rowH - desc;
 					var cellYhi = (r + 1) * layout.rowH;
 					if (gp.x >= cx && gp.x <= cx + slot.advW &&
@@ -94,123 +94,123 @@ TRV.getStripSlotAt = function(sx, sy) {
 
 // -- Undo / Redo (snapshot-based) -----------------------------------
 // Per-glyph stacks when a font is open; global stacks for loose files.
-TRV.undoStack = [];
-TRV.redoStack = [];
-TRV.UNDO_MAX = 99;
-TRV._nudgeTimer = null;
-TRV._nudgeUndoPushed = false;
+FontRig.undoStack = [];
+FontRig.redoStack = [];
+FontRig.UNDO_MAX = 99;
+FontRig._nudgeTimer = null;
+FontRig._nudgeUndoPushed = false;
 
 // Resolve active undo/redo stacks (per-glyph or global)
-TRV._undoStacks = function() {
-	var entry = TRV._getUndoEntry ? TRV._getUndoEntry() : null;
+FontRig._undoStacks = function() {
+	var entry = FontRig._getUndoEntry ? FontRig._getUndoEntry() : null;
 	if (entry) return { undo: entry.undoStack, redo: entry.redoStack };
-	return { undo: TRV.undoStack, redo: TRV.redoStack };
+	return { undo: FontRig.undoStack, redo: FontRig.redoStack };
 };
 
 // Deep-clone the active layer's shape tree (shapes → contours → nodes)
-TRV._snapshotLayer = function() {
-	var layer = TRV.getActiveLayer();
+FontRig._snapshotLayer = function() {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return null;
 	return JSON.parse(JSON.stringify(layer.shapes));
 };
 
 // Restore a snapshot into the active layer
-TRV._restoreSnapshot = function(snapshot) {
-	var layer = TRV.getActiveLayer();
+FontRig._restoreSnapshot = function(snapshot) {
+	var layer = FontRig.getActiveLayer();
 	if (!layer || !snapshot) return;
 	layer.shapes = JSON.parse(JSON.stringify(snapshot));
 };
 
 // Push current state onto undo stack (call before modifying)
-TRV.pushUndo = function() {
-	var snapshot = TRV._snapshotLayer();
+FontRig.pushUndo = function() {
+	var snapshot = FontRig._snapshotLayer();
 	if (!snapshot) return;
-	var stacks = TRV._undoStacks();
+	var stacks = FontRig._undoStacks();
 	stacks.undo.push(snapshot);
-	if (stacks.undo.length > TRV.UNDO_MAX) {
+	if (stacks.undo.length > FontRig.UNDO_MAX) {
 		stacks.undo.shift();
 	}
 	// Any new action clears redo
 	stacks.redo.length = 0;
 	// Mark glyph dirty
-	if (TRV.font && TRV.activeGlyph) {
-		TRV.dirtyGlyphs.add(TRV.activeGlyph);
-		TRV.updateGlyphPanelDirty();
+	if (FontRig.font && FontRig.activeGlyph) {
+		FontRig.dirtyGlyphs.add(FontRig.activeGlyph);
+		FontRig.updateGlyphPanelDirty();
 		// Debounced thumbnail refresh
-		clearTimeout(TRV._thumbRefreshTimer);
-		var name = TRV.activeGlyph;
-		TRV._thumbRefreshTimer = setTimeout(function() {
-			TRV.refreshThumbnail(name);
+		clearTimeout(FontRig._thumbRefreshTimer);
+		var name = FontRig.activeGlyph;
+		FontRig._thumbRefreshTimer = setTimeout(function() {
+			FontRig.refreshThumbnail(name);
 		}, 300);
 	}
 };
 
 // Push undo for nudge with timer coalescing.
 // Multiple nudges within 400ms count as one undo step.
-TRV.pushUndoNudge = function() {
-	if (!TRV._nudgeUndoPushed) {
-		TRV.pushUndo();
-		TRV._nudgeUndoPushed = true;
+FontRig.pushUndoNudge = function() {
+	if (!FontRig._nudgeUndoPushed) {
+		FontRig.pushUndo();
+		FontRig._nudgeUndoPushed = true;
 	}
-	clearTimeout(TRV._nudgeTimer);
-	TRV._nudgeTimer = setTimeout(function() {
-		TRV._nudgeUndoPushed = false;
+	clearTimeout(FontRig._nudgeTimer);
+	FontRig._nudgeTimer = setTimeout(function() {
+		FontRig._nudgeUndoPushed = false;
 	}, 400);
 };
 
-TRV.undo = function() {
-	var stacks = TRV._undoStacks();
+FontRig.undo = function() {
+	var stacks = FontRig._undoStacks();
 	if (stacks.undo.length === 0) return;
 	// Save current state to redo
-	var current = TRV._snapshotLayer();
+	var current = FontRig._snapshotLayer();
 	if (current) stacks.redo.push(current);
 	// Restore previous
 	var snapshot = stacks.undo.pop();
-	TRV._restoreSnapshot(snapshot);
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
-	TRV.xmlRefresh();
+	FontRig._restoreSnapshot(snapshot);
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
+	FontRig.xmlRefresh();
 };
 
-TRV.redo = function() {
-	var stacks = TRV._undoStacks();
+FontRig.redo = function() {
+	var stacks = FontRig._undoStacks();
 	if (stacks.redo.length === 0) return;
 	// Save current state to undo
-	var current = TRV._snapshotLayer();
+	var current = FontRig._snapshotLayer();
 	if (current) stacks.undo.push(current);
 	// Restore next
 	var snapshot = stacks.redo.pop();
-	TRV._restoreSnapshot(snapshot);
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
-	TRV.xmlRefresh();
+	FontRig._restoreSnapshot(snapshot);
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
+	FontRig.xmlRefresh();
 };
 
 // Clear undo history (e.g. when loading new glyph)
-TRV.clearUndo = function() {
-	var stacks = TRV._undoStacks();
+FontRig.clearUndo = function() {
+	var stacks = FontRig._undoStacks();
 	stacks.undo.length = 0;
 	stacks.redo.length = 0;
 };
 
 // -- Preview button sync --------------------------------------------
-TRV.updatePreviewButton = function() {
+FontRig.updatePreviewButton = function() {
 	var btn = document.getElementById('btn-preview');
-	if (btn) btn.classList.toggle('active', TRV.state.previewLocked);
+	if (btn) btn.classList.toggle('active', FontRig.state.previewLocked);
 };
 
 // -- Selection (multi-node) -----------------------------------------
-TRV.clearSelection = function() {
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+FontRig.clearSelection = function() {
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // Select a single node (replaces selection unless shift is held)
-TRV.selectNode = function(nodeId, additive) {
-	const sel = TRV.state.selectedNodeIds;
+FontRig.selectNode = function(nodeId, additive) {
+	const sel = FontRig.state.selectedNodeIds;
 
 	if (!nodeId) {
 		if (!additive) sel.clear();
@@ -229,16 +229,16 @@ TRV.selectNode = function(nodeId, additive) {
 	// Highlight first selected in XML panel (canvas → XML, one way)
 	if (sel.size > 0) {
 		const first = sel.values().next().value;
-		TRV.highlightXmlNode(first);
+		FontRig.highlightXmlNode(first);
 	}
 
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // Select multiple nodes (from rect/lasso), replacing or adding
-TRV.selectNodes = function(nodeIds, additive) {
-	const sel = TRV.state.selectedNodeIds;
+FontRig.selectNodes = function(nodeIds, additive) {
+	const sel = FontRig.state.selectedNodeIds;
 
 	if (!additive) sel.clear();
 	for (const id of nodeIds) {
@@ -247,52 +247,52 @@ TRV.selectNodes = function(nodeIds, additive) {
 
 	if (sel.size > 0) {
 		const first = sel.values().next().value;
-		TRV.highlightXmlNode(first);
+		FontRig.highlightXmlNode(first);
 	}
 
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
-TRV.updateStatusSelected = function() {
-	const sel = TRV.state.selectedNodeIds;
+FontRig.updateStatusSelected = function() {
+	const sel = FontRig.state.selectedNodeIds;
 	if (sel.size === 0) {
-		TRV.dom.statusSelected.textContent = '\u2013';
+		FontRig.dom.statusSelected.textContent = '\u2013';
 		return;
 	}
 
 	if (sel.size === 1) {
 		const nodeId = sel.values().next().value;
-		const ref = TRV.findNodeById(nodeId);
+		const ref = FontRig.findNodeById(nodeId);
 		if (ref) {
-			TRV.dom.statusSelected.textContent =
+			FontRig.dom.statusSelected.textContent =
 				nodeId + ' (' + ref.node.x + ', ' + ref.node.y + ') ' + ref.node.type;
 		}
 	} else {
-		TRV.dom.statusSelected.textContent = sel.size + ' nodes';
+		FontRig.dom.statusSelected.textContent = sel.size + ' nodes';
 	}
 };
 
 // -- Contour walk (PageUp / PageDown) -------------------------------
 // Walk selection forward/backward along the contour. If nothing is
 // selected, selects the first on-curve node of the first contour.
-TRV.walkContour = function(direction) {
-	const layer = TRV.getActiveLayer();
+FontRig.walkContour = function(direction) {
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
-	const sel = TRV.state.selectedNodeIds;
-	const allNodes = TRV.getAllNodes(layer);
+	const sel = FontRig.state.selectedNodeIds;
+	const allNodes = FontRig.getAllNodes(layer);
 	if (allNodes.length === 0) return;
 
 	// Nothing selected — pick first on-curve of first contour
 	if (sel.size === 0) {
 		for (var i = 0; i < allNodes.length; i++) {
 			if (allNodes[i].type === 'on') {
-				TRV.selectNode(allNodes[i].id, false);
+				FontRig.selectNode(allNodes[i].id, false);
 				return;
 			}
 		}
-		TRV.selectNode(allNodes[0].id, false);
+		FontRig.selectNode(allNodes[0].id, false);
 		return;
 	}
 
@@ -316,22 +316,22 @@ TRV.walkContour = function(direction) {
 
 	// Step forward or backward, wrapping around
 	var newIdx = (curIdx + direction + contourNodes.length) % contourNodes.length;
-	TRV.selectNode(contourNodes[newIdx].id, false);
+	FontRig.selectNode(contourNodes[newIdx].id, false);
 };
 
 // -- Open contour at selected node (Del) ----------------------------
 // Splits the contour at the selected on-curve node: duplicates it,
 // sets contour.closed = false. The original node becomes the end,
 // the duplicate becomes the new start.
-TRV.openContourAtNode = function() {
-	var layer = TRV.getActiveLayer();
+FontRig.openContourAtNode = function() {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
-	var sel = TRV.state.selectedNodeIds;
+	var sel = FontRig.state.selectedNodeIds;
 	if (sel.size !== 1) return; // only works on single node
 
 	var nodeId = sel.values().next().value;
-	var ref = TRV.findNodeById(nodeId);
+	var ref = FontRig.findNodeById(nodeId);
 	if (!ref || ref.node.type !== 'on') return;
 
 	var contour = ref.contour;
@@ -363,7 +363,7 @@ TRV.openContourAtNode = function() {
 	} else {
 		// -- Open contour: split into two at this node --
 		// Don't split at the very first or last on-curve (endpoints)
-		var ep = TRV.getOpenEndpoints(contour);
+		var ep = FontRig.getOpenEndpoints(contour);
 		if (!ep) return;
 		if (ni === ep.startIdx || ni === ep.endIdx) return;
 
@@ -408,8 +408,8 @@ TRV.openContourAtNode = function() {
 	}
 
 	sel.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // -- Delete selected node (Backspace) ------------------------------
@@ -419,15 +419,15 @@ TRV.openContourAtNode = function() {
 // Curve-Line or Line-Curve: converts to a single cubic using the
 //   surviving handle and a synthetic one for the line side.
 // Line-Line: simple removal, straight line remains.
-TRV.deleteNode = function() {
-	var layer = TRV.getActiveLayer();
+FontRig.deleteNode = function() {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
-	var sel = TRV.state.selectedNodeIds;
+	var sel = FontRig.state.selectedNodeIds;
 	if (sel.size !== 1) return;
 
 	var nodeId = sel.values().next().value;
-	var ref = TRV.findNodeById(nodeId);
+	var ref = FontRig.findNodeById(nodeId);
 	if (!ref) return;
 
 	var contour = ref.contour;
@@ -442,7 +442,7 @@ TRV.deleteNode = function() {
 	if (node.type !== 'on') {
 		// Off-curve selected: convert parent segment to line
 		// Find segment containing this off-curve node
-		var segs = TRV.getContourSegments(contour);
+		var segs = FontRig.getContourSegments(contour);
 		for (var gi = 0; gi < segs.length; gi++) {
 			var seg = segs[gi];
 			var isInSeg = false;
@@ -450,33 +450,33 @@ TRV.deleteNode = function() {
 			if (seg.type === 'quadratic' && ni === seg.offIdx) isInSeg = true;
 			if (isInSeg) {
 				// Build a synthetic hit for convertSegmentToLine
-				TRV.convertSegmentToLine({ contour: contour, seg: seg });
+				FontRig.convertSegmentToLine({ contour: contour, seg: seg });
 				return;
 			}
 		}
 		// Fallback: just clear selection
 		sel.clear();
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 		return;
 	}
 
 	// -- On-curve node deletion --
 	// Analyze incoming and outgoing segments
-	var incoming = TRV._analyzeIncoming(nodes, n, ni);
-	var outgoing = TRV._analyzeOutgoing(nodes, n, ni);
+	var incoming = FontRig._analyzeIncoming(nodes, n, ni);
+	var outgoing = FontRig._analyzeOutgoing(nodes, n, ni);
 
 	// Collect dense samples from both segments BEFORE removing anything.
 	// Skip duplicate at the junction (the deleted node itself).
-	var samplesIn = TRV._sampleSegment(nodes, n, ni, 'incoming', 40);
-	var samplesOut = TRV._sampleSegment(nodes, n, ni, 'outgoing', 40);
+	var samplesIn = FontRig._sampleSegment(nodes, n, ni, 'incoming', 40);
+	var samplesOut = FontRig._sampleSegment(nodes, n, ni, 'outgoing', 40);
 	// Merge: incoming ends at deleted node, outgoing starts there — skip first of outgoing
 	if (samplesOut.length > 0) samplesOut.shift();
-	TRV._pendingSamples = samplesIn.concat(samplesOut);
+	FontRig._pendingSamples = samplesIn.concat(samplesOut);
 
 	// Build replacement nodes to insert between prev on-curve and next on-curve
-	var replacement = TRV._buildReplacement(nodes, incoming, outgoing);
-	TRV._pendingSamples = null;
+	var replacement = FontRig._buildReplacement(nodes, incoming, outgoing);
+	FontRig._pendingSamples = null;
 
 	// Collect all indices to remove (the on-curve + its adjacent handles)
 	var toRemove = new Set();
@@ -517,13 +517,13 @@ TRV.deleteNode = function() {
 	}
 
 	sel.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // Analyze the incoming segment (ending at onIdx).
 // Returns { type, prevOnIdx, handleIndices, outerHandle }
-TRV._analyzeIncoming = function(nodes, n, onIdx) {
+FontRig._analyzeIncoming = function(nodes, n, onIdx) {
 	var result = { type: 'line', prevOnIdx: -1, handleIndices: [], outerHandle: null };
 	var i = (onIdx - 1 + n) % n;
 
@@ -556,7 +556,7 @@ TRV._analyzeIncoming = function(nodes, n, onIdx) {
 
 // Analyze the outgoing segment (starting at onIdx).
 // Returns { type, nextOnIdx, handleIndices, outerHandle }
-TRV._analyzeOutgoing = function(nodes, n, onIdx) {
+FontRig._analyzeOutgoing = function(nodes, n, onIdx) {
 	var result = { type: 'line', nextOnIdx: -1, handleIndices: [], outerHandle: null };
 	var i = (onIdx + 1) % n;
 
@@ -589,7 +589,7 @@ TRV._analyzeOutgoing = function(nodes, n, onIdx) {
 
 // Build replacement nodes between prevOn and nextOn after deleting
 // the node between incoming and outgoing segments.
-TRV._buildReplacement = function(nodes, incoming, outgoing) {
+FontRig._buildReplacement = function(nodes, incoming, outgoing) {
 	var round = function(v) { return Math.round(v * 10) / 10; };
 	var prevOn = nodes[incoming.prevOnIdx];
 	var nextOn = nodes[outgoing.nextOnIdx];
@@ -604,17 +604,17 @@ TRV._buildReplacement = function(nodes, incoming, outgoing) {
 
 	// Curve-Curve: merge into single cubic with scaled outer handles
 	if (inType === 'cubic' && outType === 'cubic') {
-		return TRV._mergeCubics(prevOn, incoming.outerHandle, outgoing.outerHandle, nextOn);
+		return FontRig._mergeCubics(prevOn, incoming.outerHandle, outgoing.outerHandle, nextOn);
 	}
 
 	// Curve-Line: cubic from prevOn with incoming outer handle → nextOn
 	if (inType === 'cubic' && outType === 'line') {
-		return TRV._curveToLine(prevOn, incoming.outerHandle, nextOn);
+		return FontRig._curveToLine(prevOn, incoming.outerHandle, nextOn);
 	}
 
 	// Line-Curve: cubic from prevOn → nextOn with outgoing outer handle
 	if (inType === 'line' && outType === 'cubic') {
-		return TRV._lineToCurve(prevOn, outgoing.outerHandle, nextOn);
+		return FontRig._lineToCurve(prevOn, outgoing.outerHandle, nextOn);
 	}
 
 	// Fallback for quad or mixed: just line
@@ -623,7 +623,7 @@ TRV._buildReplacement = function(nodes, incoming, outgoing) {
 
 // -- Least-squares cubic Bezier fitting ------------------------------
 // Sample a cubic at parameter t
-TRV._sampleCubic = function(p0, p1, p2, p3, t) {
+FontRig._sampleCubic = function(p0, p1, p2, p3, t) {
 	var u = 1 - t;
 	var uu = u * u, tt = t * t;
 	return {
@@ -633,7 +633,7 @@ TRV._sampleCubic = function(p0, p1, p2, p3, t) {
 };
 
 // Sample a line at parameter t
-TRV._sampleLine = function(p0, p1, t) {
+FontRig._sampleLine = function(p0, p1, t) {
 	return {
 		x: p0.x + t * (p1.x - p0.x),
 		y: p0.y + t * (p1.y - p0.y)
@@ -641,7 +641,7 @@ TRV._sampleLine = function(p0, p1, t) {
 };
 
 // Collect dense samples from a segment, returns [{ x, y }]
-TRV._sampleSegment = function(nodes, n, onIdx, direction, numSamples) {
+FontRig._sampleSegment = function(nodes, n, onIdx, direction, numSamples) {
 	var samples = [];
 	var i, pts;
 
@@ -652,7 +652,7 @@ TRV._sampleSegment = function(nodes, n, onIdx, direction, numSamples) {
 			// Line
 			for (var s = 0; s <= numSamples; s++) {
 				var t = s / numSamples;
-				samples.push(TRV._sampleLine(nodes[i], nodes[onIdx], t));
+				samples.push(FontRig._sampleLine(nodes[i], nodes[onIdx], t));
 			}
 			return samples;
 		}
@@ -669,7 +669,7 @@ TRV._sampleSegment = function(nodes, n, onIdx, direction, numSamples) {
 			var p2 = nodes[handles[1]];
 			var p3 = nodes[onIdx];
 			for (var s = 0; s <= numSamples; s++) {
-				samples.push(TRV._sampleCubic(p0, p1, p2, p3, s / numSamples));
+				samples.push(FontRig._sampleCubic(p0, p1, p2, p3, s / numSamples));
 			}
 		}
 		return samples;
@@ -678,7 +678,7 @@ TRV._sampleSegment = function(nodes, n, onIdx, direction, numSamples) {
 		i = (onIdx + 1) % n;
 		if (nodes[i].type === 'on') {
 			for (var s = 0; s <= numSamples; s++) {
-				samples.push(TRV._sampleLine(nodes[onIdx], nodes[i], s / numSamples));
+				samples.push(FontRig._sampleLine(nodes[onIdx], nodes[i], s / numSamples));
 			}
 			return samples;
 		}
@@ -693,7 +693,7 @@ TRV._sampleSegment = function(nodes, n, onIdx, direction, numSamples) {
 			var p2 = nodes[handles[1]];
 			var p3 = nodes[i];
 			for (var s = 0; s <= numSamples; s++) {
-				samples.push(TRV._sampleCubic(p0, p1, p2, p3, s / numSamples));
+				samples.push(FontRig._sampleCubic(p0, p1, p2, p3, s / numSamples));
 			}
 		}
 		return samples;
@@ -702,7 +702,7 @@ TRV._sampleSegment = function(nodes, n, onIdx, direction, numSamples) {
 
 // Arc-length parameterization: assign t values to samples based on
 // cumulative distance, normalized to [0, 1].
-TRV._arcLengthParameterize = function(samples) {
+FontRig._arcLengthParameterize = function(samples) {
 	var params = [0];
 	var total = 0;
 	for (var i = 1; i < samples.length; i++) {
@@ -721,7 +721,7 @@ TRV._arcLengthParameterize = function(samples) {
 
 // Unconstrained least-squares: fit cubic P0→P1→P2→P3 to samples.
 // P0 and P3 are fixed endpoints. Solves for P1, P2.
-TRV._fitCubicUnconstrained = function(samples, params, P0, P3) {
+FontRig._fitCubicUnconstrained = function(samples, params, P0, P3) {
 	var round = function(v) { return Math.round(v * 10) / 10; };
 
 	// Build normal equations for: A1*P1 + A2*P2 = R
@@ -773,7 +773,7 @@ TRV._fitCubicUnconstrained = function(samples, params, P0, P3) {
 
 // Tangent-constrained least-squares: P1 = P0 + α₁·T1, P2 = P3 + α₂·T2.
 // Solves for scalar distances α₁, α₂ (preserves G1 continuity).
-TRV._fitCubicConstrained = function(samples, params, P0, P3, T1, T2) {
+FontRig._fitCubicConstrained = function(samples, params, P0, P3, T1, T2) {
 	var round = function(v) { return Math.round(v * 10) / 10; };
 	var dot12 = T1.x * T2.x + T1.y * T2.y;
 
@@ -837,7 +837,7 @@ TRV._fitCubicConstrained = function(samples, params, P0, P3, T1, T2) {
 
 // Newton-Raphson reparameterization: improve t values for each sample
 // by projecting onto the current fitted curve.
-TRV._reparameterize = function(samples, params, P0, P1, P2, P3) {
+FontRig._reparameterize = function(samples, params, P0, P1, P2, P3) {
 	var newParams = [];
 	for (var i = 0; i < samples.length; i++) {
 		var t = params[i];
@@ -872,27 +872,27 @@ TRV._reparameterize = function(samples, params, P0, P1, P2, P3) {
 
 // High-level: merge two cubics by sampling + least-squares fitting
 // with tangent-constrained optimization and Newton refinement.
-TRV._mergeCubics = function(prevOn, inHandle, outHandle, nextOn) {
-	return TRV._fitMergedSegments(prevOn, nextOn, inHandle, outHandle, true);
+FontRig._mergeCubics = function(prevOn, inHandle, outHandle, nextOn) {
+	return FontRig._fitMergedSegments(prevOn, nextOn, inHandle, outHandle, true);
 };
 
-TRV._curveToLine = function(prevOn, inHandle, nextOn) {
-	return TRV._fitMergedSegments(prevOn, nextOn, inHandle, null, false);
+FontRig._curveToLine = function(prevOn, inHandle, nextOn) {
+	return FontRig._fitMergedSegments(prevOn, nextOn, inHandle, null, false);
 };
 
-TRV._lineToCurve = function(prevOn, outHandle, nextOn) {
-	return TRV._fitMergedSegments(prevOn, nextOn, null, outHandle, false);
+FontRig._lineToCurve = function(prevOn, outHandle, nextOn) {
+	return FontRig._fitMergedSegments(prevOn, nextOn, null, outHandle, false);
 };
 
 // Unified fitting: collects samples from both segments around the
 // deleted node, then fits a single cubic.
 // inHandle/outHandle may be null for line sides.
-TRV._fitMergedSegments = function(P0, P3, inHandle, outHandle, bothCurves) {
+FontRig._fitMergedSegments = function(P0, P3, inHandle, outHandle, bothCurves) {
 	var round = function(v) { return Math.round(v * 10) / 10; };
 
 	// Collect samples from the deleteNode caller — we stored them
-	var samples = TRV._pendingSamples;
-	var params = TRV._arcLengthParameterize(samples);
+	var samples = FontRig._pendingSamples;
+	var params = FontRig._arcLengthParameterize(samples);
 
 	if (samples.length < 4) {
 		// Not enough data — 1/3 rule fallback
@@ -912,27 +912,27 @@ TRV._fitMergedSegments = function(P0, P3, inHandle, outHandle, bothCurves) {
 		var t2len = Math.sqrt(t2dx * t2dx + t2dy * t2dy);
 
 		if (t1len < 0.001 || t2len < 0.001) {
-			fit = TRV._fitCubicUnconstrained(samples, params, P0, P3);
+			fit = FontRig._fitCubicUnconstrained(samples, params, P0, P3);
 		} else {
 			var T1 = { x: t1dx / t1len, y: t1dy / t1len };
 			var T2 = { x: t2dx / t2len, y: t2dy / t2len };
 
-			fit = TRV._fitCubicConstrained(samples, params, P0, P3, T1, T2);
+			fit = FontRig._fitCubicConstrained(samples, params, P0, P3, T1, T2);
 
 			// Newton-Raphson refinement: 3 iterations
 			for (var iter = 0; iter < 3; iter++) {
-				params = TRV._reparameterize(samples, params, P0, fit.P1, fit.P2, P3);
-				fit = TRV._fitCubicConstrained(samples, params, P0, P3, T1, T2);
+				params = FontRig._reparameterize(samples, params, P0, fit.P1, fit.P2, P3);
+				fit = FontRig._fitCubicConstrained(samples, params, P0, P3, T1, T2);
 			}
 		}
 	} else {
 		// Unconstrained for mixed line/curve
-		fit = TRV._fitCubicUnconstrained(samples, params, P0, P3);
+		fit = FontRig._fitCubicUnconstrained(samples, params, P0, P3);
 
 		// Newton-Raphson refinement: 3 iterations
 		for (var iter = 0; iter < 3; iter++) {
-			params = TRV._reparameterize(samples, params, P0, fit.P1, fit.P2, P3);
-			fit = TRV._fitCubicUnconstrained(samples, params, P0, P3);
+			params = FontRig._reparameterize(samples, params, P0, fit.P1, fit.P2, P3);
+			fit = FontRig._fitCubicUnconstrained(samples, params, P0, P3);
 		}
 	}
 
@@ -945,7 +945,7 @@ TRV._fitMergedSegments = function(P0, P3, inHandle, outHandle, bothCurves) {
 // -- Join open contour endpoints -------------------------------------
 // Returns the open endpoints of a contour:
 // { startIdx, endIdx, startNode, endNode } or null if closed.
-TRV.getOpenEndpoints = function(contour) {
+FontRig.getOpenEndpoints = function(contour) {
 	if (contour.closed) return null;
 	var nodes = contour.nodes;
 	if (nodes.length < 2) return null;
@@ -968,8 +968,8 @@ TRV.getOpenEndpoints = function(contour) {
 
 // Check if a node ID refers to an endpoint of an open contour.
 // Returns { contour, shape, ci, end: 'start'|'end' } or null.
-TRV.isOpenEndpoint = function(nodeId) {
-	var layer = TRV.getActiveLayer();
+FontRig.isOpenEndpoint = function(nodeId) {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return null;
 
 	var m = nodeId.match(/^c(\d+)_n(\d+)$/);
@@ -982,7 +982,7 @@ TRV.isOpenEndpoint = function(nodeId) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
 			if (ci === targetCi) {
-				var ep = TRV.getOpenEndpoints(shape.contours[ki]);
+				var ep = FontRig.getOpenEndpoints(shape.contours[ki]);
 				if (!ep) return null;
 				if (targetNi === ep.startIdx) {
 					return { contour: shape.contours[ki], shape: shape, ci: ci, ki: ki, end: 'start' };
@@ -1001,8 +1001,8 @@ TRV.isOpenEndpoint = function(nodeId) {
 // Find the nearest open endpoint within threshold (glyph units).
 // Excludes endpoints belonging to excludeCi contour index (the dragged one).
 // Returns { ci, ki, end, contour, shape, dist } or null.
-TRV.findNearOpenEndpoint = function(gx, gy, threshold, excludeCi, excludeEnd) {
-	var layer = TRV.getActiveLayer();
+FontRig.findNearOpenEndpoint = function(gx, gy, threshold, excludeCi, excludeEnd) {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return null;
 
 	var best = null;
@@ -1010,7 +1010,7 @@ TRV.findNearOpenEndpoint = function(gx, gy, threshold, excludeCi, excludeEnd) {
 	for (var si = 0; si < layer.shapes.length; si++) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
-			var ep = TRV.getOpenEndpoints(shape.contours[ki]);
+			var ep = FontRig.getOpenEndpoints(shape.contours[ki]);
 			if (ep) {
 				// Check start endpoint
 				if (!(ci === excludeCi && 'start' === excludeEnd)) {
@@ -1037,34 +1037,34 @@ TRV.findNearOpenEndpoint = function(gx, gy, threshold, excludeCi, excludeEnd) {
 
 // Try to join at the currently selected endpoint.
 // Called after drag or manually. Returns true if joined.
-TRV.tryJoinEndpoints = function() {
-	var layer = TRV.getActiveLayer();
+FontRig.tryJoinEndpoints = function() {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return false;
 
-	var sel = TRV.state.selectedNodeIds;
+	var sel = FontRig.state.selectedNodeIds;
 	if (sel.size !== 1) return false;
 
 	var nodeId = sel.values().next().value;
-	var epInfo = TRV.isOpenEndpoint(nodeId);
+	var epInfo = FontRig.isOpenEndpoint(nodeId);
 	if (!epInfo) return false;
 
 	var node = epInfo.end === 'start'
-		? TRV.getOpenEndpoints(epInfo.contour).startNode
-		: TRV.getOpenEndpoints(epInfo.contour).endNode;
+		? FontRig.getOpenEndpoints(epInfo.contour).startNode
+		: FontRig.getOpenEndpoints(epInfo.contour).endNode;
 
 	var threshold = 2; // glyph units
 
 	// Find nearby endpoint (excluding self)
-	var target = TRV.findNearOpenEndpoint(node.x, node.y, threshold, epInfo.ci, epInfo.end);
+	var target = FontRig.findNearOpenEndpoint(node.x, node.y, threshold, epInfo.ci, epInfo.end);
 
 	if (!target) {
 		// Check if same contour's other end is nearby → close
-		var selfEp = TRV.getOpenEndpoints(epInfo.contour);
+		var selfEp = FontRig.getOpenEndpoints(epInfo.contour);
 		if (selfEp) {
 			var otherNode = epInfo.end === 'start' ? selfEp.endNode : selfEp.startNode;
 			var dx = otherNode.x - node.x, dy = otherNode.y - node.y;
 			if (Math.sqrt(dx * dx + dy * dy) <= threshold) {
-				return TRV._closeContour(epInfo.contour, epInfo.end);
+				return FontRig._closeContour(epInfo.contour, epInfo.end);
 			}
 		}
 		return false;
@@ -1072,16 +1072,16 @@ TRV.tryJoinEndpoints = function() {
 
 	// Same contour, other end → close
 	if (target.ci === epInfo.ci) {
-		return TRV._closeContour(epInfo.contour, epInfo.end);
+		return FontRig._closeContour(epInfo.contour, epInfo.end);
 	}
 
 	// Different contour → merge
-	return TRV._mergeContours(epInfo, target);
+	return FontRig._mergeContours(epInfo, target);
 };
 
 // Close an open contour: snap endpoint, remove duplicate, set closed.
-TRV._closeContour = function(contour, draggedEnd) {
-	var ep = TRV.getOpenEndpoints(contour);
+FontRig._closeContour = function(contour, draggedEnd) {
+	var ep = FontRig.getOpenEndpoints(contour);
 	if (!ep) return false;
 
 	if (draggedEnd === 'start') {
@@ -1099,16 +1099,16 @@ TRV._closeContour = function(contour, draggedEnd) {
 	}
 
 	contour.closed = true;
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 	return true;
 };
 
 // Merge two open contours by connecting their endpoints.
 // srcInfo: { contour, shape, ci, ki, end } — the dragged endpoint
 // tgtInfo: { contour, shape, ci, ki, end } — the target endpoint
-TRV._mergeContours = function(srcInfo, tgtInfo) {
+FontRig._mergeContours = function(srcInfo, tgtInfo) {
 	var srcContour = srcInfo.contour;
 	var tgtContour = tgtInfo.contour;
 	var srcNodes = srcContour.nodes.slice(); // copy
@@ -1146,14 +1146,14 @@ TRV._mergeContours = function(srcInfo, tgtInfo) {
 		tgtInfo.shape.contours.splice(tgtIdx, 1);
 	}
 
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 	return true;
 };
 
 // Get contour index (ci) from a node ID like 'c2_n5'
-TRV.getContourIndexForNode = function(nodeId) {
+FontRig.getContourIndexForNode = function(nodeId) {
 	var m = nodeId.match(/^c(\d+)/);
 	return m ? parseInt(m[1]) : -1;
 };
@@ -1162,7 +1162,7 @@ TRV.getContourIndexForNode = function(nodeId) {
 // Segment iteration: walks contour nodes and yields segments.
 // Each segment is { type, startIdx, endIdx, nodes[] } where nodes
 // are the control points (2 for line, 4 for cubic).
-TRV.getContourSegments = function(contour) {
+FontRig.getContourSegments = function(contour) {
 	var nodes = contour.nodes;
 	var n = nodes.length;
 	var segments = [];
@@ -1234,7 +1234,7 @@ TRV.getContourSegments = function(contour) {
 };
 
 // Evaluate a cubic bezier at parameter t (de Casteljau)
-TRV._evalCubic = function(pts, t) {
+FontRig._evalCubic = function(pts, t) {
 	var u = 1 - t;
 	var uu = u * u, tt = t * t;
 	var uuu = uu * u, ttt = tt * t;
@@ -1245,7 +1245,7 @@ TRV._evalCubic = function(pts, t) {
 };
 
 // Evaluate a line at parameter t
-TRV._evalLine = function(pts, t) {
+FontRig._evalLine = function(pts, t) {
 	return {
 		x: pts[0].x + t * (pts[1].x - pts[0].x),
 		y: pts[0].y + t * (pts[1].y - pts[0].y)
@@ -1253,7 +1253,7 @@ TRV._evalLine = function(pts, t) {
 };
 
 // Evaluate a quadratic bezier at parameter t
-TRV._evalQuadratic = function(pts, t) {
+FontRig._evalQuadratic = function(pts, t) {
 	var u = 1 - t;
 	return {
 		x: u * u * pts[0].x + 2 * u * t * pts[1].x + t * t * pts[2].x,
@@ -1262,9 +1262,9 @@ TRV._evalQuadratic = function(pts, t) {
 };
 
 // Find nearest point on a segment, returns { t, dist, x, y }
-TRV._nearestOnSegment = function(seg, gx, gy) {
-	var evalFn = seg.type === 'cubic' ? TRV._evalCubic :
-	             seg.type === 'quadratic' ? TRV._evalQuadratic : TRV._evalLine;
+FontRig._nearestOnSegment = function(seg, gx, gy) {
+	var evalFn = seg.type === 'cubic' ? FontRig._evalCubic :
+	             seg.type === 'quadratic' ? FontRig._evalQuadratic : FontRig._evalLine;
 	var pts = seg.pts;
 	var bestT = 0, bestDist = Infinity;
 
@@ -1299,21 +1299,21 @@ TRV._nearestOnSegment = function(seg, gx, gy) {
 
 // Hit-test all segments in active layer, return best match or null.
 // Returns { ci, segIdx, seg, t, x, y, dist }
-TRV.hitTestSegment = function(sx, sy) {
-	var layer = TRV.getActiveLayer();
+FontRig.hitTestSegment = function(sx, sy) {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return null;
 
-	var gp = TRV.screenToGlyph(sx, sy);
-	var hitRadius = 8 / TRV.state.zoom; // 8 screen pixels in glyph space
+	var gp = FontRig.screenToGlyph(sx, sy);
+	var hitRadius = 8 / FontRig.state.zoom; // 8 screen pixels in glyph space
 	var best = null;
 	var ci = 0;
 
 	for (var si = 0; si < layer.shapes.length; si++) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
-			var segs = TRV.getContourSegments(shape.contours[ki]);
+			var segs = FontRig.getContourSegments(shape.contours[ki]);
 			for (var gi = 0; gi < segs.length; gi++) {
-				var hit = TRV._nearestOnSegment(segs[gi], gp.x, gp.y);
+				var hit = FontRig._nearestOnSegment(segs[gi], gp.x, gp.y);
 				if (hit.dist < hitRadius && (!best || hit.dist < best.dist)) {
 					best = {
 						ci: ci, segIdx: gi, seg: segs[gi],
@@ -1330,7 +1330,7 @@ TRV.hitTestSegment = function(sx, sy) {
 
 // De Casteljau split: split cubic at t, returns { left, right }
 // Each is an array of 4 points: [on, off, off, on]
-TRV._splitCubic = function(pts, t) {
+FontRig._splitCubic = function(pts, t) {
 	var p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
 	var u = 1 - t;
 
@@ -1354,7 +1354,7 @@ TRV._splitCubic = function(pts, t) {
 
 // Insert a node on the segment identified by hitTestSegment result.
 // Modifies the contour's node array in place.
-TRV.insertNodeOnSegment = function(hit) {
+FontRig.insertNodeOnSegment = function(hit) {
 	if (!hit || !hit.contour) return;
 
 	var nodes = hit.contour.nodes;
@@ -1373,7 +1373,7 @@ TRV.insertNodeOnSegment = function(hit) {
 		if (seg.endIdx < seg.startIdx) insertAt = nodes.length;
 		nodes.splice(insertAt, 0, newNode);
 	} else if (seg.type === 'cubic') {
-		var split = TRV._splitCubic(seg.pts, hit.t);
+		var split = FontRig._splitCubic(seg.pts, hit.t);
 		var L = split.left;   // [p0, a, d, m]
 		var R = split.right;  // [m, e, c, p3]
 
@@ -1421,15 +1421,15 @@ TRV.insertNodeOnSegment = function(hit) {
 	}
 
 	// Rebuild IDs and redraw
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // -- Segment type conversions ----------------------------------------
 // Helper: remove off-curve nodes from a segment, leaving on-curves as a line.
 // Works for both cubic (2 off-curves) and quadratic (1 off-curve).
-TRV.convertSegmentToLine = function(hit) {
+FontRig.convertSegmentToLine = function(hit) {
 	if (!hit || !hit.contour) return;
 	var nodes = hit.contour.nodes;
 	var seg = hit.seg;
@@ -1447,15 +1447,15 @@ TRV.convertSegmentToLine = function(hit) {
 		nodes.splice(toRemove[i], 1);
 	}
 
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // Convert line or quadratic segment to cubic bezier.
 // Line: insert two cubic handles at 1/3 and 2/3.
 // Quadratic: degree elevation — replace single off with two curve nodes.
-TRV.convertSegmentToCubic = function(hit) {
+FontRig.convertSegmentToCubic = function(hit) {
 	if (!hit || !hit.contour) return;
 	var nodes = hit.contour.nodes;
 	var seg = hit.seg;
@@ -1497,14 +1497,14 @@ TRV.convertSegmentToCubic = function(hit) {
 		);
 	}
 
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // Convert cubic segment to quadratic bezier.
 // Approximation: Q1 = (3*(P1+P2) - (P0+P3)) / 4
-TRV.convertSegmentToQuadratic = function(hit) {
+FontRig.convertSegmentToQuadratic = function(hit) {
 	if (!hit || !hit.contour) return;
 	var nodes = hit.contour.nodes;
 	var seg = hit.seg;
@@ -1529,9 +1529,9 @@ TRV.convertSegmentToQuadratic = function(hit) {
 		nodes.splice(0, idx2 + 1);
 	}
 
-	TRV.state.selectedNodeIds.clear();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.state.selectedNodeIds.clear();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // -- Slide node along contour ----------------------------------------
@@ -1548,9 +1548,9 @@ TRV.convertSegmentToQuadratic = function(hit) {
 // When a node connects a line and a curve, only the matching side is
 // used for sliding; the other side is reconstructed via least-squares.
 
-TRV.initSlideMode = function(nodeId, mode) {
+FontRig.initSlideMode = function(nodeId, mode) {
 	mode = mode || 'curve';
-	var ref = TRV.findNodeById(nodeId);
+	var ref = FontRig.findNodeById(nodeId);
 	if (!ref || ref.node.type !== 'on') return null;
 
 	var contour = ref.contour;
@@ -1562,8 +1562,8 @@ TRV.initSlideMode = function(nodeId, mode) {
 	var ci = parseInt(m[1]);
 	var ni = parseInt(m[2]);
 
-	var incoming = TRV._analyzeIncoming(nodes, n, ni);
-	var outgoing = TRV._analyzeOutgoing(nodes, n, ni);
+	var incoming = FontRig._analyzeIncoming(nodes, n, ni);
+	var outgoing = FontRig._analyzeOutgoing(nodes, n, ni);
 
 	// Determine which sides are active based on mode
 	var activeIn = false, activeOut = false;
@@ -1630,7 +1630,7 @@ TRV.initSlideMode = function(nodeId, mode) {
 			var tMax = canExtrapolate ? 1.4 : 1;
 			for (var i = 0; i <= numSamples; i++) {
 				var t = tMin + (tMax - tMin) * i / numSamples;
-				var pt = TRV._sampleCubic(inPts[0], inPts[1], inPts[2], inPts[3], t);
+				var pt = FontRig._sampleCubic(inPts[0], inPts[1], inPts[2], inPts[3], t);
 				polyline.push({ x: pt.x, y: pt.y, seg: 0, t: t });
 			}
 		}
@@ -1653,7 +1653,7 @@ TRV.initSlideMode = function(nodeId, mode) {
 			var tMax = canExtrapolate ? 1.4 : 1;
 			for (var i = skip; i <= numSamples; i++) {
 				var t = tMin + (tMax - tMin) * i / numSamples;
-				var pt = TRV._sampleCubic(outPts[0], outPts[1], outPts[2], outPts[3], t);
+				var pt = FontRig._sampleCubic(outPts[0], outPts[1], outPts[2], outPts[3], t);
 				polyline.push({ x: pt.x, y: pt.y, seg: 1, t: t });
 			}
 		}
@@ -1693,7 +1693,7 @@ TRV.initSlideMode = function(nodeId, mode) {
 };
 
 // Project glyph point onto the slide polyline.
-TRV._projectOntoSlidePolyline = function(slideData, gx, gy) {
+FontRig._projectOntoSlidePolyline = function(slideData, gx, gy) {
 	var poly = slideData.polyline;
 	var bestDist = Infinity;
 	var bestIdx = 0;
@@ -1741,17 +1741,17 @@ TRV._projectOntoSlidePolyline = function(slideData, gx, gy) {
 	var pt;
 	if (seg === 0) {
 		if (slideData.mode === 'line' && slideData.activeIn) {
-			pt = TRV._sampleLine(slideData.prevOn, slideData.onNode, t);
+			pt = FontRig._sampleLine(slideData.prevOn, slideData.onNode, t);
 		} else if (slideData.inPts) {
-			pt = TRV._sampleCubic(slideData.inPts[0], slideData.inPts[1], slideData.inPts[2], slideData.inPts[3], t);
+			pt = FontRig._sampleCubic(slideData.inPts[0], slideData.inPts[1], slideData.inPts[2], slideData.inPts[3], t);
 		} else {
 			pt = { x: poly[fi].x + ff * (pn.x - poly[fi].x), y: poly[fi].y + ff * (pn.y - poly[fi].y) };
 		}
 	} else {
 		if (slideData.mode === 'line' && slideData.activeOut) {
-			pt = TRV._sampleLine(slideData.onNode, slideData.nextOn, t);
+			pt = FontRig._sampleLine(slideData.onNode, slideData.nextOn, t);
 		} else if (slideData.outPts) {
-			pt = TRV._sampleCubic(slideData.outPts[0], slideData.outPts[1], slideData.outPts[2], slideData.outPts[3], t);
+			pt = FontRig._sampleCubic(slideData.outPts[0], slideData.outPts[1], slideData.outPts[2], slideData.outPts[3], t);
 		} else {
 			pt = { x: poly[fi].x + ff * (pn.x - poly[fi].x), y: poly[fi].y + ff * (pn.y - poly[fi].y) };
 		}
@@ -1761,8 +1761,8 @@ TRV._projectOntoSlidePolyline = function(slideData, gx, gy) {
 };
 
 // Perform the slide: move node, reconstruct handles on both sides.
-TRV.performSlide = function(slideData, gx, gy) {
-	var proj = TRV._projectOntoSlidePolyline(slideData, gx, gy);
+FontRig.performSlide = function(slideData, gx, gy) {
+	var proj = FontRig._projectOntoSlidePolyline(slideData, gx, gy);
 	var nodes = slideData.contour.nodes;
 	var round = function(v) { return Math.round(v * 10) / 10; };
 	var ni = slideData.nodeIdx;
@@ -1791,7 +1791,7 @@ TRV.performSlide = function(slideData, gx, gy) {
 
 		if (proj.seg === 0 && slideData.inPts) {
 			// De Casteljau works for any t — exact even when extrapolated
-			var split = TRV._splitCubic(slideData.inPts, t);
+			var split = FontRig._splitCubic(slideData.inPts, t);
 			nodes[ni].x = round(split.left[3].x);
 			nodes[ni].y = round(split.left[3].y);
 			newNode = { x: split.left[3].x, y: split.left[3].y };
@@ -1805,15 +1805,15 @@ TRV.performSlide = function(slideData, gx, gy) {
 			if (slideData.outgoing.type === 'cubic' && slideData.outPts && outH.length >= 2) {
 				var samples = [];
 				for (var i = 0; i <= 30; i++) {
-					samples.push(TRV._sampleCubic(split.right[0], split.right[1], split.right[2], split.right[3], i / 30));
+					samples.push(FontRig._sampleCubic(split.right[0], split.right[1], split.right[2], split.right[3], i / 30));
 				}
 				for (var i = 1; i <= 30; i++) {
-					samples.push(TRV._sampleCubic(slideData.outPts[0], slideData.outPts[1], slideData.outPts[2], slideData.outPts[3], i / 30));
+					samples.push(FontRig._sampleCubic(slideData.outPts[0], slideData.outPts[1], slideData.outPts[2], slideData.outPts[3], i / 30));
 				}
-				TRV._fitSamplesToSide(nodes, outH, samples, newNode, slideData.nextOn, 'out');
+				FontRig._fitSamplesToSide(nodes, outH, samples, newNode, slideData.nextOn, 'out');
 			}
 		} else if (proj.seg === 1 && slideData.outPts) {
-			var split = TRV._splitCubic(slideData.outPts, t);
+			var split = FontRig._splitCubic(slideData.outPts, t);
 			nodes[ni].x = round(split.right[0].x);
 			nodes[ni].y = round(split.right[0].y);
 			newNode = { x: split.right[0].x, y: split.right[0].y };
@@ -1827,12 +1827,12 @@ TRV.performSlide = function(slideData, gx, gy) {
 			if (slideData.incoming.type === 'cubic' && slideData.inPts && inH.length >= 2) {
 				var samples = [];
 				for (var i = 0; i <= 30; i++) {
-					samples.push(TRV._sampleCubic(slideData.inPts[0], slideData.inPts[1], slideData.inPts[2], slideData.inPts[3], i / 30));
+					samples.push(FontRig._sampleCubic(slideData.inPts[0], slideData.inPts[1], slideData.inPts[2], slideData.inPts[3], i / 30));
 				}
 				for (var i = 1; i <= 30; i++) {
-					samples.push(TRV._sampleCubic(split.left[0], split.left[1], split.left[2], split.left[3], i / 30));
+					samples.push(FontRig._sampleCubic(split.left[0], split.left[1], split.left[2], split.left[3], i / 30));
 				}
-				TRV._fitSamplesToSide(nodes, inH, samples, slideData.prevOn, newNode, 'in');
+				FontRig._fitSamplesToSide(nodes, inH, samples, slideData.prevOn, newNode, 'in');
 			}
 		}
 		return;
@@ -1842,14 +1842,14 @@ TRV.performSlide = function(slideData, gx, gy) {
 
 // Fit a set of samples into a cubic between startPt and endPt,
 // then assign the result to the handle nodes.
-TRV._fitSamplesToSide = function(nodes, handleIndices, samples, startPt, endPt, direction) {
+FontRig._fitSamplesToSide = function(nodes, handleIndices, samples, startPt, endPt, direction) {
 	if (samples.length < 4) return;
 
-	var params = TRV._arcLengthParameterize(samples);
-	var fit = TRV._fitCubicUnconstrained(samples, params, startPt, endPt);
+	var params = FontRig._arcLengthParameterize(samples);
+	var fit = FontRig._fitCubicUnconstrained(samples, params, startPt, endPt);
 	for (var iter = 0; iter < 3; iter++) {
-		params = TRV._reparameterize(samples, params, startPt, fit.P1, fit.P2, endPt);
-		fit = TRV._fitCubicUnconstrained(samples, params, startPt, endPt);
+		params = FontRig._reparameterize(samples, params, startPt, fit.P1, fit.P2, endPt);
+		fit = FontRig._fitCubicUnconstrained(samples, params, startPt, endPt);
 	}
 
 	if (direction === 'in') {
@@ -1870,11 +1870,11 @@ TRV._fitSamplesToSide = function(nodes, handleIndices, samples, startPt, endPt, 
 // -- Retract handles -------------------------------------------------
 // If on-curve selected: retract both adjacent handles to on-curve pos.
 // If handle selected: retract only that handle.
-TRV.retractHandles = function() {
-	var layer = TRV.getActiveLayer();
+FontRig.retractHandles = function() {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
-	var sel = TRV.state.selectedNodeIds;
+	var sel = FontRig.state.selectedNodeIds;
 	if (sel.size === 0) return;
 
 	var ci = 0;
@@ -1917,17 +1917,17 @@ TRV.retractHandles = function() {
 		}
 	}
 
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // -- Constrained smooth movement -------------------------------------
 // Compute unit tangent vectors for smooth on-curve nodes at drag start.
 // Tangent = direction through the two adjacent handles (from their
 // start positions). Returns Map<nodeId, {tx, ty}>.
-TRV.computeDragTangents = function(dragStartPositions) {
+FontRig.computeDragTangents = function(dragStartPositions) {
 	var tangents = new Map();
-	var layer = TRV.getActiveLayer();
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return tangents;
 
 	var ci = 0;
@@ -1976,7 +1976,7 @@ TRV.computeDragTangents = function(dragStartPositions) {
 					}
 					// If the line neighbor is also selected, both ends
 					// move together — constraint is meaningless, skip
-					if (TRV.state.selectedNodeIds.has(lineId)) continue;
+					if (FontRig.state.selectedNodeIds.has(lineId)) continue;
 					// Line neighbor's start position (or current if not dragged)
 					var linePos = dragStartPositions.has(lineId) ? dragStartPositions.get(lineId) : nodes[lineIdx];
 					// Direction from line neighbor to this on-curve
@@ -1997,7 +1997,7 @@ TRV.computeDragTangents = function(dragStartPositions) {
 
 // Project a delta (dx, dy) onto a unit tangent (tx, ty).
 // Returns { dx, dy } along the tangent direction.
-TRV.projectOntoTangent = function(dx, dy, tangent) {
+FontRig.projectOntoTangent = function(dx, dy, tangent) {
 	var dot = dx * tangent.tx + dy * tangent.ty;
 	return { dx: dot * tangent.tx, dy: dot * tangent.ty };
 };
@@ -2005,11 +2005,11 @@ TRV.projectOntoTangent = function(dx, dy, tangent) {
 // -- Toggle smooth / sharp on selected on-curve nodes ---------------
 // When converting to smooth, enforces collinearity by adjusting the
 // shorter handle to match the longer handle's direction.
-TRV.toggleSmooth = function() {
-	var layer = TRV.getActiveLayer();
+FontRig.toggleSmooth = function() {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
-	var sel = TRV.state.selectedNodeIds;
+	var sel = FontRig.state.selectedNodeIds;
 	if (sel.size === 0) return;
 
 	var ci = 0;
@@ -2028,20 +2028,20 @@ TRV.toggleSmooth = function() {
 
 				// When making smooth, enforce collinearity immediately
 				if (nodes[ni].smooth) {
-					TRV._makeSmoothAt(nodes, n, ni);
+					FontRig._makeSmoothAt(nodes, n, ni);
 				}
 			}
 			ci++;
 		}
 	}
 
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
 // Enforce collinearity at on-curve node onIdx by rotating the shorter
 // handle to be collinear with the longer one (preserving both lengths).
-TRV._makeSmoothAt = function(nodes, n, onIdx) {
+FontRig._makeSmoothAt = function(nodes, n, onIdx) {
 	var prevIdx = (onIdx - 1 + n) % n;
 	var nextIdx = (onIdx + 1) % n;
 	var prevIsHandle = (nodes[prevIdx].type !== 'on');
@@ -2112,9 +2112,9 @@ TRV._makeSmoothAt = function(nodes, n, onIdx) {
 // Get non-selected handles adjacent to selected on-curves.
 // These should follow their parent during drag (rigid body).
 // Returns Map<nodeId, {x, y}> of current positions.
-TRV.getFollowerHandles = function(selectedIds) {
+FontRig.getFollowerHandles = function(selectedIds) {
 	var followers = new Map();
-	var layer = TRV.getActiveLayer();
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return followers;
 
 	var ci = 0;
@@ -2151,8 +2151,8 @@ TRV.getFollowerHandles = function(selectedIds) {
 // Enforce collinearity on smooth nodes after positioning.
 // Called after all nodes (selected + followers) have been placed.
 // movedIds: Set of all node IDs that were repositioned this frame.
-TRV.enforceSmoothCollinearity = function(movedIds) {
-	var layer = TRV.getActiveLayer();
+FontRig.enforceSmoothCollinearity = function(movedIds) {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
 	var ci = 0;
@@ -2167,7 +2167,7 @@ TRV.enforceSmoothCollinearity = function(movedIds) {
 				if (!movedIds.has(id)) continue;
 				if (nodes[ni].type === 'on') continue; // only handles
 
-				TRV._enforceOppositeSmooth(nodes, n, ni, ci, movedIds);
+				FontRig._enforceOppositeSmooth(nodes, n, ni, ci, movedIds);
 			}
 			ci++;
 		}
@@ -2176,8 +2176,8 @@ TRV.enforceSmoothCollinearity = function(movedIds) {
 
 // Arrow key variant: translate adjacent handles then enforce collinearity.
 // dx, dy are the incremental step (called once per keypress, so no drift).
-TRV.enforceSmoothForKeys = function(draggedIds, dx, dy) {
-	var layer = TRV.getActiveLayer();
+FontRig.enforceSmoothForKeys = function(draggedIds, dx, dy) {
+	var layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
 	// First pass: translate non-selected handles adjacent to selected on-curves
@@ -2224,7 +2224,7 @@ TRV.enforceSmoothForKeys = function(draggedIds, dx, dy) {
 				if (!draggedIds.has(id)) continue;
 				if (nodes[ni].type === 'on') continue;
 
-				TRV._enforceOppositeSmooth(nodes, n, ni, ci, draggedIds);
+				FontRig._enforceOppositeSmooth(nodes, n, ni, ci, draggedIds);
 			}
 			ci++;
 		}
@@ -2234,7 +2234,7 @@ TRV.enforceSmoothForKeys = function(draggedIds, dx, dy) {
 // For handle at handleIdx, find parent on-curve. If smooth, adjust
 // the opposite handle to maintain collinearity (same angle, opposite
 // direction, preserving the opposite handle's original length).
-TRV._enforceOppositeSmooth = function(nodes, n, handleIdx, ci, movedIds) {
+FontRig._enforceOppositeSmooth = function(nodes, n, handleIdx, ci, movedIds) {
 	var prevIdx = (handleIdx - 1 + n) % n;
 	var nextIdx = (handleIdx + 1) % n;
 
@@ -2300,44 +2300,44 @@ TRV._enforceOppositeSmooth = function(nodes, n, handleIdx, ci, movedIds) {
 };
 
 // -- Fit to view ----------------------------------------------------
-TRV.fitToView = function() {
-	const layer = TRV.getActiveLayer();
+FontRig.fitToView = function() {
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return;
 
-	const canvasW = TRV.dom.canvasWrap.clientWidth;
-	const canvasH = TRV.dom.canvasWrap.clientHeight;
+	const canvasW = FontRig.dom.canvasWrap.clientWidth;
+	const canvasH = FontRig.dom.canvasWrap.clientHeight;
 
 	// Glyph strip mode: fit the strip
-	if (TRV.state.glyphViewMode && TRV.font) {
-		TRV.fitGlyphStrip();
-		TRV.draw();
+	if (FontRig.state.glyphViewMode && FontRig.font) {
+		FontRig.fitGlyphStrip();
+		FontRig.draw();
 		return;
 	}
 
 	// Joined multi-view: fit the entire joined layout
-	if (TRV.state.multiView && TRV.state.joinedView) {
-		const layout = TRV.getJoinedLayout();
+	if (FontRig.state.multiView && FontRig.state.joinedView) {
+		const layout = FontRig.getJoinedLayout();
 
 		const padding = 40;
 		const scaleX = (canvasW - padding * 2) / layout.totalW;
 		const scaleY = (canvasH - padding * 2) / layout.totalH;
-		TRV.state.zoom = Math.min(scaleX, scaleY);
+		FontRig.state.zoom = Math.min(scaleX, scaleY);
 
 		// Center of the joined layout in glyph space
 		const cx = layout.totalW / 2;
 		const cy = layout.totalH / 2;
-		TRV.state.pan.x = canvasW / 2 - cx * TRV.state.zoom;
-		TRV.state.pan.y = canvasH / 2 + cy * TRV.state.zoom;
+		FontRig.state.pan.x = canvasW / 2 - cx * FontRig.state.zoom;
+		FontRig.state.pan.y = canvasH / 2 + cy * FontRig.state.zoom;
 
-		TRV.updateZoomStatus();
-		TRV.draw();
+		FontRig.updateZoomStatus();
+		FontRig.draw();
 		return;
 	}
 
 	// Split multi-view: fit to cell dimensions
 	var w, h;
-	if (TRV.state.multiView) {
-		const cell = TRV.getCellRect(TRV.state.activeCell.row, TRV.state.activeCell.col);
+	if (FontRig.state.multiView) {
+		const cell = FontRig.getCellRect(FontRig.state.activeCell.row, FontRig.state.activeCell.col);
 		w = cell.w;
 		h = cell.h;
 	} else {
@@ -2375,106 +2375,106 @@ TRV.fitToView = function() {
 	const glyphW = maxX - minX || 1;
 	const glyphH = maxY - minY || 1;
 
-	const padding = TRV.state.multiView ? 30 : 60;
+	const padding = FontRig.state.multiView ? 30 : 60;
 	const scaleX = (w - padding * 2) / glyphW;
 	const scaleY = (h - padding * 2) / glyphH;
-	TRV.state.zoom = Math.min(scaleX, scaleY);
+	FontRig.state.zoom = Math.min(scaleX, scaleY);
 
 	const cx = (minX + maxX) / 2;
 	const cy = (minY + maxY) / 2;
-	TRV.state.pan.x = w / 2 - cx * TRV.state.zoom;
-	TRV.state.pan.y = h / 2 + cy * TRV.state.zoom;
+	FontRig.state.pan.x = w / 2 - cx * FontRig.state.zoom;
+	FontRig.state.pan.y = h / 2 + cy * FontRig.state.zoom;
 
-	TRV.updateZoomStatus();
-	TRV.draw();
+	FontRig.updateZoomStatus();
+	FontRig.draw();
 };
 
-TRV.updateZoomStatus = function() {
-	TRV.dom.statusZoom.textContent = Math.round(TRV.state.zoom * 100) + '%';
+FontRig.updateZoomStatus = function() {
+	FontRig.dom.statusZoom.textContent = Math.round(FontRig.state.zoom * 100) + '%';
 };
 
 // Zoom centred on the viewport middle (for keyboard zoom)
-TRV.zoomAtCenter = function(factor) {
-	const w = TRV.dom.canvasWrap.clientWidth;
-	const h = TRV.dom.canvasWrap.clientHeight;
+FontRig.zoomAtCenter = function(factor) {
+	const w = FontRig.dom.canvasWrap.clientWidth;
+	const h = FontRig.dom.canvasWrap.clientHeight;
 	const cx = w / 2;
 	const cy = h / 2;
-	const newZoom = TRV.state.zoom * factor;
+	const newZoom = FontRig.state.zoom * factor;
 
-	TRV.state.pan.x = cx - (cx - TRV.state.pan.x) * (newZoom / TRV.state.zoom);
-	TRV.state.pan.y = cy - (cy - TRV.state.pan.y) * (newZoom / TRV.state.zoom);
-	TRV.state.zoom = newZoom;
+	FontRig.state.pan.x = cx - (cx - FontRig.state.pan.x) * (newZoom / FontRig.state.zoom);
+	FontRig.state.pan.y = cy - (cy - FontRig.state.pan.y) * (newZoom / FontRig.state.zoom);
+	FontRig.state.zoom = newZoom;
 
-	TRV.updateZoomStatus();
-	TRV.draw();
+	FontRig.updateZoomStatus();
+	FontRig.draw();
 };
 
 // -- File I/O -------------------------------------------------------
-TRV.loadXmlString = function(xmlString, filename) {
+FontRig.loadXmlString = function(xmlString, filename) {
 	try {
-		TRV.state.glyphData = TRV.parseGlyphXML(xmlString);
-		TRV.state.rawXml = xmlString;
+		FontRig.state.glyphData = FontRig.parseGlyphXML(xmlString);
+		FontRig.state.rawXml = xmlString;
 
 		// Clear font mode if loading a loose file
-		TRV.font = null;
-		TRV.glyphCache.clear();
-		TRV.dirtyGlyphs.clear();
-		TRV.activeGlyph = null;
+		FontRig.font = null;
+		FontRig.glyphCache.clear();
+		FontRig.dirtyGlyphs.clear();
+		FontRig.activeGlyph = null;
 		var glyphPanel = document.getElementById('glyph-panel');
 		if (glyphPanel) glyphPanel.classList.remove('visible');
 
-		TRV.dom.layerSelect.innerHTML = '';
-		for (const layer of TRV.state.glyphData.layers) {
+		FontRig.dom.layerSelect.innerHTML = '';
+		for (const layer of FontRig.state.glyphData.layers) {
 			const opt = document.createElement('option');
 			opt.value = layer.name;
 			opt.textContent = layer.name || '(unnamed)';
-			TRV.dom.layerSelect.appendChild(opt);
+			FontRig.dom.layerSelect.appendChild(opt);
 		}
 
-		if (TRV.state.glyphData.layers.length > 0) {
-			TRV.state.activeLayer = TRV.state.glyphData.layers[0].name;
-			TRV.dom.layerSelect.value = TRV.state.activeLayer;
+		if (FontRig.state.glyphData.layers.length > 0) {
+			FontRig.state.activeLayer = FontRig.state.glyphData.layers[0].name;
+			FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 		}
 
-		const g = TRV.state.glyphData;
+		const g = FontRig.state.glyphData;
 		var infoHtml = '<span>' + (g.name || '?') + '</span>';
 		if (g.unicodes) infoHtml += ' U+' + g.unicodes;
-		TRV.dom.glyphInfo.innerHTML = infoHtml;
+		FontRig.dom.glyphInfo.innerHTML = infoHtml;
 
-		TRV.dom.emptyState.classList.add('hidden');
-		TRV.state.selectedNodeIds.clear();
+		FontRig.dom.emptyState.classList.add('hidden');
+		FontRig.state.selectedNodeIds.clear();
 
 		// Re-init grid if multi-view is active
-		if (TRV.state.multiView) TRV.initMultiGrid();
+		if (FontRig.state.multiView) FontRig.initMultiGrid();
 
-		TRV.fitToView();
-		TRV.buildXmlPanel();
-		TRV.clearUndo();
-		document.title = TRV.getCurrentTheme().appTitle + ' | ' + (g.name || 'untitled');
+		FontRig.fitToView();
+		FontRig.buildXmlPanel();
+		FontRig.clearUndo();
+		document.title = FontRig.getCurrentTheme().appTitle + ' | ' + (g.name || 'untitled');
 	} catch (e) {
 		alert('Error loading XML: ' + e.message);
 	}
 };
 
-TRV.saveXml = function() {
+FontRig.saveXml = function() {
 	// Always serialize fresh from data for saving
-	var xmlString = TRV.state.glyphData ? TRV.glyphToXml(TRV.state.glyphData) : TRV.state.rawXml;
+	var xmlString = FontRig.state.glyphData ? FontRig.glyphToXml(FontRig.state.glyphData) : FontRig.state.rawXml;
 	if (!xmlString) return;
 
 	const blob = new Blob([xmlString], { type: 'application/xml' });
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement('a');
 	a.href = url;
-	const name = TRV.state.glyphData ? TRV.state.glyphData.name : 'glyph';
+	const name = FontRig.state.glyphData ? FontRig.state.glyphData.name : 'glyph';
 	a.download = name + '.trglyph';
 	a.click();
 	URL.revokeObjectURL(url);
 };
 
 // -- Cursor helpers -------------------------------------------------
-TRV.updateCanvasCursor = function() {
-	const wrap = TRV.dom.canvasWrap;
-	const state = TRV.state;
+FontRig.updateCanvasCursor = function() {
+	const wrap = FontRig.dom.canvasWrap;
+	const state = FontRig.state;
 	if (state.spaceDown) {
 		wrap.style.cursor = state.isPanning ? 'grabbing' : 'grab';
 	} else if (state.isDragging) {
@@ -2487,21 +2487,21 @@ TRV.updateCanvasCursor = function() {
 };
 
 // -- Node movement by keyboard (moves all selected) -----------------
-TRV.moveSelectedNodes = function(dx, dy) {
-	const sel = TRV.state.selectedNodeIds;
+FontRig.moveSelectedNodes = function(dx, dy) {
+	const sel = FontRig.state.selectedNodeIds;
 	if (sel.size === 0) return;
 
 	for (const nodeId of sel) {
-		const ref = TRV.findNodeById(nodeId);
+		const ref = FontRig.findNodeById(nodeId);
 		if (!ref) continue;
 		ref.node.x = Math.round((ref.node.x + dx) * 10) / 10;
 		ref.node.y = Math.round((ref.node.y + dy) * 10) / 10;
 	}
 
 	// Enforce smooth tangent continuity on neighbors
-	TRV.enforceSmoothForKeys(sel, dx, dy);
+	FontRig.enforceSmoothForKeys(sel, dx, dy);
 
 	// No XML sync here — user clicks Refresh when needed
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };

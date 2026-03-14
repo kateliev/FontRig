@@ -1,20 +1,20 @@
 // ===================================================================
-// TypeRig Widgets (TRW) — Reusable UI Gadget Library
+// TypeRig Widgets (FRWidget) — Reusable UI Gadget Library
 // ===================================================================
 // Qt-style widget factories for dark-themed web UIs.
 // All widgets return plain DOM elements; no framework dependency.
 //
 // Icon system: Uses TypeRig Icons ligature font via the 'tri' class.
-// TRW.icon(name) creates <span class="tri">name</span>.
+// FRWidget.icon(name) creates <span class="tri">name</span>.
 // ===================================================================
 'use strict';
 
-var TRW = TRW || {};
+var FRWidget = FRWidget || {};
 
 // ===================================================================
 // ICON SYSTEM — TypeRig Icons ligature font
 // ===================================================================
-TRW.icon = function(name) {
+FRWidget.icon = function(name) {
 	if (!name) return null;
 	var span = document.createElement('span');
 	span.className = 'tri';
@@ -25,7 +25,7 @@ TRW.icon = function(name) {
 // ===================================================================
 // LABEL
 // ===================================================================
-TRW.Label = function(text, opts) {
+FRWidget.Label = function(text, opts) {
 	opts = opts || {};
 	var el = document.createElement('span');
 	el.className = 'trw-label';
@@ -42,14 +42,14 @@ TRW.Label = function(text, opts) {
 // ===================================================================
 // BUTTON
 // ===================================================================
-TRW.Button = function(text, opts) {
+FRWidget.Button = function(text, opts) {
 	opts = opts || {};
 	var el = document.createElement('button');
 	el.className = 'trw-btn';
 	el.type = 'button';
 
 	if (opts.icon) {
-		var ic = TRW.icon(opts.icon);
+		var ic = FRWidget.icon(opts.icon);
 		if (ic) el.appendChild(ic);
 	}
 
@@ -72,9 +72,9 @@ TRW.Button = function(text, opts) {
 // ===================================================================
 // TOGGLE BUTTON
 // ===================================================================
-TRW.ToggleButton = function(text, opts) {
+FRWidget.ToggleButton = function(text, opts) {
 	opts = opts || {};
-	var el = TRW.Button(text, opts);
+	var el = FRWidget.Button(text, opts);
 	el.classList.add('trw-toggle');
 
 	if (opts.active) el.classList.add('active');
@@ -96,7 +96,7 @@ TRW.ToggleButton = function(text, opts) {
 // ===================================================================
 // SPIN BOX (integer)
 // ===================================================================
-TRW.SpinBox = function(opts) {
+FRWidget.SpinBox = function(opts) {
 	opts = opts || {};
 	var min  = opts.min !== undefined ? opts.min : 0;
 	var max  = opts.max !== undefined ? opts.max : 100;
@@ -169,7 +169,7 @@ TRW.SpinBox = function(opts) {
 // ===================================================================
 // DOUBLE SPIN BOX (float)
 // ===================================================================
-TRW.DoubleSpinBox = function(opts) {
+FRWidget.DoubleSpinBox = function(opts) {
 	opts = opts || {};
 	var min  = opts.min !== undefined ? opts.min : 0;
 	var max  = opts.max !== undefined ? opts.max : 100;
@@ -243,7 +243,7 @@ TRW.DoubleSpinBox = function(opts) {
 // ===================================================================
 // EDIT FIELD (line edit)
 // ===================================================================
-TRW.EditField = function(opts) {
+FRWidget.EditField = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
@@ -272,7 +272,7 @@ TRW.EditField = function(opts) {
 // ===================================================================
 // COMBO BOX
 // ===================================================================
-TRW.ComboBox = function(opts) {
+FRWidget.ComboBox = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
@@ -312,7 +312,7 @@ TRW.ComboBox = function(opts) {
 // ===================================================================
 // LIST WIDGET
 // ===================================================================
-TRW.ListWidget = function(opts) {
+FRWidget.ListWidget = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
@@ -371,7 +371,7 @@ TRW.ListWidget = function(opts) {
 // Layout: [label] [spinbox] [−10] [−1] [+1] [+10]
 //         [min] [=====slider=====] [max]
 // ===================================================================
-TRW.SliderCtrl = function(opts) {
+FRWidget.SliderCtrl = function(opts) {
 	opts = opts || {};
 	var min  = opts.min !== undefined ? opts.min : 0;
 	var max  = opts.max !== undefined ? opts.max : 100;
@@ -401,21 +401,21 @@ TRW.SliderCtrl = function(opts) {
 	};
 
 	var spin = decimals > 0
-		? TRW.DoubleSpinBox(Object.assign(spinOpts, { decimals: decimals }))
-		: TRW.SpinBox(spinOpts);
+		? FRWidget.DoubleSpinBox(Object.assign(spinOpts, { decimals: decimals }))
+		: FRWidget.SpinBox(spinOpts);
 	topRow.appendChild(spin);
 
 	// Increment buttons: −10, −1, +1, +10
-	var btnDec10 = TRW.Button('\u226210', { compact: true, tooltip: '-10',
+	var btnDec10 = FRWidget.Button('\u226210', { compact: true, tooltip: '-10',
 		onClick: function() { updateAll(getCurrentVal() - 10, 'btn'); }
 	});
-	var btnDec1 = TRW.Button('\u22121', { compact: true, tooltip: '-1',
+	var btnDec1 = FRWidget.Button('\u22121', { compact: true, tooltip: '-1',
 		onClick: function() { updateAll(getCurrentVal() - step, 'btn'); }
 	});
-	var btnInc1 = TRW.Button('+1', { compact: true, tooltip: '+1',
+	var btnInc1 = FRWidget.Button('+1', { compact: true, tooltip: '+1',
 		onClick: function() { updateAll(getCurrentVal() + step, 'btn'); }
 	});
-	var btnInc10 = TRW.Button('+10', { compact: true, tooltip: '+10',
+	var btnInc10 = FRWidget.Button('+10', { compact: true, tooltip: '+10',
 		onClick: function() { updateAll(getCurrentVal() + 10, 'btn'); }
 	});
 
@@ -497,7 +497,7 @@ TRW.SliderCtrl = function(opts) {
 // ===================================================================
 // TREE WIDGET (planned — basic expandable structure)
 // ===================================================================
-TRW.TreeWidget = function(opts) {
+FRWidget.TreeWidget = function(opts) {
 	opts = opts || {};
 	var wrap = document.createElement('div');
 	wrap.className = 'trw-tree';
@@ -582,7 +582,7 @@ TRW.TreeWidget = function(opts) {
 // ===================================================================
 // TABLE WIDGET (planned — basic structure)
 // ===================================================================
-TRW.TableWidget = function(opts) {
+FRWidget.TableWidget = function(opts) {
 	opts = opts || {};
 	var table = document.createElement('table');
 	table.className = 'trw-table';
@@ -642,13 +642,13 @@ TRW.TableWidget = function(opts) {
 // ===================================================================
 // COMBINED: SPIN BUTTON (spinbox + action button)
 // ===================================================================
-TRW.SpinButton = function(buttonText, opts) {
+FRWidget.SpinButton = function(buttonText, opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
 	wrap.className = 'trw-spin-button';
 
-	var spin = TRW.SpinBox({
+	var spin = FRWidget.SpinBox({
 		min: opts.min, max: opts.max,
 		value: opts.value, step: opts.step,
 		suffix: opts.suffix,
@@ -678,7 +678,7 @@ TRW.SpinButton = function(buttonText, opts) {
 // ===================================================================
 // COMBINED: FLOW RIBBON (stretchable, reflowable button strip)
 // ===================================================================
-TRW.FlowRibbon = function(opts) {
+FRWidget.FlowRibbon = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');
@@ -703,7 +703,7 @@ TRW.FlowRibbon = function(opts) {
 // ===================================================================
 // DIALOG (simple modal)
 // ===================================================================
-TRW.Dialog = function(opts) {
+FRWidget.Dialog = function(opts) {
 	opts = opts || {};
 
 	var backdrop = document.createElement('div');
@@ -748,7 +748,7 @@ TRW.Dialog = function(opts) {
 
 		for (var i = 0; i < opts.buttons.length; i++) {
 			var bCfg = opts.buttons[i];
-			var btn = TRW.Button(bCfg.text, {
+			var btn = FRWidget.Button(bCfg.text, {
 				primary: bCfg.primary,
 				onClick: (function(cb) {
 					return function() { if (cb) cb(); api.close(); };
@@ -793,15 +793,15 @@ TRW.Dialog = function(opts) {
 // ===================================================================
 // UTILITY: Row (label + widget helper)
 // ===================================================================
-TRW.Row = function(labelText, widget) {
+FRWidget.Row = function(labelText, widget) {
 	var row = document.createElement('div');
 	row.className = 'trw-row';
-	row.appendChild(TRW.Label(labelText));
+	row.appendChild(FRWidget.Label(labelText));
 	row.appendChild(widget);
 	return row;
 };
 
-TRW.Section = function(titleText) {
+FRWidget.Section = function(titleText) {
 	var sec = document.createElement('div');
 	sec.className = 'trw-section';
 	var t = document.createElement('span');
@@ -823,7 +823,7 @@ TRW.Section = function(titleText) {
 // opts.colorCol — column index to match against colorMap (default: last column)
 // opts.onChange — fn(rowIdx, checked) called when a checkbox toggles
 // ===================================================================
-TRW.CheckTableWidget = function(opts) {
+FRWidget.CheckTableWidget = function(opts) {
 	opts = opts || {};
 
 	var wrap = document.createElement('div');

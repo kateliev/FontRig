@@ -10,13 +10,13 @@
 'use strict';
 
 // -- Grid initialization --------------------------------------------
-TRV.initMultiGrid = function() {
-	const state = TRV.state;
+FontRig.initMultiGrid = function() {
+	const state = FontRig.state;
 	const cols = state.gridCols;
 	const rows = state.gridRows;
 
 	// Only non-mask layers participate in the grid
-	const validIndices = TRV.getNonMaskLayerIndices();
+	const validIndices = FontRig.getNonMaskLayerIndices();
 	const N = validIndices.length || 1;
 
 	state.gridLayers = [];
@@ -31,15 +31,15 @@ TRV.initMultiGrid = function() {
 	}
 
 	state.activeCell = { row: 0, col: 0 };
-	TRV.syncActiveCellToLayer();
+	FontRig.syncActiveCellToLayer();
 };
 
 // -- Cell geometry (split mode) -------------------------------------
-TRV.getCellRect = function(row, col) {
-	const w = TRV.dom.canvasWrap.clientWidth;
-	const h = TRV.dom.canvasWrap.clientHeight;
-	const cols = TRV.state.gridCols;
-	const rows = TRV.state.gridRows;
+FontRig.getCellRect = function(row, col) {
+	const w = FontRig.dom.canvasWrap.clientWidth;
+	const h = FontRig.dom.canvasWrap.clientHeight;
+	const cols = FontRig.state.gridCols;
+	const rows = FontRig.state.gridRows;
 
 	return {
 		x: col * (w / cols),
@@ -49,11 +49,11 @@ TRV.getCellRect = function(row, col) {
 	};
 };
 
-TRV.getCellAt = function(sx, sy) {
-	const w = TRV.dom.canvasWrap.clientWidth;
-	const h = TRV.dom.canvasWrap.clientHeight;
-	const cols = TRV.state.gridCols;
-	const rows = TRV.state.gridRows;
+FontRig.getCellAt = function(sx, sy) {
+	const w = FontRig.dom.canvasWrap.clientWidth;
+	const h = FontRig.dom.canvasWrap.clientHeight;
+	const cols = FontRig.state.gridCols;
+	const rows = FontRig.state.gridRows;
 
 	return {
 		row: Math.max(0, Math.min(rows - 1, Math.floor(sy / (h / rows)))),
@@ -62,17 +62,17 @@ TRV.getCellAt = function(sx, sy) {
 };
 
 // -- Active cell management -----------------------------------------
-TRV.setActiveCell = function(row, col) {
-	const state = TRV.state;
+FontRig.setActiveCell = function(row, col) {
+	const state = FontRig.state;
 	state.activeCell = { row, col };
 	state.selectedNodeIds.clear();
-	TRV.syncActiveCellToLayer();
-	TRV.draw();
-	TRV.updateStatusSelected();
+	FontRig.syncActiveCellToLayer();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
 };
 
-TRV.syncActiveCellToLayer = function() {
-	const state = TRV.state;
+FontRig.syncActiveCellToLayer = function() {
+	const state = FontRig.state;
 	if (!state.glyphData || !state.gridLayers) return;
 
 	var r = state.activeCell.row;
@@ -84,13 +84,13 @@ TRV.syncActiveCellToLayer = function() {
 	const layerIdx = state.gridLayers[r][c] % N;
 
 	state.activeLayer = layers[layerIdx].name;
-	TRV.dom.layerSelect.value = layers[layerIdx].name;
+	FontRig.dom.layerSelect.value = layers[layerIdx].name;
 };
 
 // -- Ribbon rotation ------------------------------------------------
-TRV.rotateColumn = function(col, direction) {
-	const state = TRV.state;
-	const validIndices = TRV.getNonMaskLayerIndices();
+FontRig.rotateColumn = function(col, direction) {
+	const state = FontRig.state;
+	const validIndices = FontRig.getNonMaskLayerIndices();
 	const N = validIndices.length || 1;
 
 	for (let r = 0; r < state.gridRows; r++) {
@@ -101,12 +101,12 @@ TRV.rotateColumn = function(col, direction) {
 		state.gridLayers[r][col] = validIndices[pos];
 	}
 
-	TRV.syncActiveCellToLayer();
+	FontRig.syncActiveCellToLayer();
 };
 
-TRV.rotateRow = function(row, direction) {
-	const state = TRV.state;
-	const validIndices = TRV.getNonMaskLayerIndices();
+FontRig.rotateRow = function(row, direction) {
+	const state = FontRig.state;
+	const validIndices = FontRig.getNonMaskLayerIndices();
 	const N = validIndices.length || 1;
 
 	for (let c = 0; c < state.gridCols; c++) {
@@ -116,11 +116,11 @@ TRV.rotateRow = function(row, direction) {
 		state.gridLayers[row][c] = validIndices[pos];
 	}
 
-	TRV.syncActiveCellToLayer();
+	FontRig.syncActiveCellToLayer();
 };
 
-TRV.withIsolatedSelection = function(isActive, fn) {
-	const state = TRV.state;
+FontRig.withIsolatedSelection = function(isActive, fn) {
+	const state = FontRig.state;
 	const saved = state.selectedNodeIds;
 
 	if (!isActive) state.selectedNodeIds = new Set();
@@ -133,17 +133,17 @@ TRV.withIsolatedSelection = function(isActive, fn) {
 // -- JOINED MODE — shared canvas, layers in glyph space -------------
 // -- Layout computation ---------------------------------------------
 // Returns glyph-space offsets for each cell and total bounding box
-TRV.getJoinedLayout = function() {
-	const state = TRV.state;
+FontRig.getJoinedLayout = function() {
+	const state = FontRig.state;
 	const layers = state.glyphData ? state.glyphData.layers : [];
 	const cols = state.gridCols;
 	const rows = state.gridRows;
-	const gap = TRV.getCurrentTheme().grid.joinedGap;
+	const gap = FontRig.getCurrentTheme().grid.joinedGap;
 
 	// Compute actual bounding box across non-mask layers
 	let maxW = 0, maxH = 0;
 	for (const layer of layers) {
-		if (TRV.isMaskLayer(layer.name)) continue;
+		if (FontRig.isMaskLayer(layer.name)) continue;
 
 		let minX = 0, minY = 0;
 		let mxX = layer.width, mxY = layer.height;
@@ -200,10 +200,10 @@ TRV.getJoinedLayout = function() {
 // -- Execute a function with pan shifted for a cell -----------------
 // All existing draw/hit-test functions use glyphToScreen which reads
 // state.pan, so shifting it is sufficient to relocate a layer.
-TRV.withJoinedOffset = function(row, col, fn) {
-	const layout = TRV.getJoinedLayout();
+FontRig.withJoinedOffset = function(row, col, fn) {
+	const layout = FontRig.getJoinedLayout();
 	const offset = layout.offsets[row][col];
-	const state = TRV.state;
+	const state = FontRig.state;
 	const savedX = state.pan.x;
 	const savedY = state.pan.y;
 
@@ -217,12 +217,12 @@ TRV.withJoinedOffset = function(row, col, fn) {
 };
 
 // -- Determine which cell a screen point falls in (joined mode) -----
-TRV.getJoinedCellAt = function(sx, sy) {
-	const state = TRV.state;
-	const layout = TRV.getJoinedLayout();
+FontRig.getJoinedCellAt = function(sx, sy) {
+	const state = FontRig.state;
+	const layout = FontRig.getJoinedLayout();
 
 	// Convert screen to glyph (using base pan, no offset)
-	const gp = TRV.screenToGlyph(sx, sy);
+	const gp = FontRig.screenToGlyph(sx, sy);
 
 	let col = Math.floor(gp.x / layout.cellW);
 	col = Math.max(0, Math.min(state.gridCols - 1, col));
@@ -234,8 +234,8 @@ TRV.getJoinedCellAt = function(sx, sy) {
 };
 
 // -- Joined view drawing --------------------------------------------
-TRV.drawJoinedView = function(canvasW, canvasH) {
-	const state = TRV.state;
+FontRig.drawJoinedView = function(canvasW, canvasH) {
+	const state = FontRig.state;
 	const layers = state.glyphData ? state.glyphData.layers : [];
 	if (!layers.length) return;
 
@@ -252,10 +252,10 @@ TRV.drawJoinedView = function(canvasW, canvasH) {
 				c === state.activeCell.col
 			);
 
-			TRV.withJoinedOffset(r, c, () => {
+			FontRig.withJoinedOffset(r, c, () => {
 
-				TRV.withIsolatedSelection(isActive, () => {
-					TRV.renderLayer(layer, {
+				FontRig.withIsolatedSelection(isActive, () => {
+					FontRig.renderLayer(layer, {
 						isActive,
 						canvasW,
 						canvasH
@@ -267,15 +267,15 @@ TRV.drawJoinedView = function(canvasW, canvasH) {
 	}
 
 	if (!state.previewMode)
-		TRV.drawJoinedActiveIndicator(TRV.getJoinedLayout());
+		FontRig.drawJoinedActiveIndicator(FontRig.getJoinedLayout());
 };
 
 // -- Soft dividers for joined mode ----------------------------------
-TRV.drawJoinedDividers = function(canvasW, canvasH, layout) {
-	const ctx = TRV.dom.ctx;
-	const state = TRV.state;
-	const tg = TRV.getCurrentTheme().grid;
-	const rgb = TRV.getCurrentTheme().bgFadeRgb;
+FontRig.drawJoinedDividers = function(canvasW, canvasH, layout) {
+	const ctx = FontRig.dom.ctx;
+	const state = FontRig.state;
+	const tg = FontRig.getCurrentTheme().grid;
+	const rgb = FontRig.getCurrentTheme().bgFadeRgb;
 	const a = tg.dividerFadeAlphaJ;
 	const fade = 28;
 
@@ -331,22 +331,22 @@ TRV.drawJoinedDividers = function(canvasW, canvasH, layout) {
 };
 
 // -- Active cell indicator for joined mode --------------------------
-TRV.drawJoinedActiveIndicator = function(layout) {
-	const ctx = TRV.dom.ctx;
-	const state = TRV.state;
+FontRig.drawJoinedActiveIndicator = function(layout) {
+	const ctx = FontRig.dom.ctx;
+	const state = FontRig.state;
 	const r = state.activeCell.row;
 	const c = state.activeCell.col;
 
-	TRV.withJoinedOffset(r, c, function() {
+	FontRig.withJoinedOffset(r, c, function() {
 		const layerIdx = state.gridLayers[r][c] % state.glyphData.layers.length;
 		const layer = state.glyphData.layers[layerIdx];
 
 		// Small tick marks at corners of the glyph's advance box
-		const tl = TRV.glyphToScreen(0, layer.height);
-		const br = TRV.glyphToScreen(layer.width, 0);
+		const tl = FontRig.glyphToScreen(0, layer.height);
+		const br = FontRig.glyphToScreen(layer.width, 0);
 		const tick = 8;
 
-		const tg = TRV.getCurrentTheme().grid;
+		const tg = FontRig.getCurrentTheme().grid;
 		ctx.strokeStyle = tg.activeBorder;
 		ctx.lineWidth = tg.strokeWidth || 1;
 
@@ -382,9 +382,9 @@ TRV.drawJoinedActiveIndicator = function(layout) {
 
 
 // -- SPLIT MODE — clipped cells (existing) -------------------------------------
-TRV.drawSplitView = function(canvasW, canvasH) {
-	const ctx = TRV.dom.ctx;
-	const state = TRV.state;
+FontRig.drawSplitView = function(canvasW, canvasH) {
+	const ctx = FontRig.dom.ctx;
+	const state = FontRig.state;
 	const cols = state.gridCols;
 	const rows = state.gridRows;
 	const layers = state.glyphData ? state.glyphData.layers : [];
@@ -396,7 +396,7 @@ TRV.drawSplitView = function(canvasW, canvasH) {
 		for (let c = 0; c < cols; c++) {
 			const layerIdx = state.gridLayers[r][c] % layers.length;
 			const layer = layers[layerIdx];
-			const cell = TRV.getCellRect(r, c);
+			const cell = FontRig.getCellRect(r, c);
 			const isActive = (r === state.activeCell.row && c === state.activeCell.col);
 
 			ctx.save();
@@ -408,7 +408,7 @@ TRV.drawSplitView = function(canvasW, canvasH) {
 			ctx.translate(cell.x, cell.y);
 
 			var preview = state.previewMode;
-			ctx.fillStyle = preview ? TRV.getCurrentTheme().bgPreview : TRV.getBgColor();
+			ctx.fillStyle = preview ? FontRig.getCurrentTheme().bgPreview : FontRig.getBgColor();
 			ctx.fillRect(0, 0, cell.w, cell.h);
 
 			if (!isActive) {
@@ -416,7 +416,7 @@ TRV.drawSplitView = function(canvasW, canvasH) {
 				
 			}
 
-			TRV.renderLayer(layer, {
+			FontRig.renderLayer(layer, {
 				isActive,
 				canvasW: cell.w,
 				canvasH: cell.h
@@ -431,20 +431,20 @@ TRV.drawSplitView = function(canvasW, canvasH) {
 	}
 
 	// Drop shadow dividers between cells in CAD style multiview
-	if (!state.previewMode) TRV.drawSplitDividers(canvasW, canvasH);
+	if (!state.previewMode) FontRig.drawSplitDividers(canvasW, canvasH);
 
 	// Active cell border
-	TRV.drawActiveCellBorder();
+	FontRig.drawActiveCellBorder();
 };
 
 // -- Drop shadow dividers between cells in CAD style multiview
-TRV.drawSplitDividers = function(w, h) {
-	const ctx = TRV.dom.ctx;
-	const state = TRV.state;
-	const grid = TRV.getCurrentTheme().grid;
-	const rgb = TRV.getCurrentTheme().bgFadeRgb;
-	const fade =  TRV.getCurrentTheme().grid.fade;
-	const alpha = TRV.getCurrentTheme().grid.dividerFadeAlpha;
+FontRig.drawSplitDividers = function(w, h) {
+	const ctx = FontRig.dom.ctx;
+	const state = FontRig.state;
+	const grid = FontRig.getCurrentTheme().grid;
+	const rgb = FontRig.getCurrentTheme().bgFadeRgb;
+	const fade =  FontRig.getCurrentTheme().grid.fade;
+	const alpha = FontRig.getCurrentTheme().grid.dividerFadeAlpha;
 	const cols = state.gridCols;
 	const rows = state.gridRows;
 
@@ -496,11 +496,11 @@ TRV.drawSplitDividers = function(w, h) {
 };
 
 // -- Active cell border (split mode) --------------------------------
-TRV.drawActiveCellBorder = function() {
-	const ctx = TRV.dom.ctx;
-	const cell = TRV.getCellRect(TRV.state.activeCell.row, TRV.state.activeCell.col);
+FontRig.drawActiveCellBorder = function() {
+	const ctx = FontRig.dom.ctx;
+	const cell = FontRig.getCellRect(FontRig.state.activeCell.row, FontRig.state.activeCell.col);
 
-	ctx.strokeStyle = TRV.getCurrentTheme().grid.activeBorder;
+	ctx.strokeStyle = FontRig.getCurrentTheme().grid.activeBorder;
 	ctx.lineWidth = 2;
 	ctx.strokeRect(cell.x + 1, cell.y + 1, cell.w - 2, cell.h - 2);
 };
@@ -513,15 +513,15 @@ TRV.drawActiveCellBorder = function() {
 
 // -- Ensure active glyph is in the workspace strip ------------------
 // Does NOT auto-populate neighbors. User adds glyphs via double-click.
-TRV.updateWorkspaceStrip = function() {
-	if (!TRV.font || !TRV.activeGlyph) return;
+FontRig.updateWorkspaceStrip = function() {
+	if (!FontRig.font || !FontRig.activeGlyph) return;
 
-	var ws = TRV.workspace;
-	var idx = ws.glyphs.indexOf(TRV.activeGlyph);
+	var ws = FontRig.workspace;
+	var idx = ws.glyphs.indexOf(FontRig.activeGlyph);
 
 	if (idx < 0) {
 		// Active glyph not in strip — add it
-		ws.glyphs.push(TRV.activeGlyph);
+		ws.glyphs.push(FontRig.activeGlyph);
 		ws.activeIdx = ws.glyphs.length - 1;
 	} else {
 		ws.activeIdx = idx;
@@ -529,32 +529,32 @@ TRV.updateWorkspaceStrip = function() {
 
 	// Preload neighbors
 	for (var i = 0; i < ws.glyphs.length; i++) {
-		TRV._ensureGlyphLoaded(ws.glyphs[i]);
+		FontRig._ensureGlyphLoaded(ws.glyphs[i]);
 	}
 };
 
 // -- Add a glyph to the workspace strip -----------------------------
 // Inserts after active glyph, or at end if not found.
-TRV.addGlyphToStrip = function(name) {
-	var ws = TRV.workspace;
+FontRig.addGlyphToStrip = function(name) {
+	var ws = FontRig.workspace;
 	if (ws.glyphs.indexOf(name) >= 0) return; // already in strip
 
 	// Insert after active position
 	ws.glyphs.splice(ws.activeIdx + 1, 0, name);
-	TRV._ensureGlyphLoaded(name);
-	TRV.updateGlyphPanelActive();
+	FontRig._ensureGlyphLoaded(name);
+	FontRig.updateGlyphPanelActive();
 
-	if (TRV.state.glyphViewMode) {
-		TRV.draw();
+	if (FontRig.state.glyphViewMode) {
+		FontRig.draw();
 	}
 };
 
 // -- Remove a glyph from the workspace strip ------------------------
-TRV.removeGlyphFromStrip = function(name) {
-	var ws = TRV.workspace;
+FontRig.removeGlyphFromStrip = function(name) {
+	var ws = FontRig.workspace;
 	var idx = ws.glyphs.indexOf(name);
 	if (idx < 0) return;
-	if (name === TRV.activeGlyph) return; // can't remove active
+	if (name === FontRig.activeGlyph) return; // can't remove active
 
 	ws.glyphs.splice(idx, 1);
 	// Fix activeIdx if needed
@@ -564,20 +564,20 @@ TRV.removeGlyphFromStrip = function(name) {
 		ws.activeIdx--;
 	}
 
-	TRV.updateGlyphPanelActive();
+	FontRig.updateGlyphPanelActive();
 
-	if (TRV.state.glyphViewMode) {
-		TRV.draw();
+	if (FontRig.state.glyphViewMode) {
+		FontRig.draw();
 	}
 };
 
 // -- Glyph strip layout computation ---------------------------------
 // Returns { slots, totalW, rowH }
-TRV.getGlyphStripLayout = function() {
-	var state = TRV.state;
-	var ws = TRV.workspace;
-	var gap = TRV.getCurrentTheme().grid.stripGap;
-	var upm = TRV.font ? TRV.font.metrics.upm : 1000;
+FontRig.getGlyphStripLayout = function() {
+	var state = FontRig.state;
+	var ws = FontRig.workspace;
+	var gap = FontRig.getCurrentTheme().grid.stripGap;
+	var upm = FontRig.font ? FontRig.font.metrics.upm : 1000;
 	var rowH = upm + gap;
 
 	// Active glyph expansion
@@ -601,13 +601,13 @@ TRV.getGlyphStripLayout = function() {
 
 		// Get advance width from cached glyph using active layer
 		var advW = upm * 0.6; // fallback
-		var cacheEntry = TRV.glyphCache.get(name);
+		var cacheEntry = FontRig.glyphCache.get(name);
 		if (cacheEntry) {
 			// Try active layer first, then default
-			var layer = TRV.getLayerByName(cacheEntry.glyphData, TRV.state.activeLayer);
+			var layer = FontRig.getLayerByName(cacheEntry.glyphData, FontRig.state.activeLayer);
 			if (!layer) {
-				var defLayer = TRV.getDefaultLayerName(cacheEntry.glyphData);
-				layer = TRV.getLayerByName(cacheEntry.glyphData, defLayer);
+				var defLayer = FontRig.getDefaultLayerName(cacheEntry.glyphData);
+				layer = FontRig.getLayerByName(cacheEntry.glyphData, defLayer);
 			}
 			if (layer) advW = layer.width || advW;
 		}
@@ -634,16 +634,16 @@ TRV.getGlyphStripLayout = function() {
 };
 
 // -- Draw glyph strip -----------------------------------------------
-TRV.drawGlyphStrip = function(canvasW, canvasH) {
-	var ctx = TRV.dom.ctx;
-	var state = TRV.state;
-	var theme = TRV.getCurrentTheme().activeCellHightlight;
+FontRig.drawGlyphStrip = function(canvasW, canvasH) {
+	var ctx = FontRig.dom.ctx;
+	var state = FontRig.state;
+	var theme = FontRig.getCurrentTheme().activeCellHightlight;
 	var preview = state.previewMode;
-	var layout = TRV.getGlyphStripLayout();
-	var upm = TRV.font ? TRV.font.metrics.upm : 1000;
+	var layout = FontRig.getGlyphStripLayout();
+	var upm = FontRig.font ? FontRig.font.metrics.upm : 1000;
 
 	// Clear close button hit rects from previous draw
-	TRV.workspace._closeRects = {};
+	FontRig.workspace._closeRects = {};
 
 	// Save global state we'll swap per slot
 	var savedGlyphData = state.glyphData;
@@ -656,9 +656,9 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 
 	for (var si = 0; si < layout.slots.length; si++) {
 		var slot = layout.slots[si];
-		var cacheEntry = TRV.glyphCache.get(slot.name);
+		var cacheEntry = FontRig.glyphCache.get(slot.name);
 		if (!cacheEntry) {
-			TRV._ensureGlyphLoaded(slot.name);
+			FontRig._ensureGlyphLoaded(slot.name);
 			continue;
 		}
 
@@ -671,10 +671,10 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 		if (slot.active) {
 			// -- Active glyph: raised background highlight --
 			if (!preview) {
-				var xL = TRV.glyphToScreen(slot.x, 0).x;
-				var xR = TRV.glyphToScreen(slot.x + slot.w, 0).x;
-				var gTop = TRV.glyphToScreen(0, upm * 2).y;
-				var gBot = TRV.glyphToScreen(0, -upm).y;
+				var xL = FontRig.glyphToScreen(slot.x, 0).x;
+				var xR = FontRig.glyphToScreen(slot.x + slot.w, 0).x;
+				var gTop = FontRig.glyphToScreen(0, upm * 2).y;
+				var gBot = FontRig.glyphToScreen(0, -upm).y;
 			var activeGrad = ctx.createLinearGradient(0, gTop, 0, gBot);
 			theme.backgroundGradient.forEach(([p, c]) => activeGrad.addColorStop(p, c));
 	
@@ -693,14 +693,14 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 
 			if (!isExpanded) {
 				// -- Single cell (1x1): draw activeLayer directly --
-				var layer = TRV.getLayerByName(glyphData, savedActiveLayer);
+				var layer = FontRig.getLayerByName(glyphData, savedActiveLayer);
 				if (!layer) layer = glyphData.layers[0];
 				if (layer) {
 					state.activeLayer = layer.name;
 					state.pan.x = savedPanX + slot.x * state.zoom;
 					state.pan.y = savedPanY;
 					
-					TRV.renderLayer(layer, {
+					FontRig.renderLayer(layer, {
 						isActive: true,
 						canvasW: canvasW,
 						canvasH: canvasH
@@ -709,7 +709,7 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 				}
 			} else {
 				// -- Expanded grid: build gridLayers, draw per cell --
-				TRV._ensureStripGrid();
+				FontRig._ensureStripGrid();
 
 				for (var r = 0; r < slot.rows; r++) {
 					for (var c = 0; c < slot.cols; c++) {
@@ -725,7 +725,7 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 
 						state.activeLayer = layer.name;
 
-						var cellOffX = slot.x + c * (slot.advW + TRV.getCurrentTheme().grid.stripGap);
+						var cellOffX = slot.x + c * (slot.advW + FontRig.getCurrentTheme().grid.stripGap);
 						var cellOffY = r * layout.rowH;
 
 						state.pan.x = savedPanX + cellOffX * state.zoom;
@@ -733,7 +733,7 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 
 						if (!isActiveCell) state.selectedNodeIds = new Set();
 
-						TRV.renderLayer(layer, {
+						FontRig.renderLayer(layer, {
 							isActive: true,
 							canvasW: canvasW,
 							canvasH: canvasH
@@ -750,20 +750,20 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 				state.pan.y = savedPanY;
 				state.glyphData = glyphData;
 				state.activeLayer = savedActiveLayer;
-				var baseLayer = TRV.getLayerByName(glyphData, savedActiveLayer);
+				var baseLayer = FontRig.getLayerByName(glyphData, savedActiveLayer);
 				if (!baseLayer) baseLayer = glyphData.layers[0];
 				if (baseLayer) {
 					// Show HTML widget instead of canvas widget
-					TRV.updateGlyphWidget();
+					FontRig.updateGlyphWidget();
 				}
 			}
 		} else {
 			// -- Non-active glyph: same layer as active glyph --
 			state.glyphData = glyphData;
-			var layer = TRV.getLayerByName(glyphData, savedActiveLayer);
+			var layer = FontRig.getLayerByName(glyphData, savedActiveLayer);
 			if (!layer) {
-				var defName = TRV.getDefaultLayerName(glyphData);
-				layer = TRV.getLayerByName(glyphData, defName);
+				var defName = FontRig.getDefaultLayerName(glyphData);
+				layer = FontRig.getLayerByName(glyphData, defName);
 			}
 			if (!layer) continue;
 
@@ -773,7 +773,7 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 			state.pan.x = savedPanX + slot.x * state.zoom;
 			state.pan.y = savedPanY;
 
-			TRV.drawContours(layer);
+			FontRig.drawContours(layer);
 
 			// Restore selection so active glyph sees it
 			state.selectedNodeIds = savedSelection;
@@ -789,8 +789,8 @@ TRV.drawGlyphStrip = function(canvasW, canvasH) {
 };
 
 // -- Ensure gridLayers is populated for strip expanded view ---------
-TRV._ensureStripGrid = function() {
-	var state = TRV.state;
+FontRig._ensureStripGrid = function() {
+	var state = FontRig.state;
 	var cols = state.gridCols;
 	var rows = state.gridRows;
 	if (cols <= 1 && rows <= 1) return;
@@ -801,7 +801,7 @@ TRV._ensureStripGrid = function() {
 	// Build valid (non-mask) layer indices
 	var validIndices = [];
 	for (var i = 0; i < glyphData.layers.length; i++) {
-		if (!TRV.isMaskLayer(glyphData.layers[i].name)) validIndices.push(i);
+		if (!FontRig.isMaskLayer(glyphData.layers[i].name)) validIndices.push(i);
 	}
 	if (validIndices.length === 0) return;
 
@@ -831,12 +831,12 @@ TRV._ensureStripGrid = function() {
 };
 
 // -- Fit glyph strip to view ----------------------------------------
-TRV.fitGlyphStrip = function() {
-	var layout = TRV.getGlyphStripLayout();
-	var canvasW = TRV.dom.canvasWrap.clientWidth;
-	var canvasH = TRV.dom.canvasWrap.clientHeight;
-	var upm = TRV.font ? TRV.font.metrics.upm : 1000;
-	var desc = TRV.font ? Math.abs(TRV.font.metrics.descender) : 200;
+FontRig.fitGlyphStrip = function() {
+	var layout = FontRig.getGlyphStripLayout();
+	var canvasW = FontRig.dom.canvasWrap.clientWidth;
+	var canvasH = FontRig.dom.canvasWrap.clientHeight;
+	var upm = FontRig.font ? FontRig.font.metrics.upm : 1000;
+	var desc = FontRig.font ? Math.abs(FontRig.font.metrics.descender) : 200;
 	var totalH = upm + desc * 0.5;
 
 	// Find active slot for centering
@@ -851,23 +851,23 @@ TRV.fitGlyphStrip = function() {
 	var padding = 40;
 	var scaleY = (canvasH - padding * 2) / viewH;
 	var scaleX = (canvasW - padding * 2) / layout.totalW;
-	TRV.state.zoom = Math.min(scaleX, scaleY);
+	FontRig.state.zoom = Math.min(scaleX, scaleY);
 
 	// Center on active glyph
 	if (activeSlot) {
 		var cx = activeSlot.x + activeSlot.w / 2;
-		TRV.state.pan.x = canvasW / 2 - cx * TRV.state.zoom;
-		TRV.state.pan.y = canvasH * 0.75 + (rows - 1) * layout.rowH * TRV.state.zoom * 0.3;
+		FontRig.state.pan.x = canvasW / 2 - cx * FontRig.state.zoom;
+		FontRig.state.pan.y = canvasH * 0.75 + (rows - 1) * layout.rowH * FontRig.state.zoom * 0.3;
 	}
 
-	TRV.updateZoomStatus();
+	FontRig.updateZoomStatus();
 };
 
 // -- Strip offset for interaction -----------------------------------
 // Temporarily shift pan to the active cell's position in the strip
-TRV.withStripOffset = function(row, col, fn) {
-	var layout = TRV.getGlyphStripLayout();
-	var state = TRV.state;
+FontRig.withStripOffset = function(row, col, fn) {
+	var layout = FontRig.getGlyphStripLayout();
+	var state = FontRig.state;
 
 	// Find active slot
 	var activeSlot = null;
@@ -876,7 +876,7 @@ TRV.withStripOffset = function(row, col, fn) {
 	}
 	if (!activeSlot) { fn(); return; }
 
-	var cellOffX = activeSlot.x + col * (activeSlot.advW + TRV.getCurrentTheme().grid.stripGap);
+	var cellOffX = activeSlot.x + col * (activeSlot.advW + FontRig.getCurrentTheme().grid.stripGap);
 	var cellOffY = row * layout.rowH;
 
 	var savedPanX = state.pan.x;
@@ -892,55 +892,55 @@ TRV.withStripOffset = function(row, col, fn) {
 };
 
 // -- Glyph rotation in strip ----------------------------------------
-TRV.rotateGlyphColumn = function(col, direction) {
+FontRig.rotateGlyphColumn = function(col, direction) {
 	// Rotate the glyph at a strip position
-	var state = TRV.state;
-	if (!TRV.font) return;
-	var manifest = TRV.font.manifest;
+	var state = FontRig.state;
+	if (!FontRig.font) return;
+	var manifest = FontRig.font.manifest;
 	var N = manifest.length;
 	if (N === 0) return;
 
 	// Find which workspace slot to rotate
-	var slotIdx = TRV.workspace.activeIdx;
-	if (slotIdx < 0 || slotIdx >= TRV.workspace.glyphs.length) return;
+	var slotIdx = FontRig.workspace.activeIdx;
+	if (slotIdx < 0 || slotIdx >= FontRig.workspace.glyphs.length) return;
 
-	var current = TRV.workspace.glyphs[slotIdx];
+	var current = FontRig.workspace.glyphs[slotIdx];
 	var idx = 0;
 	for (var i = 0; i < N; i++) {
 		if ((manifest[i].alias || manifest[i].name) === current) { idx = i; break; }
 	}
 	idx = ((idx + direction) % N + N) % N;
 	var newName = manifest[idx].alias || manifest[idx].name;
-	TRV.workspace.glyphs[slotIdx] = newName;
-	TRV._ensureGlyphLoaded(newName);
+	FontRig.workspace.glyphs[slotIdx] = newName;
+	FontRig._ensureGlyphLoaded(newName);
 };
 
-TRV.rotateGlyphRow = function(row, direction) {
-	TRV.rotateGlyphColumn(0, direction);
+FontRig.rotateGlyphRow = function(row, direction) {
+	FontRig.rotateGlyphColumn(0, direction);
 };
 
 // -- Ensure glyph is loaded into cache (async, triggers redraw) -----
-TRV._loadQueue = new Set();
-TRV._loadRunning = false;
+FontRig._loadQueue = new Set();
+FontRig._loadRunning = false;
 
-TRV._ensureGlyphLoaded = function(name) {
-	if (TRV.glyphCache.has(name) || TRV._loadQueue.has(name)) return;
-	TRV._loadQueue.add(name);
-	TRV._processLoadQueue();
+FontRig._ensureGlyphLoaded = function(name) {
+	if (FontRig.glyphCache.has(name) || FontRig._loadQueue.has(name)) return;
+	FontRig._loadQueue.add(name);
+	FontRig._processLoadQueue();
 };
 
-TRV._processLoadQueue = async function() {
-	if (TRV._loadRunning) return;
-	TRV._loadRunning = true;
+FontRig._processLoadQueue = async function() {
+	if (FontRig._loadRunning) return;
+	FontRig._loadRunning = true;
 
-	while (TRV._loadQueue.size > 0) {
-		var name = TRV._loadQueue.values().next().value;
-		TRV._loadQueue.delete(name);
+	while (FontRig._loadQueue.size > 0) {
+		var name = FontRig._loadQueue.values().next().value;
+		FontRig._loadQueue.delete(name);
 
-		if (!TRV.glyphCache.has(name)) {
-			var glyphData = await TRV.loadGlyphFile(name);
+		if (!FontRig.glyphCache.has(name)) {
+			var glyphData = await FontRig.loadGlyphFile(name);
 			if (glyphData) {
-				TRV.glyphCache.set(name, {
+				FontRig.glyphCache.set(name, {
 					glyphData: glyphData,
 					undoStack: [],
 					redoStack: [],
@@ -948,13 +948,13 @@ TRV._processLoadQueue = async function() {
 					pan: null,
 					zoom: null
 				});
-				TRV._evictCache();
+				FontRig._evictCache();
 			}
 		}
 
-		TRV.draw();
+		FontRig.draw();
 		await new Promise(function(r) { requestAnimationFrame(r); });
 	}
 
-	TRV._loadRunning = false;
+	FontRig._loadRunning = false;
 };

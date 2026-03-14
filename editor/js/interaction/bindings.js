@@ -7,162 +7,162 @@
 'use strict';
 
 // -- Zoom factors ---------------------------------------------------
-TRV.ZOOM_IN_FACTOR  = 1.15;
-TRV.ZOOM_OUT_FACTOR = 1 / 1.15;
-TRV.WHEEL_ZOOM_IN   = 1.1;
-TRV.WHEEL_ZOOM_OUT  = 0.9;
+FontRig.ZOOM_IN_FACTOR  = 1.15;
+FontRig.ZOOM_OUT_FACTOR = 1 / 1.15;
+FontRig.WHEEL_ZOOM_IN   = 1.1;
+FontRig.WHEEL_ZOOM_OUT  = 0.9;
 
 // -- Actions --------------------------------------------------------
 // Named functions that keyboard/mouse/toolbar bindings reference.
 // Each receives an optional event context object { e, sx, sy }.
-TRV.actions = {
+FontRig.actions = {
 	// -- File ---
 	openFile: function() {
-		TRV.dom.fileInput.click();
+		FontRig.dom.fileInput.click();
 	},
 
 	openFont: function() {
-		TRV.openFont();
+		FontRig.openFont();
 	},
 
 	saveFile: function() {
-		if (TRV.font) {
-			TRV.saveDirtyGlyphs();
+		if (FontRig.font) {
+			FontRig.saveDirtyGlyphs();
 		} else {
-			TRV.saveXml();
+			FontRig.saveXml();
 		}
 	},
 
 	// -- Undo / Redo ---
 	undo: function() {
-		TRV.undo();
+		FontRig.undo();
 	},
 
 	redo: function() {
-		TRV.redo();
+		FontRig.redo();
 	},
 
 	// -- View ---
 	fitToView: function() {
-		TRV.fitToView();
+		FontRig.fitToView();
 	},
 
 	zoomIn: function() {
-		TRV.zoomAtCenter(TRV.ZOOM_IN_FACTOR);
+		FontRig.zoomAtCenter(FontRig.ZOOM_IN_FACTOR);
 	},
 
 	zoomOut: function() {
-		TRV.zoomAtCenter(TRV.ZOOM_OUT_FACTOR);
+		FontRig.zoomAtCenter(FontRig.ZOOM_OUT_FACTOR);
 	},
 
 	// -- Selection ---
 	selectAll: function() {
-		var layer = TRV.getActiveLayer();
+		var layer = FontRig.getActiveLayer();
 		if (!layer) return;
-		var allNodes = TRV.getAllNodes(layer);
-		TRV.state.selectedNodeIds.clear();
+		var allNodes = FontRig.getAllNodes(layer);
+		FontRig.state.selectedNodeIds.clear();
 		for (var i = 0; i < allNodes.length; i++) {
-			TRV.state.selectedNodeIds.add(allNodes[i].id);
+			FontRig.state.selectedNodeIds.add(allNodes[i].id);
 		}
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 	},
 
 	clearSelection: function() {
-		TRV.clearSelection();
+		FontRig.clearSelection();
 	},
 
 	// -- Contour walk (PageUp / PageDown) ---
 	walkNext: function() {
-		TRV.walkContour(1);
+		FontRig.walkContour(1);
 	},
 
 	walkPrev: function() {
-		TRV.walkContour(-1);
+		FontRig.walkContour(-1);
 	},
 
 	// -- Glyph navigation (Ctrl+PageDown / Ctrl+PageUp) ---
 	nextGlyph: function() {
-		TRV.stepGlyph(1);
+		FontRig.stepGlyph(1);
 	},
 
 	prevGlyph: function() {
-		TRV.stepGlyph(-1);
+		FontRig.stepGlyph(-1);
 	},
 
 	// -- Layer cycling (Alt+. / Alt+,) ---
 	nextLayer: function() {
-		TRV.cycleLayer(1);
+		FontRig.cycleLayer(1);
 	},
 
 	prevLayer: function() {
-		TRV.cycleLayer(-1);
+		FontRig.cycleLayer(-1);
 	},
 
 	// -- Node movement (arrow keys) ---
 	moveUp: function(ctx) {
-		var t = TRV.getCurrentTheme().keyboard;
+		var t = FontRig.getCurrentTheme().keyboard;
 		var step = t.arrowStep;
 		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
-		TRV.pushUndoNudge();
-		TRV.moveSelectedNodes(0, step);
+		FontRig.pushUndoNudge();
+		FontRig.moveSelectedNodes(0, step);
 	},
 
 	moveDown: function(ctx) {
-		var t = TRV.getCurrentTheme().keyboard;
+		var t = FontRig.getCurrentTheme().keyboard;
 		var step = t.arrowStep;
 		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
-		TRV.pushUndoNudge();
-		TRV.moveSelectedNodes(0, -step);
+		FontRig.pushUndoNudge();
+		FontRig.moveSelectedNodes(0, -step);
 	},
 
 	moveRight: function(ctx) {
-		var t = TRV.getCurrentTheme().keyboard;
+		var t = FontRig.getCurrentTheme().keyboard;
 		var step = t.arrowStep;
 		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
-		TRV.pushUndoNudge();
-		TRV.moveSelectedNodes(step, 0);
+		FontRig.pushUndoNudge();
+		FontRig.moveSelectedNodes(step, 0);
 	},
 
 	moveLeft: function(ctx) {
-		var t = TRV.getCurrentTheme().keyboard;
+		var t = FontRig.getCurrentTheme().keyboard;
 		var step = t.arrowStep;
 		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
-		TRV.pushUndoNudge();
-		TRV.moveSelectedNodes(-step, 0);
+		FontRig.pushUndoNudge();
+		FontRig.moveSelectedNodes(-step, 0);
 	},
 
 	// -- Node operations ---
 	openContour: function() {
-		TRV.pushUndo();
-		TRV.openContourAtNode();
+		FontRig.pushUndo();
+		FontRig.openContourAtNode();
 	},
 
 	deleteNode: function() {
-		TRV.pushUndo();
-		TRV.deleteNode();
+		FontRig.pushUndo();
+		FontRig.deleteNode();
 	},
 
 	retractHandles: function() {
-		TRV.pushUndo();
-		TRV.retractHandles();
+		FontRig.pushUndo();
+		FontRig.retractHandles();
 	},
 
 	joinContour: function() {
-		TRV.pushUndo();
-		TRV.tryJoinEndpoints();
+		FontRig.pushUndo();
+		FontRig.tryJoinEndpoints();
 	},
 
 	// -- Preview ---
 	togglePreview: function() {
-		TRV.state.previewLocked = !TRV.state.previewLocked;
-		TRV.state.previewMode = TRV.state.previewLocked;
-		TRV.updatePreviewButton();
-		TRV.draw();
+		FontRig.state.previewLocked = !FontRig.state.previewLocked;
+		FontRig.state.previewMode = FontRig.state.previewLocked;
+		FontRig.updatePreviewButton();
+		FontRig.draw();
 	},
 
 	// -- GUI Mode ---
@@ -181,15 +181,15 @@ TRV.actions = {
 			lightBtn.classList.remove('active');
 		}
 		
-		TRV.draw();
+		FontRig.draw();
 	},
 
 	setGuiModeDark: function() {
-		TRV.actions.setGuiMode('dark');
+		FontRig.actions.setGuiMode('dark');
 	},
 
 	setGuiModeLight: function() {
-		TRV.actions.setGuiMode('light');
+		FontRig.actions.setGuiMode('light');
 	},
 
 	// -- XML panel ---
@@ -198,12 +198,12 @@ TRV.actions = {
 	},
 
 	xmlRefresh: function() {
-		TRV.xmlRefresh();
+		FontRig.xmlRefresh();
 	},
 
 	xmlApply: function() {
-		TRV.pushUndo();
-		TRV.xmlApply();
+		FontRig.pushUndo();
+		FontRig.xmlApply();
 	},
 };
 
@@ -212,9 +212,9 @@ TRV.actions = {
 //   key:          KeyboardEvent.key value
 //   ctrl:         requires Ctrl/Cmd (default: false)
 //   hasSelection: only fires when nodes are selected (default: false)
-//   action:       key into TRV.actions
+//   action:       key into FontRig.actions
 //   desc:         human-readable description
-TRV.keyMap = [
+FontRig.keyMap = [
 	// Undo / Redo
 	{ key: 'z',         ctrl: true,  action: 'undo',           desc: 'Undo' },
 	{ key: 'Z',         ctrl: true,  action: 'redo',           desc: 'Redo' },
@@ -257,13 +257,13 @@ TRV.keyMap = [
 
 // -- Keyboard dispatch ----------------------------------------------
 // Called from events.js keydown handler. Returns true if handled.
-TRV.dispatchKey = function(e) {
+FontRig.dispatchKey = function(e) {
 	var isCtrl = e.ctrlKey || e.metaKey;
 	var isAlt = e.altKey;
 	var isTyping = (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT');
 
-	for (var i = 0; i < TRV.keyMap.length; i++) {
-		var b = TRV.keyMap[i];
+	for (var i = 0; i < FontRig.keyMap.length; i++) {
+		var b = FontRig.keyMap[i];
 
 		// Match key (code takes priority for layout independence with modifiers)
 		if (b.code) {
@@ -279,13 +279,13 @@ TRV.dispatchKey = function(e) {
 		if (!b.alt && isAlt) continue;
 
 		// Skip if requires selection but none active
-		if (b.hasSelection && TRV.state.selectedNodeIds.size === 0) continue;
+		if (b.hasSelection && FontRig.state.selectedNodeIds.size === 0) continue;
 
 		// Skip plain keys when typing in any text field
 		if (isTyping && !b.ctrl && !b.alt) continue;
 
 		e.preventDefault();
-		var action = TRV.actions[b.action];
+		var action = FontRig.actions[b.action];
 		if (action) action({ e: e });
 		return true;
 	}
@@ -311,8 +311,8 @@ TRV.dispatchKey = function(e) {
 // -- Toolbar button map ---------------------------------------------
 // { id, toggle, stateKey, action, desc }
 // Buttons with toggle:true flip a state boolean and toggle .active class.
-// Buttons with action call TRV.actions[action].
-TRV.toolbarMap = [
+// Buttons with action call FontRig.actions[action].
+FontRig.toolbarMap = [
 	{ id: 'btn-load',    action: 'openFile',  desc: 'Load .trglyph file' },
 	{ id: 'btn-open-font', action: 'openFont', desc: 'Open .trfont folder' },
 	{ id: 'btn-save',    action: 'saveFile',  desc: 'Save .trglyph file' },
@@ -339,21 +339,21 @@ TRV.toolbarMap = [
 
 // -- Toolbar dispatch -----------------------------------------------
 // Wire simple toolbar buttons. Call once during init.
-TRV.wireToolbar = function() {
-	for (var i = 0; i < TRV.toolbarMap.length; i++) {
+FontRig.wireToolbar = function() {
+	for (var i = 0; i < FontRig.toolbarMap.length; i++) {
 		(function(entry) {
 			var el = document.getElementById(entry.id);
 			if (!el) return;
 
 			el.addEventListener('click', function() {
 				if (entry.toggle) {
-					TRV.state[entry.stateKey] = !TRV.state[entry.stateKey];
+					FontRig.state[entry.stateKey] = !FontRig.state[entry.stateKey];
 					this.classList.toggle('active');
-					TRV.draw();
+					FontRig.draw();
 				} else if (entry.action) {
-					TRV.actions[entry.action]();
+					FontRig.actions[entry.action]();
 				}
 			});
-		})(TRV.toolbarMap[i]);
+		})(FontRig.toolbarMap[i]);
 	}
 };

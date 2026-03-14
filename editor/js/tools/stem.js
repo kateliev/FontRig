@@ -2,13 +2,13 @@
 // FontRig — On-stem measurement
 // ===================================================================
 // Approach B: perpendicular to nearest contour wall, with H/V fallback.
-// Reuses TRV._evalCubic, _evalLine, _nearestOnSegment, getContourSegments.
+// Reuses FontRig._evalCubic, _evalLine, _nearestOnSegment, getContourSegments.
 'use strict';
 
-TRV.stem = {};
+FontRig.stem = {};
 
 // -- Cubic derivative at t ------------------------------------------
-TRV.stem.cubicDeriv = function(pts, t) {
+FontRig.stem.cubicDeriv = function(pts, t) {
 	var u = 1 - t;
 	var p0 = pts[0], p1 = pts[1], p2 = pts[2], p3 = pts[3];
 	return {
@@ -22,7 +22,7 @@ TRV.stem.cubicDeriv = function(pts, t) {
 // through (ox,oy) with direction (dx,dy).
 // Uses cross-product: (B(t) - O) x D = 0 -> scalar cubic in t.
 // Returns array of { t, x, y, s } where s = signed distance along ray.
-TRV.stem.raySegmentCrossings = function(ox, oy, dx, dy, seg) {
+FontRig.stem.raySegmentCrossings = function(ox, oy, dx, dy, seg) {
 	var results = [];
 	var pts = seg.pts;
 
@@ -87,7 +87,7 @@ TRV.stem.raySegmentCrossings = function(ox, oy, dx, dy, seg) {
 		N = 12;
 	}
 
-	var evalFn = seg.type === 'quadratic' ? TRV._evalQuadratic : TRV._evalCubic;
+	var evalFn = seg.type === 'quadratic' ? FontRig._evalQuadratic : FontRig._evalCubic;
 
 	// Find roots via sampling + bisection (robust for any polynomial)
 	var vals = new Array(N + 1);
@@ -138,14 +138,14 @@ TRV.stem.raySegmentCrossings = function(ox, oy, dx, dy, seg) {
 };
 
 // -- Ray vs all contours in layer -----------------------------------
-TRV.stem.rayLayerCrossings = function(ox, oy, dx, dy, layer) {
+FontRig.stem.rayLayerCrossings = function(ox, oy, dx, dy, layer) {
 	var all = [];
 	for (var si = 0; si < layer.shapes.length; si++) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
-			var segs = TRV.getContourSegments(shape.contours[ki]);
+			var segs = FontRig.getContourSegments(shape.contours[ki]);
 			for (var gi = 0; gi < segs.length; gi++) {
-				var hits = TRV.stem.raySegmentCrossings(ox, oy, dx, dy, segs[gi]);
+				var hits = FontRig.stem.raySegmentCrossings(ox, oy, dx, dy, segs[gi]);
 				for (var hi = 0; hi < hits.length; hi++) all.push(hits[hi]);
 			}
 		}
@@ -154,8 +154,8 @@ TRV.stem.rayLayerCrossings = function(ox, oy, dx, dy, layer) {
 };
 
 // -- Point-in-glyph (nonzero winding via horizontal ray) ------------
-TRV.stem.isInside = function(gx, gy, layer) {
-	var crossings = TRV.stem.rayLayerCrossings(gx, gy, 1, 0, layer);
+FontRig.stem.isInside = function(gx, gy, layer) {
+	var crossings = FontRig.stem.rayLayerCrossings(gx, gy, 1, 0, layer);
 	// Nonzero winding: sum signed crossings to the right
 	var winding = 0;
 	for (var i = 0; i < crossings.length; i++) {
@@ -165,15 +165,15 @@ TRV.stem.isInside = function(gx, gy, layer) {
 };
 
 // -- Find nearest contour point (glyph coords) ---------------------
-TRV.stem.nearestOnLayer = function(gx, gy, layer) {
+FontRig.stem.nearestOnLayer = function(gx, gy, layer) {
 	var best = null;
 
 	for (var si = 0; si < layer.shapes.length; si++) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
-			var segs = TRV.getContourSegments(shape.contours[ki]);
+			var segs = FontRig.getContourSegments(shape.contours[ki]);
 			for (var gi = 0; gi < segs.length; gi++) {
-				var hit = TRV._nearestOnSegment(segs[gi], gx, gy);
+				var hit = FontRig._nearestOnSegment(segs[gi], gx, gy);
 				if (!best || hit.dist < best.dist) {
 					best = { seg: segs[gi], t: hit.t, x: hit.x, y: hit.y, dist: hit.dist };
 				}
@@ -185,14 +185,14 @@ TRV.stem.nearestOnLayer = function(gx, gy, layer) {
 
 // -- Perpendicular measurement from cursor --------------------------
 // Returns { from: {x,y}, to: {x,y}, dist } or null
-TRV.stem.measurePerp = function(gx, gy, layer) {
-	var nearest = TRV.stem.nearestOnLayer(gx, gy, layer);
+FontRig.stem.measurePerp = function(gx, gy, layer) {
+	var nearest = FontRig.stem.nearestOnLayer(gx, gy, layer);
 	if (!nearest) return null;
 
 	// Get tangent at nearest point
 	var tang;
 	if (nearest.seg.type === 'cubic') {
-		tang = TRV.stem.cubicDeriv(nearest.seg.pts, nearest.t);
+		tang = FontRig.stem.cubicDeriv(nearest.seg.pts, nearest.t);
 	} else if (nearest.seg.type === 'quadratic') {
 		// Quadratic derivative: B'(t) = 2(1-t)(P1-P0) + 2t(P2-P1)
 		var qp = nearest.seg.pts;
@@ -213,7 +213,7 @@ TRV.stem.measurePerp = function(gx, gy, layer) {
 	px /= plen; py /= plen;
 
 	// Cast perpendicular ray from cursor
-	var crossings = TRV.stem.rayLayerCrossings(gx, gy, px, py, layer);
+	var crossings = FontRig.stem.rayLayerCrossings(gx, gy, px, py, layer);
 	if (crossings.length < 2) return null;
 
 	// Find nearest crossing on each side of cursor (s < 0 and s > 0)
@@ -238,10 +238,10 @@ TRV.stem.measurePerp = function(gx, gy, layer) {
 
 // -- Axis-aligned measurement (fallback) ----------------------------
 // dir: 'h' for horizontal, 'v' for vertical
-TRV.stem.measureAxis = function(gx, gy, layer, dir) {
+FontRig.stem.measureAxis = function(gx, gy, layer, dir) {
 	var dx = dir === 'h' ? 1 : 0;
 	var dy = dir === 'h' ? 0 : 1;
-	var crossings = TRV.stem.rayLayerCrossings(gx, gy, dx, dy, layer);
+	var crossings = FontRig.stem.rayLayerCrossings(gx, gy, dx, dy, layer);
 
 	var negBest = null, posBest = null;
 	for (var i = 0; i < crossings.length; i++) {
@@ -263,42 +263,42 @@ TRV.stem.measureAxis = function(gx, gy, layer, dir) {
 };
 
 // -- Main measurement (perpendicular with H/V fallback) -------------
-TRV.stem.measure = function(gx, gy, layer) {
+FontRig.stem.measure = function(gx, gy, layer) {
 	// Try perpendicular measurement first
-	var m = TRV.stem.measurePerp(gx, gy, layer);
+	var m = FontRig.stem.measurePerp(gx, gy, layer);
 	if (m) return m;
 
 	// Fallback: try both axes, return the smaller (likely stem width)
-	var mh = TRV.stem.measureAxis(gx, gy, layer, 'h');
-	var mv = TRV.stem.measureAxis(gx, gy, layer, 'v');
+	var mh = FontRig.stem.measureAxis(gx, gy, layer, 'h');
+	var mv = FontRig.stem.measureAxis(gx, gy, layer, 'v');
 
 	if (mh && mv) return mh.dist <= mv.dist ? mh : mv;
 	return mh || mv;
 };
 
 // -- Draw stem measurement on canvas --------------------------------
-TRV.drawStemMeasurement = function(layer) {
-	if (!TRV.state.showStem) return;
+FontRig.drawStemMeasurement = function(layer) {
+	if (!FontRig.state.showStem) return;
 
-	var mouse = TRV.state.previewMouse;
+	var mouse = FontRig.state.previewMouse;
 	if (!mouse) return;
 
 	// Convert screen mouse to glyph coords
-	var gp = TRV.screenToGlyph(mouse.x, mouse.y);
+	var gp = FontRig.screenToGlyph(mouse.x, mouse.y);
 
 	// Only measure inside glyph body
-	if (!TRV.stem.isInside(gp.x, gp.y, layer)) return;
+	if (!FontRig.stem.isInside(gp.x, gp.y, layer)) return;
 
-	var m = TRV.stem.measure(gp.x, gp.y, layer);
+	var m = FontRig.stem.measure(gp.x, gp.y, layer);
 	if (!m) return;
 
-	var ctx = TRV.dom.ctx;
-	var th = TRV.getCurrentTheme().onStemMeasurment;
-	var preview = TRV.state.previewMode;
+	var ctx = FontRig.dom.ctx;
+	var th = FontRig.getCurrentTheme().onStemMeasurment;
+	var preview = FontRig.state.previewMode;
 
 	// Convert endpoints to screen coords
-	var sp1 = TRV.glyphToScreen(m.from.x, m.from.y);
-	var sp2 = TRV.glyphToScreen(m.to.x, m.to.y);
+	var sp1 = FontRig.glyphToScreen(m.from.x, m.from.y);
+	var sp2 = FontRig.glyphToScreen(m.to.x, m.to.y);
 
 	// Measurement line
 	ctx.save();

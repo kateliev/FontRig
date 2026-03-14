@@ -7,23 +7,23 @@
 
 (function() {
 
-const state = TRV.state;
-const dom = TRV.dom;
+const state = FontRig.state;
+const dom = FontRig.dom;
 
 // -- Helpers for multi-view coordinate handling ----------------------
 
 // Which cell was clicked (split or joined)
 function getCellAtScreen(sx, sy) {
 	if (!state.multiView) return null;
-	if (state.joinedView) return TRV.getJoinedCellAt(sx, sy);
-	return TRV.getCellAt(sx, sy);
+	if (state.joinedView) return FontRig.getJoinedCellAt(sx, sy);
+	return FontRig.getCellAt(sx, sy);
 }
 
 // Get screen coords suitable for hit testing in active cell.
 // Split mode: cell-relative. Joined/single/strip: absolute.
 function interactionCoords(sx, sy) {
 	if (state.multiView && !state.joinedView && !state.glyphViewMode) {
-		const cell = TRV.getCellRect(state.activeCell.row, state.activeCell.col);
+		const cell = FontRig.getCellRect(state.activeCell.row, state.activeCell.col);
 		return { sx: sx - cell.x, sy: sy - cell.y };
 	}
 	return { sx: sx, sy: sy };
@@ -31,10 +31,10 @@ function interactionCoords(sx, sy) {
 
 // Execute fn with pan shifted for active cell (joined/strip mode)
 function withActiveOffset(fn) {
-	if (state.glyphViewMode && TRV.font) {
-		TRV.withStripOffset(state.activeCell.row, state.activeCell.col, fn);
+	if (state.glyphViewMode && FontRig.font) {
+		FontRig.withStripOffset(state.activeCell.row, state.activeCell.col, fn);
 	} else if (state.multiView && state.joinedView) {
-		TRV.withJoinedOffset(state.activeCell.row, state.activeCell.col, fn);
+		FontRig.withJoinedOffset(state.activeCell.row, state.activeCell.col, fn);
 	} else {
 		fn();
 	}
@@ -64,16 +64,16 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 	}
 
 	// -- Glyph strip: click to switch glyph or layer cell
-	if (state.glyphViewMode && TRV.font) {
-		var stripHit = TRV.getStripSlotAt(absSx, absSy);
+	if (state.glyphViewMode && FontRig.font) {
+		var stripHit = FontRig.getStripSlotAt(absSx, absSy);
 		if (stripHit) {
 			// Check close button on non-active slots
-			if (!stripHit.slot.active && TRV.workspace._closeRects) {
-				var cr = TRV.workspace._closeRects[stripHit.slot.name];
+			if (!stripHit.slot.active && FontRig.workspace._closeRects) {
+				var cr = FontRig.workspace._closeRects[stripHit.slot.name];
 				if (cr && absSx >= cr.x && absSx <= cr.x + cr.w &&
 					absSy >= cr.y && absSy <= cr.y + cr.h) {
-					TRV.removeGlyphFromStrip(stripHit.slot.name);
-					TRV.updateGlyphPanelActive();
+					FontRig.removeGlyphFromStrip(stripHit.slot.name);
+					FontRig.updateGlyphPanelActive();
 					return;
 				}
 			}
@@ -81,11 +81,11 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 			if (stripHit.slot.active) {
 				// Clicked active glyph — switch layer cell if different
 				if (stripHit.row !== state.activeCell.row || stripHit.col !== state.activeCell.col) {
-					TRV.setActiveCell(stripHit.row, stripHit.col);
+					FontRig.setActiveCell(stripHit.row, stripHit.col);
 				}
 			} else {
 				// Clicked non-active glyph — switch to it
-				TRV.switchGlyph(stripHit.slot.name);
+				FontRig.switchGlyph(stripHit.slot.name);
 				return;
 			}
 		}
@@ -95,7 +95,7 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 	if (state.multiView && !state.glyphViewMode) {
 		const clicked = getCellAtScreen(absSx, absSy);
 		if (clicked && (clicked.row !== state.activeCell.row || clicked.col !== state.activeCell.col)) {
-			TRV.setActiveCell(clicked.row, clicked.col);
+			FontRig.setActiveCell(clicked.row, clicked.col);
 		}
 	}
 
@@ -103,13 +103,13 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 	const { sx, sy } = interactionCoords(absSx, absSy);
 
 	// -- Transform frame: check before node hit test
-	if (TRV.tf.active) {
+	if (FontRig.tf.active) {
 		var tfHandled = false;
 		withActiveOffset(function() {
-			tfHandled = TRV.tfMouseDown(sx, sy, e);
+			tfHandled = FontRig.tfMouseDown(sx, sy, e);
 		});
 		if (tfHandled) {
-			TRV.draw();
+			FontRig.draw();
 			return;
 		}
 	}
@@ -118,13 +118,13 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 	if (state.showNodes) {
 		let hit = null;
 		withActiveOffset(function() {
-			hit = TRV.hitTestNode(sx, sy);
+			hit = FontRig.hitTestNode(sx, sy);
 		});
 		if (hit) {
 			if (e.shiftKey) {
-				TRV.selectNode(hit.id, true);
+				FontRig.selectNode(hit.id, true);
 			} else if (!state.selectedNodeIds.has(hit.id)) {
-				TRV.selectNode(hit.id, false);
+				FontRig.selectNode(hit.id, false);
 			}
 			startDrag(sx, sy, e);
 			return;
@@ -133,11 +133,11 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 		// -- Check segment hit: grab cubic segments for direct manipulation
 		let segHit = null;
 		withActiveOffset(function() {
-			segHit = TRV.hitTestSegment(sx, sy);
+			segHit = FontRig.hitTestSegment(sx, sy);
 		});
 		if (segHit && segHit.seg.type === 'cubic') {
 			let gp;
-			withActiveOffset(function() { gp = TRV.screenToGlyph(sx, sy); });
+			withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
 
 			// Select the segment's nodes
 			var seg = segHit.seg;
@@ -148,7 +148,7 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 				'c' + ci + '_n' + seg.offIdx1,
 				'c' + ci + '_n' + seg.offIdx2
 			];
-			TRV.selectNodes(ids, e.shiftKey);
+			FontRig.selectNodes(ids, e.shiftKey);
 
 			// Bernstein basis values at hit t
 			var t = segHit.t;
@@ -157,7 +157,7 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 			var B2 = 3 * u * t * t;
 			var denom = B1 * B1 + B2 * B2;
 
-			TRV.pushUndo();
+			FontRig.pushUndo();
 			state.isDragging = true;
 			state.segmentDrag = {
 				ci: ci,
@@ -185,7 +185,7 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 				'c' + ci + '_n' + seg.endIdx,
 				'c' + ci + '_n' + seg.offIdx
 			];
-			TRV.selectNodes(ids, e.shiftKey);
+			FontRig.selectNodes(ids, e.shiftKey);
 			return;
 		}
 	}
@@ -194,14 +194,14 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 	if (state.showAnchors) {
 		let anchorIdx = null;
 		withActiveOffset(function() {
-			anchorIdx = TRV.hitTestAnchor(sx, sy);
+			anchorIdx = FontRig.hitTestAnchor(sx, sy);
 		});
 		if (anchorIdx !== null) {
-			TRV.pushUndo();
+			FontRig.pushUndo();
 			state.isDragging = true;
 			state.dragAnchorIdx = anchorIdx;
 			let gp;
-			withActiveOffset(function() { gp = TRV.screenToGlyph(sx, sy); });
+			withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
 			state.dragOriginGlyph = { x: gp.x, y: gp.y };
 			dom.canvasWrap.style.cursor = 'move';
 			return;
@@ -230,15 +230,15 @@ dom.canvasWrap.addEventListener('mousedown', function(e) {
 	// Clear existing selection unless shift held
 	if (!e.shiftKey) {
 		state.selectedNodeIds.clear();
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 	}
 });
 
 function startDrag(sx, sy, e) {
-	TRV.pushUndo();
+	FontRig.pushUndo();
 	let gp;
-	withActiveOffset(function() { gp = TRV.screenToGlyph(sx, sy); });
+	withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
 	state.isDragging = true;
 	state.dragOriginGlyph = { x: gp.x, y: gp.y };
 
@@ -248,7 +248,7 @@ function startDrag(sx, sy, e) {
 	// Save start positions for all selected nodes
 	state.dragStartPositions = new Map();
 	for (const nodeId of state.selectedNodeIds) {
-		const ref = TRV.findNodeById(nodeId);
+		const ref = FontRig.findNodeById(nodeId);
 		if (ref) {
 			state.dragStartPositions.set(nodeId, { x: ref.node.x, y: ref.node.y });
 		}
@@ -256,7 +256,7 @@ function startDrag(sx, sy, e) {
 
 	// Add follower handles unless Alt is held (detached mode)
 	if (!state.dragAltMode) {
-		var followers = TRV.getFollowerHandles(state.selectedNodeIds);
+		var followers = FontRig.getFollowerHandles(state.selectedNodeIds);
 		for (const [id, pos] of followers) {
 			if (!state.dragStartPositions.has(id)) {
 				state.dragStartPositions.set(id, { x: pos.x, y: pos.y });
@@ -265,16 +265,16 @@ function startDrag(sx, sy, e) {
 	}
 
 	// Compute tangent constraints for smooth on-curves
-	state.dragTangents = TRV.computeDragTangents(state.dragStartPositions);
+	state.dragTangents = FontRig.computeDragTangents(state.dragStartPositions);
 
 	// Slide mode: if S/A/E is already held, initialize slide
 	state.slideData = null;
 	if (state.selectedNodeIds.size === 1) {
 		var slideNodeId = state.selectedNodeIds.values().next().value;
 		if (state.sKeyDown) {
-			state.slideData = TRV.initSlideMode(slideNodeId, 'curve');
+			state.slideData = FontRig.initSlideMode(slideNodeId, 'curve');
 		} else if (state.aKeyDown) {
-			state.slideData = TRV.initSlideMode(slideNodeId, 'line');
+			state.slideData = FontRig.initSlideMode(slideNodeId, 'line');
 		}
 	}
 
@@ -293,17 +293,17 @@ window.addEventListener('mousemove', function(e) {
 
 	// Cursor position in glyph coords (offset-aware)
 	let gp;
-	withActiveOffset(function() { gp = TRV.screenToGlyph(sx, sy); });
+	withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
 	dom.statusCursor.textContent = Math.round(gp.x) + ', ' + Math.round(gp.y);
 
 	// -- Transform frame drag
-	if (TRV.tf.active && TRV.tf.dragType) {
+	if (FontRig.tf.active && FontRig.tf.dragType) {
 		var tfHandled = false;
 		withActiveOffset(function() {
-			tfHandled = TRV.tfMouseMove(sx, sy, e);
+			tfHandled = FontRig.tfMouseMove(sx, sy, e);
 		});
 		if (tfHandled) {
-			TRV.draw(); // draw AFTER offset is restored
+			FontRig.draw(); // draw AFTER offset is restored
 			return;
 		}
 	}
@@ -314,7 +314,7 @@ window.addEventListener('mousemove', function(e) {
 
 		let ids;
 		withActiveOffset(function() {
-			ids = TRV.hitTestRect(
+			ids = FontRig.hitTestRect(
 				state.selectStartScreen.x, state.selectStartScreen.y,
 				sx, sy
 			);
@@ -322,8 +322,8 @@ window.addEventListener('mousemove', function(e) {
 		if (!e.shiftKey) state.selectedNodeIds.clear();
 		for (const id of ids) state.selectedNodeIds.add(id);
 
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 		return;
 	}
 
@@ -333,20 +333,20 @@ window.addEventListener('mousemove', function(e) {
 
 		let ids;
 		withActiveOffset(function() {
-			ids = TRV.hitTestLasso(state.selectLassoPoints);
+			ids = FontRig.hitTestLasso(state.selectLassoPoints);
 		});
 		if (!e.shiftKey) state.selectedNodeIds.clear();
 		for (const id of ids) state.selectedNodeIds.add(id);
 
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 		return;
 	}
 
 	// -- Segment drag: reshape curve by distributing delta to handles
 	if (state.isDragging && state.segmentDrag) {
 		withActiveOffset(function() {
-			const dgp = TRV.screenToGlyph(sx, sy);
+			const dgp = FontRig.screenToGlyph(sx, sy);
 			var dx = dgp.x - state.dragOriginGlyph.x;
 			var dy = dgp.y - state.dragOriginGlyph.y;
 
@@ -361,24 +361,24 @@ window.addEventListener('mousemove', function(e) {
 			var w1 = sd.B1 / sd.denom;
 			var w2 = sd.B2 / sd.denom;
 
-			TRV.updateNodePosition(sd.h1Id, sd.h1Start.x + dx * w1, sd.h1Start.y + dy * w1);
-			TRV.updateNodePosition(sd.h2Id, sd.h2Start.x + dx * w2, sd.h2Start.y + dy * w2);
+			FontRig.updateNodePosition(sd.h1Id, sd.h1Start.x + dx * w1, sd.h1Start.y + dy * w1);
+			FontRig.updateNodePosition(sd.h2Id, sd.h2Start.x + dx * w2, sd.h2Start.y + dy * w2);
 
 			// Enforce collinearity on smooth nodes at segment endpoints
 			var movedHandles = new Set([sd.h1Id, sd.h2Id]);
-			TRV.enforceSmoothCollinearity(movedHandles);
+			FontRig.enforceSmoothCollinearity(movedHandles);
 		});
 
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 		return;
 	}
 
 	// -- Anchor drag
 	if (state.isDragging && state.dragAnchorIdx !== null) {
 		withActiveOffset(function() {
-			var gp = TRV.screenToGlyph(sx, sy);
-			var layer = TRV.getActiveLayer();
+			var gp = FontRig.screenToGlyph(sx, sy);
+			var layer = FontRig.getActiveLayer();
 			if (layer && layer.anchors && layer.anchors[state.dragAnchorIdx]) {
 				var a = layer.anchors[state.dragAnchorIdx];
 				// Shift constraint: lock to axis
@@ -392,7 +392,7 @@ window.addEventListener('mousemove', function(e) {
 				a.y = Math.round(gp.y);
 			}
 		});
-		TRV.draw();
+		FontRig.draw();
 		return;
 	}
 
@@ -400,11 +400,11 @@ window.addEventListener('mousemove', function(e) {
 	// No XML sync during drag — canvas is source of truth
 	if (state.isDragging && state.dragStartPositions) {
 		withActiveOffset(function() {
-			const dgp = TRV.screenToGlyph(sx, sy);
+			const dgp = FontRig.screenToGlyph(sx, sy);
 
 			// Slide mode: S held, project node along contour
 			if (state.slideData) {
-				TRV.performSlide(state.slideData, dgp.x, dgp.y);
+				FontRig.performSlide(state.slideData, dgp.x, dgp.y);
 				return;
 			}
 
@@ -425,24 +425,24 @@ window.addEventListener('mousemove', function(e) {
 				// locked tangents (line-curve) always active; free tangents (curve-curve) need Ctrl
 				var tan = state.dragTangents ? state.dragTangents.get(nodeId) : null;
 				if (tan && (tan.locked || e.ctrlKey || e.metaKey)) {
-					var proj = TRV.projectOntoTangent(dx, dy, tan);
+					var proj = FontRig.projectOntoTangent(dx, dy, tan);
 					effDx = proj.dx;
 					effDy = proj.dy;
 				}
 
-				TRV.updateNodePosition(nodeId, startPos.x + effDx, startPos.y + effDy);
+				FontRig.updateNodePosition(nodeId, startPos.x + effDx, startPos.y + effDy);
 			}
 
 			// Follower handles of constrained nodes need the same projected delta
 			if (state.dragTangents && state.dragTangents.size > 0) {
 				for (const [onId, tangent] of state.dragTangents) {
 					if (!tangent.locked && !e.ctrlKey && !e.metaKey) continue;
-					var proj = TRV.projectOntoTangent(dx, dy, tangent);
+					var proj = FontRig.projectOntoTangent(dx, dy, tangent);
 					// Find follower handles for this on-curve and reposition them
 					var m = onId.match(/^c(\d+)_n(\d+)$/);
 					if (!m) continue;
 					var ci = parseInt(m[1]), ni = parseInt(m[2]);
-					var ref = TRV.findNodeById(onId);
+					var ref = FontRig.findNodeById(onId);
 					if (!ref) continue;
 					var nodes = ref.contour.nodes;
 					var n = nodes.length;
@@ -451,11 +451,11 @@ window.addEventListener('mousemove', function(e) {
 					// Only reposition if they're followers (in dragStartPositions but not selected)
 					if (state.dragStartPositions.has(prevId) && !state.selectedNodeIds.has(prevId)) {
 						var sp = state.dragStartPositions.get(prevId);
-						TRV.updateNodePosition(prevId, sp.x + proj.dx, sp.y + proj.dy);
+						FontRig.updateNodePosition(prevId, sp.x + proj.dx, sp.y + proj.dy);
 					}
 					if (state.dragStartPositions.has(nextId) && !state.selectedNodeIds.has(nextId)) {
 						var sp = state.dragStartPositions.get(nextId);
-						TRV.updateNodePosition(nextId, sp.x + proj.dx, sp.y + proj.dy);
+						FontRig.updateNodePosition(nextId, sp.x + proj.dx, sp.y + proj.dy);
 					}
 				}
 			}
@@ -463,12 +463,12 @@ window.addEventListener('mousemove', function(e) {
 			// Enforce collinearity on smooth nodes (skip in Alt mode)
 			if (!state.dragAltMode) {
 				var allMoved = new Set(state.dragStartPositions.keys());
-				TRV.enforceSmoothCollinearity(allMoved);
+				FontRig.enforceSmoothCollinearity(allMoved);
 			}
 		});
 
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 		return;
 	}
 
@@ -479,13 +479,13 @@ window.addEventListener('mousemove', function(e) {
 		state.pan.x += dsx;
 		state.pan.y += dsy;
 		state.lastMouse = { x: e.clientX, y: e.clientY };
-		TRV.draw();
+		FontRig.draw();
 		return;
 	}
 
 	// Preview mode / stem measurement: redraw on hover
 	if (state.previewMode || state.showStem) {
-		TRV.draw();
+		FontRig.draw();
 	}
 
 	// -- Hover cursor hint
@@ -493,12 +493,12 @@ window.addEventListener('mousemove', function(e) {
 		let cursor = 'default';
 		if (state.showNodes) {
 			let hit = null;
-			withActiveOffset(function() { hit = TRV.hitTestNode(sx, sy); });
+			withActiveOffset(function() { hit = FontRig.hitTestNode(sx, sy); });
 			if (hit) cursor = 'move';
 		}
 		if (cursor === 'default' && state.showAnchors) {
 			let aHit = null;
-			withActiveOffset(function() { aHit = TRV.hitTestAnchor(sx, sy); });
+			withActiveOffset(function() { aHit = FontRig.hitTestAnchor(sx, sy); });
 			if (aHit !== null) cursor = 'move';
 		}
 		dom.canvasWrap.style.cursor = cursor;
@@ -507,9 +507,9 @@ window.addEventListener('mousemove', function(e) {
 
 window.addEventListener('mouseup', function(e) {
 	// -- Transform frame drag end
-	if (TRV.tf.active && TRV.tf.dragType) {
-		TRV.tfMouseUp();
-		TRV.draw();
+	if (FontRig.tf.active && FontRig.tf.dragType) {
+		FontRig.tfMouseUp();
+		FontRig.draw();
 		return;
 	}
 
@@ -517,7 +517,7 @@ window.addEventListener('mouseup', function(e) {
 	if (state.isSelecting && state.selectMode === 'rect') {
 		let ids;
 		withActiveOffset(function() {
-			ids = TRV.hitTestRect(
+			ids = FontRig.hitTestRect(
 				state.selectStartScreen.x, state.selectStartScreen.y,
 				state.selectCurrentScreen.x, state.selectCurrentScreen.y
 			);
@@ -529,8 +529,8 @@ window.addEventListener('mouseup', function(e) {
 		state.selectStartScreen = null;
 		state.selectCurrentScreen = null;
 
-		TRV.selectNodes(ids, e.shiftKey);
-		TRV.updateCanvasCursor();
+		FontRig.selectNodes(ids, e.shiftKey);
+		FontRig.updateCanvasCursor();
 		return;
 	}
 
@@ -538,7 +538,7 @@ window.addEventListener('mouseup', function(e) {
 	if (state.isSelecting && state.selectMode === 'lasso') {
 		let ids;
 		withActiveOffset(function() {
-			ids = TRV.hitTestLasso(state.selectLassoPoints);
+			ids = FontRig.hitTestLasso(state.selectLassoPoints);
 		});
 
 		// Clear overlay state BEFORE draw
@@ -546,15 +546,15 @@ window.addEventListener('mouseup', function(e) {
 		state.selectMode = null;
 		state.selectLassoPoints = [];
 
-		TRV.selectNodes(ids, e.shiftKey);
-		TRV.updateCanvasCursor();
+		FontRig.selectNodes(ids, e.shiftKey);
+		FontRig.updateCanvasCursor();
 		return;
 	}
 
 	// -- Finalize drag (no XML sync — user clicks Refresh when needed)
 	if (state.isDragging) {
 		// Try joining open endpoints after drag (skip for anchors)
-		if (state.dragAnchorIdx === null) TRV.tryJoinEndpoints();
+		if (state.dragAnchorIdx === null) FontRig.tryJoinEndpoints();
 
 		state.isDragging = false;
 		state.dragStartPositions = null;
@@ -570,7 +570,7 @@ window.addEventListener('mouseup', function(e) {
 		state.isPanning = false;
 	}
 
-	TRV.updateCanvasCursor();
+	FontRig.updateCanvasCursor();
 });
 
 // ===================================================================
@@ -583,13 +583,13 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 	const { sx, sy } = interactionCoords(absSx, absSy);
 
 	// Transform frame: double-click cycles mode
-	if (TRV.tf.active) {
+	if (FontRig.tf.active) {
 		var tfHandled = false;
 		withActiveOffset(function() {
-			tfHandled = TRV.tfDblClick(sx, sy);
+			tfHandled = FontRig.tfDblClick(sx, sy);
 		});
 		if (tfHandled) {
-			TRV.draw();
+			FontRig.draw();
 			return;
 		}
 	}
@@ -597,17 +597,17 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 	// Double-click on a node: select whole contour (existing behavior)
 	var nodeHit = null;
 	withActiveOffset(function() {
-		nodeHit = TRV.hitTestNode(sx, sy);
+		nodeHit = FontRig.hitTestNode(sx, sy);
 	});
 
 	if (nodeHit) {
 		var ci = -1;
 		withActiveOffset(function() {
-			ci = TRV.hitTestContour(sx, sy);
+			ci = FontRig.hitTestContour(sx, sy);
 		});
 		if (ci >= 0) {
-			var ids = TRV.getContourNodeIds(ci);
-			TRV.selectNodes(ids, e.shiftKey);
+			var ids = FontRig.getContourNodeIds(ci);
+			FontRig.selectNodes(ids, e.shiftKey);
 		}
 		return;
 	}
@@ -615,7 +615,7 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 	// Double-click on a segment: select that segment's nodes
 	var segHit = null;
 	withActiveOffset(function() {
-		segHit = TRV.hitTestSegment(sx, sy);
+		segHit = FontRig.hitTestSegment(sx, sy);
 	});
 
 	if (segHit) {
@@ -628,18 +628,18 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 		} else if (seg.type === 'quadratic') {
 			ids.push('c' + ci + '_n' + seg.offIdx);
 		}
-		TRV.selectNodes(ids, e.shiftKey);
+		FontRig.selectNodes(ids, e.shiftKey);
 		return;
 	}
 
 	// Fallback: try contour hit
 	var ci = -1;
 	withActiveOffset(function() {
-		ci = TRV.hitTestContour(sx, sy);
+		ci = FontRig.hitTestContour(sx, sy);
 	});
 	if (ci >= 0) {
-		var ids = TRV.getContourNodeIds(ci);
-		TRV.selectNodes(ids, e.shiftKey);
+		var ids = FontRig.getContourNodeIds(ci);
+		FontRig.selectNodes(ids, e.shiftKey);
 	}
 });
 
@@ -655,26 +655,26 @@ dom.canvasWrap.addEventListener('wheel', function(e) {
 
 	// Normal zoom (centred on cursor)
 	const { sx: mx, sy: my } = interactionCoords(absSx, absSy);
-	const factor = e.deltaY > 0 ? TRV.WHEEL_ZOOM_OUT : TRV.WHEEL_ZOOM_IN;
+	const factor = e.deltaY > 0 ? FontRig.WHEEL_ZOOM_OUT : FontRig.WHEEL_ZOOM_IN;
 	const newZoom = state.zoom * factor;
 
 	state.pan.x = mx - (mx - state.pan.x) * (newZoom / state.zoom);
 	state.pan.y = my - (my - state.pan.y) * (newZoom / state.zoom);
 	state.zoom = newZoom;
 
-	TRV.updateZoomStatus();
-	TRV.draw();
+	FontRig.updateZoomStatus();
+	FontRig.draw();
 }, { passive: false });
 
 // ===================================================================
 // Resize
 // ===================================================================
-const resizeObserver = new ResizeObserver(function() { TRV.draw(); });
+const resizeObserver = new ResizeObserver(function() { FontRig.draw(); });
 resizeObserver.observe(dom.canvasWrap);
 
 // ===================================================================
 // Toolbar: special buttons (exclusive pairs, panels, view modes)
-// Simple toggle/action buttons are wired via TRV.wireToolbar().
+// Simple toggle/action buttons are wired via FontRig.wireToolbar().
 // ===================================================================
 
 // Fill / Outline (exclusive pair)
@@ -682,24 +682,24 @@ document.getElementById('btn-filled').addEventListener('click', function() {
 	state.filled = true;
 	this.classList.add('active');
 	document.getElementById('btn-outline').classList.remove('active');
-	TRV.draw();
+	FontRig.draw();
 });
 
 document.getElementById('btn-outline').addEventListener('click', function() {
 	state.filled = false;
 	this.classList.add('active');
 	document.getElementById('btn-filled').classList.remove('active');
-	TRV.draw();
+	FontRig.draw();
 });
 
 // XML panel (has panel show/hide logic)
 document.getElementById('btn-panel').addEventListener('click', function(e) {
 	// Shift+click or click when detached → toggle detach
-	if (e.shiftKey || TRV.panelBridge.isDetached) {
-		if (TRV.panelBridge.isDetached) {
-			TRV.attachPanel();
+	if (e.shiftKey || FontRig.panelBridge.isDetached) {
+		if (FontRig.panelBridge.isDetached) {
+			FontRig.attachPanel();
 		} else {
-			TRV.detachPanel();
+			FontRig.detachPanel();
 		}
 		return;
 	}
@@ -721,34 +721,34 @@ document.getElementById('btn-panel').addEventListener('click', function(e) {
 	}
 
 	requestAnimationFrame(function() {
-		TRV.draw();
-		if (state.showXml && state.activePanel === 'xml') TRV.buildXmlPanel();
+		FontRig.draw();
+		if (state.showXml && state.activePanel === 'xml') FontRig.buildXmlPanel();
 	});
 });
 
 // Popout button inside panel header
 document.getElementById('btn-popout').addEventListener('click', function() {
-	TRV.detachPanel();
+	FontRig.detachPanel();
 });
 
 // Font panel button
 document.getElementById('btn-font-panel').addEventListener('click', function(e) {
 	// Shift+click → toggle detach
-	if (e.shiftKey || TRV.fontPanelBridge.isDetached) {
-		if (TRV.fontPanelBridge.isDetached) {
-			TRV.attachFontPanel();
+	if (e.shiftKey || FontRig.fontPanelBridge.isDetached) {
+		if (FontRig.fontPanelBridge.isDetached) {
+			FontRig.attachFontPanel();
 		} else {
-			TRV.detachFontPanel();
+			FontRig.detachFontPanel();
 		}
 		return;
 	}
 
 	// Just focus the detached panel if already detached
-	if (TRV.fontPanelBridge.isDetached && TRV.fontPanelBridge.detachedWindow) {
-		TRV.fontPanelBridge.detachedWindow.focus();
+	if (FontRig.fontPanelBridge.isDetached && FontRig.fontPanelBridge.detachedWindow) {
+		FontRig.fontPanelBridge.detachedWindow.focus();
 	} else {
 		// Open detached font panel
-		TRV.detachFontPanel();
+		FontRig.detachFontPanel();
 	}
 });
 
@@ -776,14 +776,14 @@ function setViewMode(cols, rows) {
 		state.gridLayers = null;
 	} else {
 		state.multiView = true;
-		TRV.initMultiGrid();
+		FontRig.initMultiGrid();
 	}
 
 	if (cols === 1 && rows === 1) btn1x1.classList.add('active');
 	if (cols === 2 && rows === 1) btn2x1.classList.add('active');
 	if (cols === 2 && rows === 2) btn2x2.classList.add('active');
 
-	TRV.fitToView();
+	FontRig.fitToView();
 }
 
 document.getElementById('btn-view-1x1').addEventListener('click', function() { setViewMode(1, 1); });
@@ -796,7 +796,7 @@ document.getElementById('btn-join').addEventListener('click', function() {
 	if (state.glyphViewMode) {
 		state.glyphViewMode = false;
 		document.getElementById('btn-glyph-view').classList.remove('active');
-		TRV.updateGlyphPanelActive();
+		FontRig.updateGlyphPanelActive();
 	}
 
 	state.joinedView = !state.joinedView;
@@ -807,12 +807,12 @@ document.getElementById('btn-join').addEventListener('click', function() {
 		setViewMode(2, 1);
 	}
 
-	TRV.fitToView();
+	FontRig.fitToView();
 });
 
 // -- Glyph view toggle (glyph strip on shared baseline) -------------
 document.getElementById('btn-glyph-view').addEventListener('click', function() {
-	if (!TRV.font) return;
+	if (!FontRig.font) return;
 
 	state.glyphViewMode = !state.glyphViewMode;
 	this.classList.toggle('active', state.glyphViewMode);
@@ -830,16 +830,16 @@ document.getElementById('btn-glyph-view').addEventListener('click', function() {
 		document.getElementById('btn-view-2x1').classList.remove('active');
 		document.getElementById('btn-view-2x2').classList.remove('active');
 
-		TRV.updateWorkspaceStrip();
-		TRV.fitGlyphStrip();
+		FontRig.updateWorkspaceStrip();
+		FontRig.fitGlyphStrip();
 	} else {
 		// Exit strip mode
 		state.gridLayers = null;
-		TRV.fitToView();
+		FontRig.fitToView();
 	}
 
-	TRV.updateGlyphPanelActive();
-	TRV.draw();
+	FontRig.updateGlyphPanelActive();
+	FontRig.draw();
 });
 
 // -- Layer dropdown -------------------------------------------------
@@ -849,7 +849,7 @@ dom.layerSelect.addEventListener('change', function() {
 
 	// In multi-view or expanded strip, update the active cell's gridLayers
 	if (state.gridLayers && state.glyphData) {
-		if (!TRV.isMaskLayer(this.value)) {
+		if (!FontRig.isMaskLayer(this.value)) {
 			var layers = state.glyphData.layers;
 			var idx = -1;
 			for (var i = 0; i < layers.length; i++) {
@@ -865,8 +865,8 @@ dom.layerSelect.addEventListener('change', function() {
 		}
 	}
 
-	TRV.draw();
-	TRV.buildXmlPanel();
+	FontRig.draw();
+	FontRig.buildXmlPanel();
 });
 
 // ===================================================================
@@ -935,7 +935,7 @@ dom.layerSelect.addEventListener('change', function() {
 			var entry = e.target.closest('.glyph-entry');
 			if (!entry) return;
 			var name = entry.dataset.name;
-			if (name) TRV.switchGlyph(name);
+			if (name) FontRig.switchGlyph(name);
 		});
 
 		// Double click: add glyph to workspace strip
@@ -943,20 +943,20 @@ dom.layerSelect.addEventListener('change', function() {
 			var entry = e.target.closest('.glyph-entry');
 			if (!entry) return;
 			var name = entry.dataset.name;
-			if (!name || !TRV.state.glyphViewMode) return;
+			if (!name || !FontRig.state.glyphViewMode) return;
 
-			TRV.addGlyphToStrip(name);
-			TRV.updateGlyphPanelActive();
+			FontRig.addGlyphToStrip(name);
+			FontRig.updateGlyphPanelActive();
 		});
 	}
 
 	if (glyphSearch) {
 		glyphSearch.addEventListener('input', function() {
-			TRV.filterGlyphPanel(this.value);
+			FontRig.filterGlyphPanel(this.value);
 			// Update visible count
 			if (glyphCount && glyphList) {
 				var visible = glyphList.querySelectorAll('.glyph-entry:not([style*="display: none"])');
-				glyphCount.textContent = visible.length + '/' + (TRV.font ? TRV.font.manifest.length : 0);
+				glyphCount.textContent = visible.length + '/' + (FontRig.font ? FontRig.font.manifest.length : 0);
 			}
 		});
 	}
@@ -968,7 +968,7 @@ dom.fileInput.addEventListener('change', function(e) {
 	const file = e.target.files[0];
 	if (!file) return;
 	const reader = new FileReader();
-	reader.onload = function(ev) { TRV.loadXmlString(ev.target.result, file.name); };
+	reader.onload = function(ev) { FontRig.loadXmlString(ev.target.result, file.name); };
 	reader.readAsText(file);
 	dom.fileInput.value = '';
 });
@@ -990,7 +990,7 @@ document.addEventListener('drop', function(e) {
 	const file = e.dataTransfer.files[0];
 	if (!file) return;
 	const reader = new FileReader();
-	reader.onload = function(ev) { TRV.loadXmlString(ev.target.result, file.name); };
+	reader.onload = function(ev) { FontRig.loadXmlString(ev.target.result, file.name); };
 	reader.readAsText(file);
 });
 
@@ -1005,12 +1005,12 @@ document.addEventListener('keydown', function(e) {
 			// Toggle persistent lock
 			state.previewLocked = !state.previewLocked;
 			state.previewMode = state.previewLocked;
-			TRV.updatePreviewButton();
-			TRV.draw();
+			FontRig.updatePreviewButton();
+			FontRig.draw();
 		} else if (!state.previewLocked) {
 			if (!state.previewMode) {
 				state.previewMode = true;
-				TRV.draw();
+				FontRig.draw();
 			}
 		}
 		e.preventDefault();
@@ -1022,7 +1022,7 @@ document.addEventListener('keydown', function(e) {
 		if (!state.spaceDown) {
 			state.spaceDown = true;
 			e.preventDefault();
-			TRV.updateCanvasCursor();
+			FontRig.updateCanvasCursor();
 		}
 		return;
 	}
@@ -1033,7 +1033,7 @@ document.addEventListener('keydown', function(e) {
 			state.sKeyDown = true;
 			if (state.isDragging && state.selectedNodeIds.size === 1) {
 				var nodeId = state.selectedNodeIds.values().next().value;
-				state.slideData = TRV.initSlideMode(nodeId, 'curve');
+				state.slideData = FontRig.initSlideMode(nodeId, 'curve');
 			}
 		}
 		if (state.slideData) {
@@ -1048,7 +1048,7 @@ document.addEventListener('keydown', function(e) {
 			state.aKeyDown = true;
 			if (state.isDragging && state.selectedNodeIds.size === 1) {
 				var nodeId = state.selectedNodeIds.values().next().value;
-				state.slideData = TRV.initSlideMode(nodeId, 'line');
+				state.slideData = FontRig.initSlideMode(nodeId, 'line');
 			}
 		}
 		if (state.slideData) {
@@ -1061,15 +1061,15 @@ document.addEventListener('keydown', function(e) {
 	if (e.target === dom.xmlContent) {
 		if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
 			e.preventDefault();
-			TRV.pushUndo();
-			TRV.xmlApply();
+			FontRig.pushUndo();
+			FontRig.xmlApply();
 			return;
 		}
 		if (!(e.ctrlKey || e.metaKey)) return;
 	}
 
 	// Dispatch through key map
-	TRV.dispatchKey(e);
+	FontRig.dispatchKey(e);
 });
 
 document.addEventListener('keyup', function(e) {
@@ -1077,7 +1077,7 @@ document.addEventListener('keyup', function(e) {
 	if (e.code === 'Backquote') {
 		if (!state.previewLocked) {
 			state.previewMode = false;
-			TRV.draw();
+			FontRig.draw();
 		}
 		return;
 	}
@@ -1087,7 +1087,7 @@ document.addEventListener('keyup', function(e) {
 		if (state.isPanning) {
 			state.isPanning = false;
 		}
-		TRV.updateCanvasCursor();
+		FontRig.updateCanvasCursor();
 	}
 
 	// S/A/E key released: exit slide mode
@@ -1128,7 +1128,7 @@ document.addEventListener('keyup', function(e) {
 		const maxPanel = mainRect.width - minPanel - dom.splitHandle.offsetWidth;
 		panel.style.width = Math.max(minPanel, Math.min(maxPanel, panelWidth)) + 'px';
 
-		TRV.draw();
+		FontRig.draw();
 	});
 
 	window.addEventListener('mouseup', function() {
@@ -1137,7 +1137,7 @@ document.addEventListener('keyup', function(e) {
 			dom.splitHandle.classList.remove('dragging');
 			document.body.style.cursor = '';
 			document.body.style.userSelect = '';
-			TRV.draw();
+			FontRig.draw();
 		}
 	});
 })();
@@ -1150,14 +1150,14 @@ var xmlApplyBtn = document.getElementById('xml-apply-btn');
 
 if (xmlRefreshBtn) {
 	xmlRefreshBtn.addEventListener('click', function() {
-		TRV.xmlRefresh();
+		FontRig.xmlRefresh();
 	});
 }
 
 if (xmlApplyBtn) {
 	xmlApplyBtn.addEventListener('click', function() {
-		TRV.pushUndo();
-		TRV.xmlApply();
+		FontRig.pushUndo();
+		FontRig.xmlApply();
 	});
 }
 
@@ -1167,28 +1167,28 @@ dom.xmlContent.addEventListener('click', function() {
 	var pos = textarea.selectionStart;
 	var text = textarea.value.substring(0, pos);
 	var lineIdx = text.split('\n').length - 1;
-	var nodeId = TRV.xmlLineNodeMap[lineIdx];
+	var nodeId = FontRig.xmlLineNodeMap[lineIdx];
 
 	if (nodeId) {
 		state.selectedNodeIds.clear();
 		state.selectedNodeIds.add(nodeId);
-		TRV.draw();
-		TRV.updateStatusSelected();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
 	}
 });
 
 // ===================================================================
 // Panel tabs + Python REPL
 // ===================================================================
-TRV.initPanelTabs();
-TRV.wirePythonPanel();
-TRV.initGlyphWidget();
+FontRig.initPanelTabs();
+FontRig.wirePythonPanel();
+FontRig.initGlyphWidget();
 
 // ===================================================================
 // Wire simple toolbar buttons from bindings.js
 // ===================================================================
-TRV.wireToolbar();
-TRV.wireTransformInputs();
+FontRig.wireToolbar();
+FontRig.wireTransformInputs();
 
 // ===================================================================
 // Context menu (right-click)
@@ -1228,24 +1228,24 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	var nodeHit = null;
 	var segHit = null;
 	withActiveOffset(function() {
-		nodeHit = TRV.hitTestNode(coords.sx, coords.sy);
+		nodeHit = FontRig.hitTestNode(coords.sx, coords.sy);
 		if (!nodeHit) {
-			segHit = TRV.hitTestSegment(coords.sx, coords.sy);
+			segHit = FontRig.hitTestSegment(coords.sx, coords.sy);
 		}
 	});
 
 	if (nodeHit) {
 		// -- Right-clicked on a node --
 		if (!state.selectedNodeIds.has(nodeHit.id)) {
-			TRV.selectNode(nodeHit.id, false);
+			FontRig.selectNode(nodeHit.id, false);
 		}
 
 		// Find which contour this node belongs to
-		pendingContourIdx = TRV.getContourIndexForNode(nodeHit.id);
+		pendingContourIdx = FontRig.getContourIndexForNode(nodeHit.id);
 
 		// Show join only for open endpoints
 		if (joinItem) {
-			var epCheck = TRV.isOpenEndpoint(nodeHit.id);
+			var epCheck = FontRig.isOpenEndpoint(nodeHit.id);
 			joinItem.style.display = epCheck ? '' : 'none';
 		}
 
@@ -1268,7 +1268,7 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 		if (toggleItem) {
 			var hasSmooth = false, hasSharp = false;
 			for (var id of state.selectedNodeIds) {
-				var ref = TRV.findNodeById(id);
+				var ref = FontRig.findNodeById(id);
 				if (ref && ref.node.type === 'on') {
 					if (ref.node.smooth) hasSmooth = true;
 					else hasSharp = true;
@@ -1336,54 +1336,54 @@ if (ctxMenu) {
 
 		var action = item.dataset.action;
 		if (action === 'toggleSmooth') {
-			TRV.pushUndo();
-			TRV.toggleSmooth();
+			FontRig.pushUndo();
+			FontRig.toggleSmooth();
 		} else if (action === 'retractHandles') {
-			TRV.pushUndo();
-			TRV.retractHandles();
+			FontRig.pushUndo();
+			FontRig.retractHandles();
 		} else if (action === 'joinContour') {
-			TRV.pushUndo();
-			TRV.tryJoinEndpoints();
+			FontRig.pushUndo();
+			FontRig.tryJoinEndpoints();
 		} else if (action === 'openContour') {
-			TRV.pushUndo();
-			TRV.openContourAtNode();
+			FontRig.pushUndo();
+			FontRig.openContourAtNode();
 		} else if (action === 'selectContour') {
 			if (pendingContourIdx >= 0) {
-				var ids = TRV.getContourNodeIds(pendingContourIdx);
-				TRV.selectNodes(ids, false);
+				var ids = FontRig.getContourNodeIds(pendingContourIdx);
+				FontRig.selectNodes(ids, false);
 				pendingContourIdx = -1;
 			}
 		} else if (action === 'insertNode') {
 			if (pendingSegmentHit) {
-				TRV.pushUndo();
-				TRV.insertNodeOnSegment(pendingSegmentHit);
+				FontRig.pushUndo();
+				FontRig.insertNodeOnSegment(pendingSegmentHit);
 				pendingSegmentHit = null;
 	pendingContourIdx = -1;
 			}
 		} else if (action === 'convertToLine') {
 			if (pendingSegmentHit) {
-				TRV.pushUndo();
-				TRV.convertSegmentToLine(pendingSegmentHit);
+				FontRig.pushUndo();
+				FontRig.convertSegmentToLine(pendingSegmentHit);
 				pendingSegmentHit = null;
 				pendingContourIdx = -1;
 			}
 		} else if (action === 'convertToCurve') {
 			if (pendingSegmentHit) {
-				TRV.pushUndo();
-				TRV.convertSegmentToCubic(pendingSegmentHit);
+				FontRig.pushUndo();
+				FontRig.convertSegmentToCubic(pendingSegmentHit);
 				pendingSegmentHit = null;
 				pendingContourIdx = -1;
 			}
 		} else if (action === 'convertToQuadratic') {
 			if (pendingSegmentHit) {
-				TRV.pushUndo();
-				TRV.convertSegmentToQuadratic(pendingSegmentHit);
+				FontRig.pushUndo();
+				FontRig.convertSegmentToQuadratic(pendingSegmentHit);
 				pendingSegmentHit = null;
 				pendingContourIdx = -1;
 			}
 		} else if (action === 'transformSelection') {
-			TRV.activateTransform();
-			TRV.draw();
+			FontRig.activateTransform();
+			FontRig.draw();
 		}
 
 		hideContextMenu();
@@ -1398,9 +1398,9 @@ window.addEventListener('mousedown', function(e) {
 });
 
 document.addEventListener('keydown', function(e) {
-	if (e.key === 'Escape' && TRV.tf.active) {
-		TRV.deactivateTransform();
-		TRV.draw();
+	if (e.key === 'Escape' && FontRig.tf.active) {
+		FontRig.deactivateTransform();
+		FontRig.draw();
 		e.stopPropagation();
 		return;
 	}

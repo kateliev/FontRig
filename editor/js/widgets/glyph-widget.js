@@ -7,11 +7,11 @@
 'use strict';
 
 // -- Compute widget position and size (centered on glyph middle) ------
-TRV._getWidgetRect = function(advW, verticalOffset) {
-	var lsbScreen = TRV.glyphToScreen(0, 0);
-	var rsbScreen = TRV.glyphToScreen(advW, 0);
-	var wrapRect = TRV.dom.canvasWrap.getBoundingClientRect();
-	var state = TRV.state;
+FontRig._getWidgetRect = function(advW, verticalOffset) {
+	var lsbScreen = FontRig.glyphToScreen(0, 0);
+	var rsbScreen = FontRig.glyphToScreen(advW, 0);
+	var wrapRect = FontRig.dom.canvasWrap.getBoundingClientRect();
+	var state = FontRig.state;
 
 	// Fixed size: half of advance width
 	var widgetW = 260 * state.zoom;
@@ -31,36 +31,36 @@ TRV._getWidgetRect = function(advW, verticalOffset) {
 };
 
 // -- Get layer color ----------------------------------------------------
-TRV._getLayerColor = function(layerName, glyphData) {
+FontRig._getLayerColor = function(layerName, glyphData) {
 	if (!glyphData || !layerName) return '#5b9def';
 	var layers = glyphData.layers;
 	var idx = layers.findIndex(function(l) { return l.name === layerName; });
 	if (idx < 0) idx = 0;
-	var colors = TRV.getCurrentTheme().layerColors;
+	var colors = FontRig.getCurrentTheme().layerColors;
 	return colors[idx % colors.length];
 };
 
 // -- Glyph Widget HTML Overlay ---------------------------------------
-TRV._widgetSlot = null;
+FontRig._widgetSlot = null;
 
-TRV.showGlyphWidget = function(name, layer, layerName) {
-	var widget = TRV.dom.glyphWidget;
+FontRig.showGlyphWidget = function(name, layer, layerName) {
+	var widget = FontRig.dom.glyphWidget;
 	if (!widget || !name || !layer) return;
 
-	var state = TRV.state;
-	var bounds = TRV._getLayerBounds(layer);
+	var state = FontRig.state;
+	var bounds = FontRig._getLayerBounds(layer);
 	var advW = layer.width || 0;
 
 	var lsbVal = bounds ? Math.round(bounds.minX) : 0;
 	var rsbVal = bounds ? Math.round(advW - bounds.maxX) : 0;
 
 	var unicode = '';
-	if (TRV.font && TRV.font.encoding) {
-		var code = TRV.font.encoding[name];
+	if (FontRig.font && FontRig.font.encoding) {
+		var code = FontRig.font.encoding[name];
 		if (code) unicode = 'U+' + code.toString(16).toUpperCase().padStart(4, '0');
 	}
 
-	var rect = TRV._getWidgetRect(advW, 60);
+	var rect = FontRig._getWidgetRect(advW, 60);
 
 	widget.style.left = rect.left + 'px';
 	widget.style.width = rect.width + 'px';
@@ -74,55 +74,55 @@ TRV.showGlyphWidget = function(name, layer, layerName) {
 		widget.classList.remove('gw-stacked');
 	}
 
-	TRV.dom.gwName.value = name;
-	TRV.dom.gwUnicode.value = unicode;
-	TRV.dom.gwLayer.textContent = layerName || '';
+	FontRig.dom.gwName.value = name;
+	FontRig.dom.gwUnicode.value = unicode;
+	FontRig.dom.gwLayer.textContent = layerName || '';
 
 	// Color the layer indicator
-	var layerColor = TRV._getLayerColor(layerName, state.glyphData);
-	TRV.dom.gwLayer.style.color = layerColor;
-	TRV.dom.gwLayer.previousElementSibling.style.color = layerColor;
+	var layerColor = FontRig._getLayerColor(layerName, state.glyphData);
+	FontRig.dom.gwLayer.style.color = layerColor;
+	FontRig.dom.gwLayer.previousElementSibling.style.color = layerColor;
 
-	TRV.dom.gwLsb.value = lsbVal;
-	TRV.dom.gwAdvance.value = advW;
-	TRV.dom.gwRsb.value = rsbVal;
+	FontRig.dom.gwLsb.value = lsbVal;
+	FontRig.dom.gwAdvance.value = advW;
+	FontRig.dom.gwRsb.value = rsbVal;
 
-	TRV._widgetSlot = name;
+	FontRig._widgetSlot = name;
 
 	widget.classList.add('visible');
 
 	// Pin: bottom edge always 20px from canvas bottom
-	var h = TRV.dom.canvasWrap.clientHeight;
+	var h = FontRig.dom.canvasWrap.clientHeight;
 	widget.style.top = (h - widget.offsetHeight - 20) + 'px';
 };
 
-TRV.hideGlyphWidget = function() {
-	if (TRV.dom.glyphWidget) {
-		TRV.dom.glyphWidget.classList.remove('visible');
+FontRig.hideGlyphWidget = function() {
+	if (FontRig.dom.glyphWidget) {
+		FontRig.dom.glyphWidget.classList.remove('visible');
 	}
-	TRV._widgetSlot = null;
-	if (TRV.dom.glyphWidgets) {
-		TRV.dom.glyphWidgets.innerHTML = '';
+	FontRig._widgetSlot = null;
+	if (FontRig.dom.glyphWidgets) {
+		FontRig.dom.glyphWidgets.innerHTML = '';
 	}
 };
 
-TRV._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
-	var container = TRV.dom.glyphWidgets;
+FontRig._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
+	var container = FontRig.dom.glyphWidgets;
 	if (!container) return;
 
-	var state = TRV.state;
-	var bounds = TRV._getLayerBounds(layer);
+	var state = FontRig.state;
+	var bounds = FontRig._getLayerBounds(layer);
 	var advW = layer.width || 0;
 
 	var unicode = '';
-	if (TRV.font && TRV.font.encoding) {
-		var code = TRV.font.encoding[name];
+	if (FontRig.font && FontRig.font.encoding) {
+		var code = FontRig.font.encoding[name];
 		if (code) unicode = 'U+' + code.toString(16).toUpperCase().padStart(4, '0');
 	}
 
-	var rect = TRV._getWidgetRect(advW, 60);
+	var rect = FontRig._getWidgetRect(advW, 60);
 
-	var layerColor = TRV._getLayerColor(layerName, state.glyphData);
+	var layerColor = FontRig._getLayerColor(layerName, state.glyphData);
 
 	var widget = document.createElement('div');
 	widget.className = 'glyph-widget glyph-widget--readonly visible';
@@ -145,7 +145,7 @@ TRV._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
 	container.appendChild(widget);
 
 	// Pin: bottom edge always 20px from canvas bottom
-	var h = TRV.dom.canvasWrap.clientHeight;
+	var h = FontRig.dom.canvasWrap.clientHeight;
 	widget.style.top = (h - widget.offsetHeight - 20) + 'px';
 
 	// Stop propagation on the widget to prevent canvas click handling
@@ -164,36 +164,36 @@ TRV._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
 			closeBtn.addEventListener('click', function(e) {
 				e.stopPropagation();
 				e.preventDefault();
-				TRV.removeGlyphFromStrip(name);
+				FontRig.removeGlyphFromStrip(name);
 			});
 		}
 	}
 };
 
-TRV.updateGlyphWidget = function() {
-	var state = TRV.state;
+FontRig.updateGlyphWidget = function() {
+	var state = FontRig.state;
 
 	// No glyph loaded - hide widget
 	if (!state.glyphData) {
-		TRV.hideGlyphWidget();
+		FontRig.hideGlyphWidget();
 		return;
 	}
 
 	// Clear non-active widgets container
-	if (TRV.dom.glyphWidgets) {
-		TRV.dom.glyphWidgets.innerHTML = '';
+	if (FontRig.dom.glyphWidgets) {
+		FontRig.dom.glyphWidgets.innerHTML = '';
 	}
 
 	// --- GLYPH STRIP MODE ---
 	// Show per-glyph widgets (active editable, non-active readonly with close)
-	if (state.glyphViewMode && TRV.font) {
-		var ws = TRV.workspace;
+	if (state.glyphViewMode && FontRig.font) {
+		var ws = FontRig.workspace;
 		if (ws.activeIdx < 0 || ws.activeIdx >= ws.glyphs.length) {
-			TRV.hideGlyphWidget();
+			FontRig.hideGlyphWidget();
 			return;
 		}
 
-		var layout = TRV.getGlyphStripLayout();
+		var layout = FontRig.getGlyphStripLayout();
 
 		var activeSlot = null;
 		for (var i = 0; i < layout.slots.length; i++) {
@@ -210,10 +210,10 @@ TRV.updateGlyphWidget = function() {
 			var slot = layout.slots[i];
 			if (slot.active) continue;
 
-			var cacheEntry = TRV.glyphCache.get(slot.name);
+			var cacheEntry = FontRig.glyphCache.get(slot.name);
 			if (!cacheEntry) continue;
 
-			var layer = TRV.getLayerByName(cacheEntry.glyphData, state.activeLayer);
+			var layer = FontRig.getLayerByName(cacheEntry.glyphData, state.activeLayer);
 			if (!layer) layer = cacheEntry.glyphData.layers[0];
 			if (!layer) continue;
 
@@ -221,33 +221,33 @@ TRV.updateGlyphWidget = function() {
 			state.pan.y = basePanY;
 
 			// Pass true for showCloseBtn in glyph strip mode
-			TRV._createReadonlyWidget(slot.name, layer, state.activeLayer, true);
+			FontRig._createReadonlyWidget(slot.name, layer, state.activeLayer, true);
 		}
 
 		state.pan.x = savedPanX;
 		state.pan.y = savedPanY;
 
 		if (!activeSlot) {
-			TRV.hideGlyphWidget();
+			FontRig.hideGlyphWidget();
 			return;
 		}
 
 		// Show editable widget for active glyph
 		var name = ws.glyphs[ws.activeIdx];
-		var cacheEntry = TRV.glyphCache.get(name);
+		var cacheEntry = FontRig.glyphCache.get(name);
 		if (!cacheEntry) {
-			TRV.hideGlyphWidget();
+			FontRig.hideGlyphWidget();
 			return;
 		}
 
-		var layer = TRV.getLayerByName(cacheEntry.glyphData, state.activeLayer);
+		var layer = FontRig.getLayerByName(cacheEntry.glyphData, state.activeLayer);
 		if (!layer) layer = cacheEntry.glyphData.layers[0];
 		if (!layer) {
-			TRV.hideGlyphWidget();
+			FontRig.hideGlyphWidget();
 			return;
 		}
 
-		TRV.showGlyphWidget(name, layer, state.activeLayer);
+		FontRig.showGlyphWidget(name, layer, state.activeLayer);
 		return;
 	}
 
@@ -255,38 +255,38 @@ TRV.updateGlyphWidget = function() {
 	// Only show single bottom widget when NOT in glyph strip mode
 	if ((state.multiView || state.joinedView) && !state.glyphViewMode) {
 		// Hide main editable widget, show single positioned widget
-		TRV.hideGlyphWidget();
-		TRV._positionMultiViewWidget();
+		FontRig.hideGlyphWidget();
+		FontRig._positionMultiViewWidget();
 		return;
 	}
 
 	// --- SINGLE GLYPH MODE ---
 	// Show editable widget for the current glyph
-	var layer = TRV.getActiveLayer();
+	var layer = FontRig.getActiveLayer();
 	if (!layer) {
-		TRV.hideGlyphWidget();
+		FontRig.hideGlyphWidget();
 		return;
 	}
 
-	var glyphName = state.glyphData.name || TRV.activeGlyph;
+	var glyphName = state.glyphData.name || FontRig.activeGlyph;
 	if (!glyphName) {
-		TRV.hideGlyphWidget();
+		FontRig.hideGlyphWidget();
 		return;
 	}
 
-	TRV.showGlyphWidget(glyphName, layer, state.activeLayer);
+	FontRig.showGlyphWidget(glyphName, layer, state.activeLayer);
 };
 
 // -- Position single widget for multi-view/joined mode ---------------
-TRV._positionMultiViewWidget = function() {
-	var state = TRV.state;
-	var widget = TRV.dom.glyphWidget;
+FontRig._positionMultiViewWidget = function() {
+	var state = FontRig.state;
+	var widget = FontRig.dom.glyphWidget;
 	if (!widget) return;
 
 	var rows = state.gridRows;
 	var cols = state.gridCols;
-	var w = TRV.dom.canvasWrap.clientWidth;
-	var h = TRV.dom.canvasWrap.clientHeight;
+	var w = FontRig.dom.canvasWrap.clientWidth;
+	var h = FontRig.dom.canvasWrap.clientHeight;
 
 	// Position at bottom center
 	var widgetW = Math.min(400, w * 0.4);
@@ -300,71 +300,71 @@ TRV._positionMultiViewWidget = function() {
 	widget.classList.add('visible');
 
 	// Populate with current glyph data
-	var layer = TRV.getActiveLayer();
+	var layer = FontRig.getActiveLayer();
 	if (!layer) {
 		widget.classList.remove('visible');
 		return;
 	}
 
-	var glyphName = state.glyphData.name || TRV.activeGlyph;
+	var glyphName = state.glyphData.name || FontRig.activeGlyph;
 	if (!glyphName) {
 		widget.classList.remove('visible');
 		return;
 	}
 
 	var advW = layer.width || 0;
-	var bounds = TRV._getLayerBounds(layer);
+	var bounds = FontRig._getLayerBounds(layer);
 	var lsbVal = bounds ? Math.round(bounds.minX) : 0;
 	var rsbVal = bounds ? Math.round(advW - bounds.maxX) : 0;
 
 	var unicode = '';
-	if (TRV.font && TRV.font.encoding) {
-		var code = TRV.font.encoding[glyphName];
+	if (FontRig.font && FontRig.font.encoding) {
+		var code = FontRig.font.encoding[glyphName];
 		if (code) unicode = 'U+' + code.toString(16).toUpperCase().padStart(4, '0');
 	}
 
 	// Update input values
-	TRV.dom.gwName.value = glyphName;
-	TRV.dom.gwUnicode.value = unicode;
-	TRV.dom.gwLayer.textContent = state.activeLayer || '';
+	FontRig.dom.gwName.value = glyphName;
+	FontRig.dom.gwUnicode.value = unicode;
+	FontRig.dom.gwLayer.textContent = state.activeLayer || '';
 	
-	var layerColor = TRV._getLayerColor(state.activeLayer, state.glyphData);
-	TRV.dom.gwLayer.style.color = layerColor;
-	TRV.dom.gwLayer.previousElementSibling.style.color = layerColor;
+	var layerColor = FontRig._getLayerColor(state.activeLayer, state.glyphData);
+	FontRig.dom.gwLayer.style.color = layerColor;
+	FontRig.dom.gwLayer.previousElementSibling.style.color = layerColor;
 
-	TRV.dom.gwLsb.value = lsbVal;
-	TRV.dom.gwAdvance.value = advW;
-	TRV.dom.gwRsb.value = rsbVal;
+	FontRig.dom.gwLsb.value = lsbVal;
+	FontRig.dom.gwAdvance.value = advW;
+	FontRig.dom.gwRsb.value = rsbVal;
 
-	TRV._widgetSlot = glyphName;
+	FontRig._widgetSlot = glyphName;
 };
 
-TRV.initGlyphWidget = function() {
-	var nameInput = TRV.dom.gwName;
-	var unicodeInput = TRV.dom.gwUnicode;
-	var lsbInput = TRV.dom.gwLsb;
-	var advInput = TRV.dom.gwAdvance;
-	var rsbInput = TRV.dom.gwRsb;
+FontRig.initGlyphWidget = function() {
+	var nameInput = FontRig.dom.gwName;
+	var unicodeInput = FontRig.dom.gwUnicode;
+	var lsbInput = FontRig.dom.gwLsb;
+	var advInput = FontRig.dom.gwAdvance;
+	var rsbInput = FontRig.dom.gwRsb;
 
 	nameInput.addEventListener('change', function() {
-		var oldName = TRV._widgetSlot;
+		var oldName = FontRig._widgetSlot;
 		var newName = this.value.trim();
 		if (!oldName || !newName || oldName === newName) return;
 
-		var ws = TRV.workspace;
+		var ws = FontRig.workspace;
 		var idx = ws.glyphs.indexOf(oldName);
 		if (idx >= 0) {
 			ws.glyphs[idx] = newName;
-			TRV.activeGlyph = newName;
-			TRV.dirtyGlyphs.add(newName);
-			TRV.dirtyGlyphs.delete(oldName);
-			TRV._widgetSlot = newName;
-			TRV.updateGlyphPanelActive();
+			FontRig.activeGlyph = newName;
+			FontRig.dirtyGlyphs.add(newName);
+			FontRig.dirtyGlyphs.delete(oldName);
+			FontRig._widgetSlot = newName;
+			FontRig.updateGlyphPanelActive();
 		}
 	});
 
 	unicodeInput.addEventListener('change', function() {
-		var glyphName = TRV._widgetSlot;
+		var glyphName = FontRig._widgetSlot;
 		var val = this.value.trim();
 		if (!glyphName) return;
 
@@ -376,14 +376,14 @@ TRV.initGlyphWidget = function() {
 		}
 
 		if (code !== null && code >= 0 && code <= 0x10FFFF) {
-			if (TRV.font && TRV.font.encoding) {
-				TRV.font.encoding[glyphName] = code;
-				TRV.dirtyGlyphs.add(glyphName);
+			if (FontRig.font && FontRig.font.encoding) {
+				FontRig.font.encoding[glyphName] = code;
+				FontRig.dirtyGlyphs.add(glyphName);
 				this.value = 'U+' + code.toString(16).toUpperCase().padStart(4, '0');
 			}
 		} else {
-			if (TRV.font && TRV.font.encoding) {
-				var current = TRV.font.encoding[glyphName];
+			if (FontRig.font && FontRig.font.encoding) {
+				var current = FontRig.font.encoding[glyphName];
 				if (current) {
 					this.value = 'U+' + current.toString(16).toUpperCase().padStart(4, '0');
 				}
@@ -392,7 +392,7 @@ TRV.initGlyphWidget = function() {
 	});
 
 	function updateWidths() {
-		var glyphName = TRV._widgetSlot;
+		var glyphName = FontRig._widgetSlot;
 		if (!glyphName) return;
 
 		var lsb = parseInt(lsbInput.value) || 0;
@@ -404,11 +404,11 @@ TRV.initGlyphWidget = function() {
 			rsbInput.value = rsb;
 		}
 
-		var state = TRV.state;
+		var state = FontRig.state;
 		var glyphData = null;
 
 		// Try cache first (glyph strip mode), then state.glyphData (single mode)
-		var cacheEntry = TRV.glyphCache.get(glyphName);
+		var cacheEntry = FontRig.glyphCache.get(glyphName);
 		if (cacheEntry) {
 			glyphData = cacheEntry.glyphData;
 		} else if (state.glyphData && state.glyphData.name === glyphName) {
@@ -417,13 +417,13 @@ TRV.initGlyphWidget = function() {
 
 		if (!glyphData) return;
 
-		var layer = TRV.getLayerByName(glyphData, state.activeLayer);
+		var layer = FontRig.getLayerByName(glyphData, state.activeLayer);
 		if (!layer) layer = glyphData.layers[0];
 		if (!layer) return;
 
 		layer.width = adv;
 
-		var bounds = TRV._getLayerBounds(layer);
+		var bounds = FontRig._getLayerBounds(layer);
 		if (bounds) {
 			var currentLsb = Math.round(bounds.minX);
 			var delta = lsb - currentLsb;
@@ -440,27 +440,27 @@ TRV.initGlyphWidget = function() {
 			}
 		}
 
-		TRV.dirtyGlyphs.add(glyphName);
-		TRV.draw();
-		TRV.updateGlyphWidget();
+		FontRig.dirtyGlyphs.add(glyphName);
+		FontRig.draw();
+		FontRig.updateGlyphWidget();
 	}
 
 	lsbInput.addEventListener('change', updateWidths);
 	advInput.addEventListener('change', updateWidths);
 	rsbInput.addEventListener('change', updateWidths);
 
-	var closeBtn = TRV.dom.glyphWidget.querySelector('[data-field="close"]');
+	var closeBtn = FontRig.dom.glyphWidget.querySelector('[data-field="close"]');
 	if (closeBtn) {
 		closeBtn.addEventListener('click', function() {
-			var name = TRV._widgetSlot;
+			var name = FontRig._widgetSlot;
 			if (name) {
-				TRV.removeGlyphFromStrip(name);
+				FontRig.removeGlyphFromStrip(name);
 			}
 		});
 	}
 };
 
-TRV._getLayerBounds = function(layer) {
+FontRig._getLayerBounds = function(layer) {
 	var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 	var found = false;
 	for (var si = 0; si < layer.shapes.length; si++) {

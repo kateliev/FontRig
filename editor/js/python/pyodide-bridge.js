@@ -6,7 +6,7 @@
 // ===================================================================
 'use strict';
 
-TRV.pyBridge = {
+FontRig.pyBridge = {
 	pyodide: null,
 	ready: false,
 	loading: false,
@@ -138,7 +138,7 @@ TRV.pyBridge = {
 				log('Fetching TypeRig core (' + this.manifest.length + ' files)…');
 
 				var fetches = this.manifest.map(function(filePath) {
-					return fetch(TRV.pyBridge._rawUrl(filePath))
+					return fetch(FontRig.pyBridge._rawUrl(filePath))
 						.then(function(r) {
 							if (!r.ok) throw new Error(filePath + ': ' + r.status);
 							return r.text();
@@ -243,10 +243,10 @@ TRV.pyBridge = {
 	// -- Sync viewer glyph → Python glyph variable ----------------------
 	// Also syncs selection state (not in XML, passed separately)
 	syncToPython: function() {
-		if (!this.ready || !TRV.state.glyphData) return;
+		if (!this.ready || !FontRig.state.glyphData) return;
 
 		// Serialize current viewer glyph to XML
-		var xml = TRV.glyphToXml(TRV.state.glyphData);
+		var xml = FontRig.glyphToXml(FontRig.state.glyphData);
 		this.pyodide.globals.set('_xml_in', xml);
 
 		this.pyodide.runPython(
@@ -255,8 +255,8 @@ TRV.pyBridge = {
 		);
 
 		// Sync selection: JS selectedNodeIds → Python node.selected
-		var selIds = Array.from(TRV.state.selectedNodeIds);
-		var activeName = TRV.state.activeLayer || '';
+		var selIds = Array.from(FontRig.state.selectedNodeIds);
+		var activeName = FontRig.state.activeLayer || '';
 		this.pyodide.globals.set('_sel_ids', selIds);
 		this.pyodide.globals.set('_sel_layer', activeName);
 		this.pyodide.runPython(
@@ -264,10 +264,10 @@ TRV.pyBridge = {
 			'del _sel_ids, _sel_layer\n'
 		);
 
-		// Sync layer selection: TRV.layerSelection → Python selected_layers
-		if (TRV.layerSelection && TRV.layerSelection.layers.length > 0) {
-			var checkedNames = TRV.layerSelection.getChecked();
-			var layerInfo = TRV.layerSelection.layers.map(function(l) {
+		// Sync layer selection: FontRig.layerSelection → Python selected_layers
+		if (FontRig.layerSelection && FontRig.layerSelection.layers.length > 0) {
+			var checkedNames = FontRig.layerSelection.getChecked();
+			var layerInfo = FontRig.layerSelection.layers.map(function(l) {
 				return { name: l.name, type: l.type, checked: l.checked };
 			});
 			this.pyodide.globals.set('_layer_sel', checkedNames);
@@ -280,14 +280,14 @@ TRV.pyBridge = {
 			);
 		}
 
-		// Sync scope: TRV.scope → Python scope_layers / scope_glyphs
-		if (TRV.scope) {
-			var scopeLayerNames = TRV.scope.getLayers();
-			var scopeGlyphNames = TRV.scope.getGlyphs();
+		// Sync scope: FontRig.scope → Python scope_layers / scope_glyphs
+		if (FontRig.scope) {
+			var scopeLayerNames = FontRig.scope.getLayers();
+			var scopeGlyphNames = FontRig.scope.getGlyphs();
 			this.pyodide.globals.set('_scope_layers', scopeLayerNames);
 			this.pyodide.globals.set('_scope_glyphs', scopeGlyphNames);
-			this.pyodide.globals.set('_scope_layer_mode', TRV.scope.layerMode);
-			this.pyodide.globals.set('_scope_glyph_mode', TRV.scope.glyphMode);
+			this.pyodide.globals.set('_scope_layer_mode', FontRig.scope.layerMode);
+			this.pyodide.globals.set('_scope_glyph_mode', FontRig.scope.glyphMode);
 			this.pyodide.runPython(
 				'scope_layers = list(_scope_layers.to_py())\n' +
 				'scope_glyphs = list(_scope_glyphs.to_py())\n' +
@@ -310,13 +310,13 @@ TRV.pyBridge = {
 
 			if (!xml) return false;
 
-			var newGlyph = TRV.parseGlyphXML(xml);
+			var newGlyph = FontRig.parseGlyphXML(xml);
 
-			TRV.state.glyphData = newGlyph;
-			TRV.state.rawXml = xml;
+			FontRig.state.glyphData = newGlyph;
+			FontRig.state.rawXml = xml;
 
 			// Sync selection: Python node.selected → JS selectedNodeIds
-			var activeName = TRV.state.activeLayer || '';
+			var activeName = FontRig.state.activeLayer || '';
 			this.pyodide.globals.set('_sel_layer', activeName);
 			var pySelRaw = this.pyodide.runPython(
 				'_get_selection(_sel_layer)'
@@ -325,42 +325,42 @@ TRV.pyBridge = {
 			// Pyodide may return a JsProxy for lists — convert to native JS
 			var pySel = pySelRaw && pySelRaw.toJs ? pySelRaw.toJs() : pySelRaw;
 			if (Array.isArray(pySel)) {
-				TRV.state.selectedNodeIds = new Set(pySel);
+				FontRig.state.selectedNodeIds = new Set(pySel);
 			}
 
 			// Update layer selector
-			var currentLayer = TRV.state.activeLayer;
-			TRV.dom.layerSelect.innerHTML = '';
+			var currentLayer = FontRig.state.activeLayer;
+			FontRig.dom.layerSelect.innerHTML = '';
 			for (var i = 0; i < newGlyph.layers.length; i++) {
 				var layer = newGlyph.layers[i];
 				var opt = document.createElement('option');
 				opt.value = layer.name;
 				opt.textContent = layer.name || '(unnamed)';
-				TRV.dom.layerSelect.appendChild(opt);
+				FontRig.dom.layerSelect.appendChild(opt);
 			}
 
 			if (newGlyph.layers.find(function(l) { return l.name === currentLayer; })) {
-				TRV.dom.layerSelect.value = currentLayer;
+				FontRig.dom.layerSelect.value = currentLayer;
 			} else if (newGlyph.layers.length > 0) {
-				TRV.state.activeLayer = newGlyph.layers[0].name;
-				TRV.dom.layerSelect.value = TRV.state.activeLayer;
+				FontRig.state.activeLayer = newGlyph.layers[0].name;
+				FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 			}
 
 			// Update glyph info
 			var infoHtml = '<span>' + (newGlyph.name || '?') + '</span>';
 			if (newGlyph.unicodes) infoHtml += ' U+' + newGlyph.unicodes;
-			TRV.dom.glyphInfo.innerHTML = infoHtml;
+			FontRig.dom.glyphInfo.innerHTML = infoHtml;
 
 			// Refresh XML panel if visible
-			if (TRV.state.showXml && TRV.state.activePanel === 'xml') {
-				TRV.buildXmlPanel();
+			if (FontRig.state.showXml && FontRig.state.activePanel === 'xml') {
+				FontRig.buildXmlPanel();
 			}
 
 			// Force canvas redraw on next frame
-			requestAnimationFrame(function() { TRV.draw(); });
+			requestAnimationFrame(function() { FontRig.draw(); });
 
 			// Update status bar selection count
-			if (TRV.updateStatusSelected) TRV.updateStatusSelected();
+			if (FontRig.updateStatusSelected) FontRig.updateStatusSelected();
 
 			return true;
 

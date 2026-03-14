@@ -6,35 +6,35 @@
 'use strict';
 
 // -- Font state -----------------------------------------------------
-TRV.font = null;            // null = loose .trglyph mode
-TRV.glyphCache = new Map(); // name → { glyphData, undoStack, redoStack, selection, pan, zoom }
-TRV.dirtyGlyphs = new Set();
-TRV.activeGlyph = null;     // current glyph name
-TRV.CACHE_MAX = 32;         // LRU eviction threshold
+FontRig.font = null;            // null = loose .trglyph mode
+FontRig.glyphCache = new Map(); // name → { glyphData, undoStack, redoStack, selection, pan, zoom }
+FontRig.dirtyGlyphs = new Set();
+FontRig.activeGlyph = null;     // current glyph name
+FontRig.CACHE_MAX = 32;         // LRU eviction threshold
 
 // -- Workspace (glyph strip) ----------------------------------------
-TRV.workspace = {
+FontRig.workspace = {
 	glyphs: [],       // ordered glyph names in strip (user-controlled)
 	activeIdx: 0,     // index of active glyph in strip
 };
 
 // -- Resolve default layer name for thumbnails & strip ---------------
 // Priority: font master default → 'Regular' → first non-mask layer
-TRV.getDefaultLayerName = function(glyphData) {
+FontRig.getDefaultLayerName = function(glyphData) {
 	if (!glyphData || !glyphData.layers || glyphData.layers.length === 0) return null;
 
 	// 1. If font has masters defined, use the default master's layer name
-	if (TRV.font && TRV.font.masters && TRV.font.masters.length > 0) {
-		for (var i = 0; i < TRV.font.masters.length; i++) {
-			if (TRV.font.masters[i].isDefault) {
-				var lname = TRV.font.masters[i].layerName;
+	if (FontRig.font && FontRig.font.masters && FontRig.font.masters.length > 0) {
+		for (var i = 0; i < FontRig.font.masters.length; i++) {
+			if (FontRig.font.masters[i].isDefault) {
+				var lname = FontRig.font.masters[i].layerName;
 				for (var j = 0; j < glyphData.layers.length; j++) {
 					if (glyphData.layers[j].name === lname) return lname;
 				}
 			}
 		}
 		// Fallback: first master's layer name
-		var firstMasterLayer = TRV.font.masters[0].layerName;
+		var firstMasterLayer = FontRig.font.masters[0].layerName;
 		for (var j = 0; j < glyphData.layers.length; j++) {
 			if (glyphData.layers[j].name === firstMasterLayer) return firstMasterLayer;
 		}
@@ -47,7 +47,7 @@ TRV.getDefaultLayerName = function(glyphData) {
 
 	// 3. First non-mask layer
 	for (var j = 0; j < glyphData.layers.length; j++) {
-		if (!TRV.isMaskLayer(glyphData.layers[j].name)) return glyphData.layers[j].name;
+		if (!FontRig.isMaskLayer(glyphData.layers[j].name)) return glyphData.layers[j].name;
 	}
 
 	// 4. Whatever's there
@@ -55,7 +55,7 @@ TRV.getDefaultLayerName = function(glyphData) {
 };
 
 // -- Parse font.xml -------------------------------------------------
-TRV.parseFontXml = function(xmlString) {
+FontRig.parseFontXml = function(xmlString) {
 	var parser = new DOMParser();
 	var doc = parser.parseFromString(xmlString, 'text/xml');
 	var root = doc.documentElement;
@@ -112,7 +112,7 @@ TRV.parseFontXml = function(xmlString) {
 };
 
 // -- Parse glyphs.xml -----------------------------------------------
-TRV.parseGlyphsManifest = function(xmlString) {
+FontRig.parseGlyphsManifest = function(xmlString) {
 	var parser = new DOMParser();
 	var doc = parser.parseFromString(xmlString, 'text/xml');
 	var root = doc.documentElement;
@@ -137,7 +137,7 @@ TRV.parseGlyphsManifest = function(xmlString) {
 };
 
 // -- Read file from directory handle --------------------------------
-TRV._readFile = async function(dirHandle, relativePath) {
+FontRig._readFile = async function(dirHandle, relativePath) {
 	var parts = relativePath.replace(/\\/g, '/').split('/');
 	var current = dirHandle;
 
@@ -152,7 +152,7 @@ TRV._readFile = async function(dirHandle, relativePath) {
 };
 
 // -- Write file to directory handle ---------------------------------
-TRV._writeFile = async function(dirHandle, relativePath, content) {
+FontRig._writeFile = async function(dirHandle, relativePath, content) {
 	var parts = relativePath.replace(/\\/g, '/').split('/');
 	var current = dirHandle;
 
@@ -168,14 +168,14 @@ TRV._writeFile = async function(dirHandle, relativePath, content) {
 };
 
 // -- Open .trfont folder --------------------------------------------
-TRV.openFont = async function() {
+FontRig.openFont = async function() {
 	try {
 		var dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
 
 		// Read font.xml
 		var fontXml;
 		try {
-			fontXml = await TRV._readFile(dirHandle, 'font.xml');
+			fontXml = await FontRig._readFile(dirHandle, 'font.xml');
 		} catch (e) {
 			alert('Not a valid .trfont folder: font.xml not found.');
 			return;
@@ -184,14 +184,14 @@ TRV.openFont = async function() {
 		// Read glyphs.xml
 		var glyphsXml;
 		try {
-			glyphsXml = await TRV._readFile(dirHandle, 'glyphs.xml');
+			glyphsXml = await FontRig._readFile(dirHandle, 'glyphs.xml');
 		} catch (e) {
 			alert('Not a valid .trfont folder: glyphs.xml not found.');
 			return;
 		}
 
-		var fontData = TRV.parseFontXml(fontXml);
-		var manifest = TRV.parseGlyphsManifest(glyphsXml);
+		var fontData = FontRig.parseFontXml(fontXml);
+		var manifest = FontRig.parseGlyphsManifest(glyphsXml);
 
 		// Attach encoding unicodes to manifest entries
 		for (var i = 0; i < manifest.entries.length; i++) {
@@ -203,7 +203,7 @@ TRV.openFont = async function() {
 		}
 
 		// Store font state
-		TRV.font = {
+		FontRig.font = {
 			dirHandle: dirHandle,
 			info: fontData.info,
 			metrics: fontData.metrics,
@@ -214,17 +214,17 @@ TRV.openFont = async function() {
 		};
 
 		// Clear previous state
-		TRV.glyphCache.clear();
-		TRV.dirtyGlyphs.clear();
-		TRV.activeGlyph = null;
+		FontRig.glyphCache.clear();
+		FontRig.dirtyGlyphs.clear();
+		FontRig.activeGlyph = null;
 
 		// Update UI
-		TRV.buildGlyphPanel();
-		TRV.updateFontInfo();
+		FontRig.buildGlyphPanel();
+		FontRig.updateFontInfo();
 
 		// Load first glyph
 		if (manifest.entries.length > 0) {
-			await TRV.switchGlyph(manifest.entries[0].alias || manifest.entries[0].name);
+			await FontRig.switchGlyph(manifest.entries[0].alias || manifest.entries[0].name);
 		}
 
 	} catch (e) {
@@ -236,15 +236,15 @@ TRV.openFont = async function() {
 };
 
 // -- Load a single glyph from disk ----------------------------------
-TRV.loadGlyphFile = async function(name) {
-	if (!TRV.font) return null;
+FontRig.loadGlyphFile = async function(name) {
+	if (!FontRig.font) return null;
 
-	var entry = TRV.font.manifestIndex[name];
+	var entry = FontRig.font.manifestIndex[name];
 	if (!entry) return null;
 
 	try {
-		var xmlString = await TRV._readFile(TRV.font.dirHandle, entry.path);
-		var glyphData = TRV.parseGlyphXML(xmlString);
+		var xmlString = await FontRig._readFile(FontRig.font.dirHandle, entry.path);
+		var glyphData = FontRig.parseGlyphXML(xmlString);
 		return glyphData;
 	} catch (e) {
 		console.error('Error loading glyph "' + name + '":', e);
@@ -253,24 +253,24 @@ TRV.loadGlyphFile = async function(name) {
 };
 
 // -- Switch active glyph -------------------------------------------
-TRV.switchGlyph = async function(name) {
-	if (!TRV.font) return;
-	if (name === TRV.activeGlyph) return;
+FontRig.switchGlyph = async function(name) {
+	if (!FontRig.font) return;
+	if (name === FontRig.activeGlyph) return;
 
 	// Stash current glyph state into cache
-	if (TRV.activeGlyph && TRV.glyphCache.has(TRV.activeGlyph)) {
-		var current = TRV.glyphCache.get(TRV.activeGlyph);
-		current.selection = new Set(TRV.state.selectedNodeIds);
-		current.pan = { x: TRV.state.pan.x, y: TRV.state.pan.y };
-		current.zoom = TRV.state.zoom;
+	if (FontRig.activeGlyph && FontRig.glyphCache.has(FontRig.activeGlyph)) {
+		var current = FontRig.glyphCache.get(FontRig.activeGlyph);
+		current.selection = new Set(FontRig.state.selectedNodeIds);
+		current.pan = { x: FontRig.state.pan.x, y: FontRig.state.pan.y };
+		current.zoom = FontRig.state.zoom;
 	}
 
 	// Load glyph if not cached
-	if (!TRV.glyphCache.has(name)) {
-		var glyphData = await TRV.loadGlyphFile(name);
+	if (!FontRig.glyphCache.has(name)) {
+		var glyphData = await FontRig.loadGlyphFile(name);
 		if (!glyphData) return;
 
-		TRV.glyphCache.set(name, {
+		FontRig.glyphCache.set(name, {
 			glyphData: glyphData,
 			undoStack: [],
 			redoStack: [],
@@ -280,114 +280,114 @@ TRV.switchGlyph = async function(name) {
 		});
 
 		// LRU eviction
-		TRV._evictCache();
+		FontRig._evictCache();
 	}
 
 	// Activate
-	var entry = TRV.glyphCache.get(name);
-	TRV.activeGlyph = name;
-	TRV.state.glyphData = entry.glyphData;
-	TRV.state.rawXml = '';
+	var entry = FontRig.glyphCache.get(name);
+	FontRig.activeGlyph = name;
+	FontRig.state.glyphData = entry.glyphData;
+	FontRig.state.rawXml = '';
 
 	// Restore per-glyph state
-	TRV.state.selectedNodeIds = entry.selection;
+	FontRig.state.selectedNodeIds = entry.selection;
 
 	// Populate layer dropdown
-	TRV.dom.layerSelect.innerHTML = '';
+	FontRig.dom.layerSelect.innerHTML = '';
 	for (var i = 0; i < entry.glyphData.layers.length; i++) {
 		var layer = entry.glyphData.layers[i];
 		var opt = document.createElement('option');
 		opt.value = layer.name;
 		opt.textContent = layer.name || '(unnamed)';
-		TRV.dom.layerSelect.appendChild(opt);
+		FontRig.dom.layerSelect.appendChild(opt);
 	}
 
 	//if (entry.glyphData.layers.length > 0) {
-	//	TRV.state.activeLayer = entry.glyphData.layers[0].name;
-	//	TRV.dom.layerSelect.value = TRV.state.activeLayer;
+	//	FontRig.state.activeLayer = entry.glyphData.layers[0].name;
+	//	FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 	//}
 
 	// Glyph info in toolbar
 	var g = entry.glyphData;
-	var enc = TRV.font.encoding[name] || g.unicodes || '';
+	var enc = FontRig.font.encoding[name] || g.unicodes || '';
 	var infoHtml = '<span>' + (g.name || name) + '</span>';
 	if (enc) infoHtml += ' U+' + enc;
-	TRV.dom.glyphInfo.innerHTML = infoHtml;
+	FontRig.dom.glyphInfo.innerHTML = infoHtml;
 
-	TRV.dom.emptyState.classList.add('hidden');
+	FontRig.dom.emptyState.classList.add('hidden');
 
 	// Restore or fit viewport (skip in strip mode — zoom persists)
-	if (TRV.state.glyphViewMode && TRV.font) {
+	if (FontRig.state.glyphViewMode && FontRig.font) {
 		// Strip mode: zoom stays, just update strip membership
 	} else if (entry.pan !== null) {
-		TRV.state.pan = entry.pan;
-		TRV.state.zoom = entry.zoom;
+		FontRig.state.pan = entry.pan;
+		FontRig.state.zoom = entry.zoom;
 	} else {
-		TRV.fitToView();
+		FontRig.fitToView();
 	}
 
 	// Re-init multi-view if active
-	if (TRV.state.glyphViewMode) {
-		TRV.updateWorkspaceStrip();
-		TRV.state.activeCell = { row: 0, col: 0 };
-		TRV.syncActiveCellToLayer();
-	} else if (TRV.state.multiView) {
-		TRV.initMultiGrid();
+	if (FontRig.state.glyphViewMode) {
+		FontRig.updateWorkspaceStrip();
+		FontRig.state.activeCell = { row: 0, col: 0 };
+		FontRig.syncActiveCellToLayer();
+	} else if (FontRig.state.multiView) {
+		FontRig.initMultiGrid();
 	}
 
-	TRV.buildXmlPanel();
-	TRV.draw();
-	TRV.updateStatusSelected();
-	TRV.updateGlyphPanelActive();
+	FontRig.buildXmlPanel();
+	FontRig.draw();
+	FontRig.updateStatusSelected();
+	FontRig.updateGlyphPanelActive();
 };
 
 // -- LRU eviction ---------------------------------------------------
-TRV._evictCache = function() {
-	if (TRV.glyphCache.size <= TRV.CACHE_MAX) return;
+FontRig._evictCache = function() {
+	if (FontRig.glyphCache.size <= FontRig.CACHE_MAX) return;
 
 	// Evict oldest entries that aren't dirty or active
-	var keys = Array.from(TRV.glyphCache.keys());
+	var keys = Array.from(FontRig.glyphCache.keys());
 	for (var i = 0; i < keys.length; i++) {
-		if (TRV.glyphCache.size <= TRV.CACHE_MAX) break;
+		if (FontRig.glyphCache.size <= FontRig.CACHE_MAX) break;
 		var k = keys[i];
-		if (k === TRV.activeGlyph) continue;
-		if (TRV.dirtyGlyphs.has(k)) continue;
-		TRV.glyphCache.delete(k);
+		if (k === FontRig.activeGlyph) continue;
+		if (FontRig.dirtyGlyphs.has(k)) continue;
+		FontRig.glyphCache.delete(k);
 	}
 };
 
 // -- Per-glyph undo integration -------------------------------------
 // These replace the global stacks when a font is open.
-TRV._getUndoEntry = function() {
-	if (!TRV.font || !TRV.activeGlyph) return null;
-	return TRV.glyphCache.get(TRV.activeGlyph) || null;
+FontRig._getUndoEntry = function() {
+	if (!FontRig.font || !FontRig.activeGlyph) return null;
+	return FontRig.glyphCache.get(FontRig.activeGlyph) || null;
 };
 
 // -- Save dirty glyphs to disk --------------------------------------
-TRV.saveDirtyGlyphs = async function() {
-	if (!TRV.font || TRV.dirtyGlyphs.size === 0) return;
+FontRig.saveDirtyGlyphs = async function() {
+	if (!FontRig.font || FontRig.dirtyGlyphs.size === 0) return;
 
 	var saved = 0;
 	var errors = [];
 
-	for (var name of TRV.dirtyGlyphs) {
-		var entry = TRV.glyphCache.get(name);
+	for (var name of FontRig.dirtyGlyphs) {
+		var entry = FontRig.glyphCache.get(name);
 		if (!entry) continue;
 
-		var manifestEntry = TRV.font.manifestIndex[name];
+		var manifestEntry = FontRig.font.manifestIndex[name];
 		if (!manifestEntry) continue;
 
 		try {
-			var xmlString = TRV.glyphToXml(entry.glyphData);
-			await TRV._writeFile(TRV.font.dirHandle, manifestEntry.path, xmlString);
+			var xmlString = FontRig.glyphToXml(entry.glyphData);
+			await FontRig._writeFile(FontRig.font.dirHandle, manifestEntry.path, xmlString);
 			saved++;
 		} catch (e) {
 			errors.push(name + ': ' + e.message);
 		}
 	}
 
-	TRV.dirtyGlyphs.clear();
-	TRV.updateGlyphPanelDirty();
+	FontRig.dirtyGlyphs.clear();
+	FontRig.updateGlyphPanelDirty();
 
 	if (errors.length > 0) {
 		alert('Saved ' + saved + ' glyphs. Errors:\n' + errors.join('\n'));
@@ -395,7 +395,7 @@ TRV.saveDirtyGlyphs = async function() {
 };
 
 // -- Build glyph list panel -----------------------------------------
-TRV.buildGlyphPanel = function() {
+FontRig.buildGlyphPanel = function() {
 	var panel = document.getElementById('glyph-panel');
 	var list = document.getElementById('glyph-list');
 	var search = document.getElementById('glyph-search');
@@ -406,12 +406,12 @@ TRV.buildGlyphPanel = function() {
 	list.innerHTML = '';
 
 	// Disconnect previous observer
-	if (TRV._thumbObserver) TRV._thumbObserver.disconnect();
+	if (FontRig._thumbObserver) FontRig._thumbObserver.disconnect();
 
-	if (!TRV.font) return;
+	if (!FontRig.font) return;
 
-	for (var i = 0; i < TRV.font.manifest.length; i++) {
-		var entry = TRV.font.manifest[i];
+	for (var i = 0; i < FontRig.font.manifest.length; i++) {
+		var entry = FontRig.font.manifest[i];
 		var name = entry.alias || entry.name;
 		var div = document.createElement('div');
 		div.className = 'glyph-entry';
@@ -447,53 +447,53 @@ TRV.buildGlyphPanel = function() {
 	if (search) search.value = '';
 
 	// Show count
-	if (countEl) countEl.textContent = TRV.font.manifest.length;
+	if (countEl) countEl.textContent = FontRig.font.manifest.length;
 
 	// Setup IntersectionObserver for lazy thumbnail loading
-	TRV._thumbObserver = new IntersectionObserver(function(entries) {
+	FontRig._thumbObserver = new IntersectionObserver(function(entries) {
 		for (var i = 0; i < entries.length; i++) {
 			if (!entries[i].isIntersecting) continue;
 			var el = entries[i].target;
 			var name = el.dataset.name;
 			if (!name || el.dataset.thumbLoaded) continue;
-			TRV._queueThumbnail(name, el);
+			FontRig._queueThumbnail(name, el);
 		}
 	}, { root: list, rootMargin: '100px 0px' });
 
 	var allEntries = list.querySelectorAll('.glyph-entry');
 	for (var i = 0; i < allEntries.length; i++) {
-		TRV._thumbObserver.observe(allEntries[i]);
+		FontRig._thumbObserver.observe(allEntries[i]);
 	}
 };
 
 // -- Thumbnail rendering queue --------------------------------------
-TRV._thumbQueue = [];
-TRV._thumbRunning = false;
+FontRig._thumbQueue = [];
+FontRig._thumbRunning = false;
 
-TRV._queueThumbnail = function(name, el) {
+FontRig._queueThumbnail = function(name, el) {
 	// Skip if already queued or rendered
 	if (el.dataset.thumbLoaded) return;
-	TRV._thumbQueue.push({ name: name, el: el });
-	TRV._processThumbQueue();
+	FontRig._thumbQueue.push({ name: name, el: el });
+	FontRig._processThumbQueue();
 };
 
-TRV._processThumbQueue = async function() {
-	if (TRV._thumbRunning) return;
-	TRV._thumbRunning = true;
+FontRig._processThumbQueue = async function() {
+	if (FontRig._thumbRunning) return;
+	FontRig._thumbRunning = true;
 
-	while (TRV._thumbQueue.length > 0) {
-		var item = TRV._thumbQueue.shift();
+	while (FontRig._thumbQueue.length > 0) {
+		var item = FontRig._thumbQueue.shift();
 		var name = item.name;
 		var el = item.el;
 
 		if (el.dataset.thumbLoaded) continue;
 
 		// Load glyph if not cached
-		var cacheEntry = TRV.glyphCache.get(name);
+		var cacheEntry = FontRig.glyphCache.get(name);
 		var glyphData = cacheEntry ? cacheEntry.glyphData : null;
 
 		if (!glyphData) {
-			glyphData = await TRV.loadGlyphFile(name);
+			glyphData = await FontRig.loadGlyphFile(name);
 			if (!glyphData) {
 				el.dataset.thumbLoaded = 'empty';
 				continue;
@@ -502,20 +502,20 @@ TRV._processThumbQueue = async function() {
 			// Just use the data temporarily
 		}
 
-		TRV._renderThumbnail(el, glyphData);
+		FontRig._renderThumbnail(el, glyphData);
 		el.dataset.thumbLoaded = 'true';
 
 		// Yield every 8 thumbnails to keep UI responsive
-		if (TRV._thumbQueue.length > 0 && TRV._thumbQueue.length % 8 === 0) {
+		if (FontRig._thumbQueue.length > 0 && FontRig._thumbQueue.length % 8 === 0) {
 			await new Promise(function(r) { requestAnimationFrame(r); });
 		}
 	}
 
-	TRV._thumbRunning = false;
+	FontRig._thumbRunning = false;
 };
 
 // -- Render a single glyph thumbnail --------------------------------
-TRV._renderThumbnail = function(entryEl, glyphData) {
+FontRig._renderThumbnail = function(entryEl, glyphData) {
 	var cvs = entryEl.querySelector('.glyph-thumb');
 	if (!cvs) return;
 
@@ -524,13 +524,13 @@ TRV._renderThumbnail = function(entryEl, glyphData) {
 	var h = cvs.height;
 
 	// Find default layer (consistent across all glyphs)
-	var layerName = TRV.getDefaultLayerName(glyphData);
-	var layer = TRV.getLayerByName(glyphData, layerName);
+	var layerName = FontRig.getDefaultLayerName(glyphData);
+	var layer = FontRig.getLayerByName(glyphData, layerName);
 	if (!layer || layer.shapes.length === 0) return;
 
 	// Compute transform to fit glyph in thumbnail
-	var upm = TRV.font ? TRV.font.metrics.upm : 1000;
-	var desc = TRV.font ? Math.abs(TRV.font.metrics.descender) : 200;
+	var upm = FontRig.font ? FontRig.font.metrics.upm : 1000;
+	var desc = FontRig.font ? Math.abs(FontRig.font.metrics.descender) : 200;
 	var advW = layer.width || upm;
 	var totalH = upm + desc * 0.3;
 
@@ -547,7 +547,7 @@ TRV._renderThumbnail = function(entryEl, glyphData) {
 		for (var ki = 0; ki < shape.contours.length; ki++) {
 			var contour = shape.contours[ki];
 			if (!contour.closed || contour.nodes.length === 0) continue;
-			TRV._buildThumbPath(ctx, contour.nodes, scale, ox, oy);
+			FontRig._buildThumbPath(ctx, contour.nodes, scale, ox, oy);
 		}
 	}
 
@@ -556,7 +556,7 @@ TRV._renderThumbnail = function(entryEl, glyphData) {
 };
 
 // -- Build a contour path for thumbnail (mini version of buildContourPath)
-TRV._buildThumbPath = function(ctx, nodes, scale, ox, oy) {
+FontRig._buildThumbPath = function(ctx, nodes, scale, ox, oy) {
 	var n = nodes.length;
 	if (n === 0) return;
 
@@ -602,32 +602,32 @@ TRV._buildThumbPath = function(ctx, nodes, scale, ox, oy) {
 };
 
 // -- Refresh a single thumbnail after editing -----------------------
-TRV.refreshThumbnail = function(name) {
+FontRig.refreshThumbnail = function(name) {
 	var list = document.getElementById('glyph-list');
 	if (!list) return;
 	var entry = list.querySelector('.glyph-entry[data-name="' + name + '"]');
 	if (!entry) return;
 
-	var cacheEntry = TRV.glyphCache.get(name);
+	var cacheEntry = FontRig.glyphCache.get(name);
 	if (cacheEntry) {
 		entry.dataset.thumbLoaded = '';
-		TRV._renderThumbnail(entry, cacheEntry.glyphData);
+		FontRig._renderThumbnail(entry, cacheEntry.glyphData);
 		entry.dataset.thumbLoaded = 'true';
 	}
 };
 
 // -- Update active highlight in glyph panel -------------------------
-TRV.updateGlyphPanelActive = function() {
+FontRig.updateGlyphPanelActive = function() {
 	var list = document.getElementById('glyph-list');
 	if (!list) return;
 
-	var stripSet = new Set(TRV.workspace.glyphs);
+	var stripSet = new Set(FontRig.workspace.glyphs);
 
 	var entries = list.querySelectorAll('.glyph-entry');
 	for (var i = 0; i < entries.length; i++) {
 		var name = entries[i].dataset.name;
-		entries[i].classList.toggle('active', name === TRV.activeGlyph);
-		entries[i].classList.toggle('in-strip', TRV.state.glyphViewMode && stripSet.has(name));
+		entries[i].classList.toggle('active', name === FontRig.activeGlyph);
+		entries[i].classList.toggle('in-strip', FontRig.state.glyphViewMode && stripSet.has(name));
 	}
 
 	// Scroll active entry into view
@@ -636,18 +636,18 @@ TRV.updateGlyphPanelActive = function() {
 };
 
 // -- Update dirty dots in glyph panel -------------------------------
-TRV.updateGlyphPanelDirty = function() {
+FontRig.updateGlyphPanelDirty = function() {
 	var list = document.getElementById('glyph-list');
 	if (!list) return;
 
 	var entries = list.querySelectorAll('.glyph-entry');
 	for (var i = 0; i < entries.length; i++) {
-		entries[i].classList.toggle('dirty', TRV.dirtyGlyphs.has(entries[i].dataset.name));
+		entries[i].classList.toggle('dirty', FontRig.dirtyGlyphs.has(entries[i].dataset.name));
 	}
 };
 
 // -- Filter glyph list by search text -------------------------------
-TRV.filterGlyphPanel = function(query) {
+FontRig.filterGlyphPanel = function(query) {
 	var list = document.getElementById('glyph-list');
 	if (!list) return;
 
@@ -660,30 +660,30 @@ TRV.filterGlyphPanel = function(query) {
 };
 
 // -- Update font info in toolbar ------------------------------------
-TRV.updateFontInfo = function() {
-	if (!TRV.font) return;
-	var info = TRV.font.info;
-	document.title = TRV.getCurrentTheme().appTitle + ' | ' + info.family + ' ' + info.style;
+FontRig.updateFontInfo = function() {
+	if (!FontRig.font) return;
+	var info = FontRig.font.info;
+	document.title = FontRig.getCurrentTheme().appTitle + ' | ' + info.family + ' ' + info.style;
 };
 
 
 // -- Unsaved changes warning ----------------------------------------
 window.addEventListener('beforeunload', function(e) {
-	if (TRV.dirtyGlyphs.size > 0) {
+	if (FontRig.dirtyGlyphs.size > 0) {
 		e.preventDefault();
 		e.returnValue = '';
 	}
 });
 
 // -- Step to next/previous glyph in manifest ------------------------
-TRV.stepGlyph = function(direction) {
-	if (!TRV.font || !TRV.activeGlyph) return;
+FontRig.stepGlyph = function(direction) {
+	if (!FontRig.font || !FontRig.activeGlyph) return;
 
-	var manifest = TRV.font.manifest;
+	var manifest = FontRig.font.manifest;
 	var idx = -1;
 	for (var i = 0; i < manifest.length; i++) {
 		var name = manifest[i].alias || manifest[i].name;
-		if (name === TRV.activeGlyph) { idx = i; break; }
+		if (name === FontRig.activeGlyph) { idx = i; break; }
 	}
 
 	if (idx < 0) return;
@@ -693,5 +693,5 @@ TRV.stepGlyph = function(direction) {
 	if (newIdx >= manifest.length) newIdx = 0;
 
 	var newName = manifest[newIdx].alias || manifest[newIdx].name;
-	TRV.switchGlyph(newName);
+	FontRig.switchGlyph(newName);
 };

@@ -4,14 +4,14 @@
 'use strict';
 
 // -- Layer helpers ---------------------------------------------------
-TRV.getActiveLayer = function() {
-	if (!TRV.state.glyphData) return null;
-	const name = TRV.state.activeLayer;
-	return TRV.state.glyphData.layers.find(l => l.name === name)
-		|| TRV.state.glyphData.layers[0] || null;
+FontRig.getActiveLayer = function() {
+	if (!FontRig.state.glyphData) return null;
+	const name = FontRig.state.activeLayer;
+	return FontRig.state.glyphData.layers.find(l => l.name === name)
+		|| FontRig.state.glyphData.layers[0] || null;
 };
 
-TRV.getAllNodes = function(layer) {
+FontRig.getAllNodes = function(layer) {
 	const nodes = [];
 	if (!layer) return nodes;
 	let ci = 0;
@@ -37,8 +37,8 @@ TRV.getAllNodes = function(layer) {
 };
 
 // -- Node manipulation ----------------------------------------------
-TRV.findNodeById = function(nodeId) {
-	const layer = TRV.getActiveLayer();
+FontRig.findNodeById = function(nodeId) {
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return null;
 
 	let ci = 0;
@@ -55,8 +55,8 @@ TRV.findNodeById = function(nodeId) {
 	return null;
 };
 
-TRV.updateNodePosition = function(nodeId, gx, gy) {
-	const ref = TRV.findNodeById(nodeId);
+FontRig.updateNodePosition = function(nodeId, gx, gy) {
+	const ref = FontRig.findNodeById(nodeId);
 	if (!ref) return;
 
 	ref.node.x = Math.round(gx * 10) / 10;
@@ -64,17 +64,17 @@ TRV.updateNodePosition = function(nodeId, gx, gy) {
 };
 
 // -- Coordinate transforms ------------------------------------------
-TRV.glyphToScreen = function(gx, gy) {
+FontRig.glyphToScreen = function(gx, gy) {
 	return {
-		x: gx * TRV.state.zoom + TRV.state.pan.x,
-		y: -gy * TRV.state.zoom + TRV.state.pan.y,
+		x: gx * FontRig.state.zoom + FontRig.state.pan.x,
+		y: -gy * FontRig.state.zoom + FontRig.state.pan.y,
 	};
 };
 
-TRV.screenToGlyph = function(sx, sy) {
+FontRig.screenToGlyph = function(sx, sy) {
 	return {
-		x: (sx - TRV.state.pan.x) / TRV.state.zoom,
-		y: -(sy - TRV.state.pan.y) / TRV.state.zoom,
+		x: (sx - FontRig.state.pan.x) / FontRig.state.zoom,
+		y: -(sy - FontRig.state.pan.y) / FontRig.state.zoom,
 	};
 };
 
@@ -83,7 +83,7 @@ TRV.screenToGlyph = function(sx, sy) {
 // When tx is null/undefined the point passes through unchanged.
 // Python affine convention: x' = xx*x + yx*y + dx
 //                           y' = xy*x + yy*y + dy
-TRV.txGlyphToScreen = function(tx, x, y) {
+FontRig.txGlyphToScreen = function(tx, x, y) {
 	if (tx && tx.length === 6) {
 		// Python Transform convention: [xx, xy, yx, yy, dx, dy]
 		// x' = xx*x + yx*y + dx
@@ -93,12 +93,12 @@ TRV.txGlyphToScreen = function(tx, x, y) {
 		x = nx;
 		y = ny;
 	}
-	return TRV.glyphToScreen(x, y);
+	return FontRig.glyphToScreen(x, y);
 };
 
 // -- Hit test: anchor (screen coords) -------------------------------
-TRV.hitTestAnchor = function(sx, sy, radius) {
-	var layer = TRV.getActiveLayer();
+FontRig.hitTestAnchor = function(sx, sy, radius) {
+	var layer = FontRig.getActiveLayer();
 	if (!layer || !layer.anchors) return null;
 
 	var r2 = (radius || 10) * (radius || 10);
@@ -107,7 +107,7 @@ TRV.hitTestAnchor = function(sx, sy, radius) {
 
 	for (var i = 0; i < layer.anchors.length; i++) {
 		var a = layer.anchors[i];
-		var sp = TRV.glyphToScreen(a.x, a.y);
+		var sp = FontRig.glyphToScreen(a.x, a.y);
 		var dx = sp.x - sx;
 		var dy = sp.y - sy;
 		var d2 = dx * dx + dy * dy;
@@ -120,18 +120,18 @@ TRV.hitTestAnchor = function(sx, sy, radius) {
 };
 
 // -- Hit test: single node ------------------------------------------
-TRV.hitTestNode = function(sx, sy, radius) {
-	const layer = TRV.getActiveLayer();
+FontRig.hitTestNode = function(sx, sy, radius) {
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return null;
 
 	const r2 = (radius || 8) * (radius || 8);
-	const allNodes = TRV.getAllNodes(layer);
+	const allNodes = FontRig.getAllNodes(layer);
 
 	let closest = null;
 	let closestDist = Infinity;
 
 	for (const node of allNodes) {
-		const sp = TRV.txGlyphToScreen(node.shapeTx, node.x, node.y);
+		const sp = FontRig.txGlyphToScreen(node.shapeTx, node.x, node.y);
 		const dx = sp.x - sx;
 		const dy = sp.y - sy;
 		const d2 = dx * dx + dy * dy;
@@ -145,8 +145,8 @@ TRV.hitTestNode = function(sx, sy, radius) {
 };
 
 // -- Hit test: rectangle (screen coords) ----------------------------
-TRV.hitTestRect = function(x1, y1, x2, y2) {
-	const layer = TRV.getActiveLayer();
+FontRig.hitTestRect = function(x1, y1, x2, y2) {
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return [];
 
 	const minX = Math.min(x1, x2);
@@ -154,11 +154,11 @@ TRV.hitTestRect = function(x1, y1, x2, y2) {
 	const minY = Math.min(y1, y2);
 	const maxY = Math.max(y1, y2);
 
-	const allNodes = TRV.getAllNodes(layer);
+	const allNodes = FontRig.getAllNodes(layer);
 	const ids = [];
 
 	for (const node of allNodes) {
-		const sp = TRV.txGlyphToScreen(node.shapeTx, node.x, node.y);
+		const sp = FontRig.txGlyphToScreen(node.shapeTx, node.x, node.y);
 		if (sp.x >= minX && sp.x <= maxX && sp.y >= minY && sp.y <= maxY) {
 			ids.push(node.id);
 		}
@@ -168,18 +168,18 @@ TRV.hitTestRect = function(x1, y1, x2, y2) {
 };
 
 // -- Hit test: lasso polygon (screen coords) ------------------------
-TRV.hitTestLasso = function(points) {
+FontRig.hitTestLasso = function(points) {
 	if (points.length < 3) return [];
 
-	const layer = TRV.getActiveLayer();
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return [];
 
-	const allNodes = TRV.getAllNodes(layer);
+	const allNodes = FontRig.getAllNodes(layer);
 	const ids = [];
 
 	for (const node of allNodes) {
-		const sp = TRV.txGlyphToScreen(node.shapeTx, node.x, node.y);
-		if (TRV.pointInPolygon(sp.x, sp.y, points)) {
+		const sp = FontRig.txGlyphToScreen(node.shapeTx, node.x, node.y);
+		if (FontRig.pointInPolygon(sp.x, sp.y, points)) {
 			ids.push(node.id);
 		}
 	}
@@ -188,7 +188,7 @@ TRV.hitTestLasso = function(points) {
 };
 
 // -- Point-in-polygon (ray casting) ---------------------------------
-TRV.pointInPolygon = function(px, py, polygon) {
+FontRig.pointInPolygon = function(px, py, polygon) {
 	let inside = false;
 	const n = polygon.length;
 
@@ -206,25 +206,25 @@ TRV.pointInPolygon = function(px, py, polygon) {
 };
 
 // -- Mask layer helpers ---------------------------------------------
-TRV.isMaskLayer = function(layerName) {
+FontRig.isMaskLayer = function(layerName) {
 	return layerName && layerName.toLowerCase().startsWith('mask.');
 };
 
 // Get the mask layer object for a given layer name, or null
-TRV.getMaskFor = function(layerName) {
-	if (!TRV.state.glyphData) return null;
+FontRig.getMaskFor = function(layerName) {
+	if (!FontRig.state.glyphData) return null;
 	const maskName = 'mask.' + layerName;
-	return TRV.state.glyphData.layers.find(
+	return FontRig.state.glyphData.layers.find(
 		l => l.name.toLowerCase() === maskName.toLowerCase()
 	) || null;
 };
 
 // Get indices of non-mask layers (for grid population)
-TRV.getNonMaskLayerIndices = function() {
-	if (!TRV.state.glyphData) return [];
+FontRig.getNonMaskLayerIndices = function() {
+	if (!FontRig.state.glyphData) return [];
 	const indices = [];
-	TRV.state.glyphData.layers.forEach(function(layer, i) {
-		if (!TRV.isMaskLayer(layer.name)) indices.push(i);
+	FontRig.state.glyphData.layers.forEach(function(layer, i) {
+		if (!FontRig.isMaskLayer(layer.name)) indices.push(i);
 	});
 	return indices;
 };
@@ -235,11 +235,11 @@ TRV.getNonMaskLayerIndices = function() {
 //   1. isPointInPath (click inside filled contour)
 //   2. isPointInStroke (click on outline edge)
 //   3. Nearest node proximity fallback (for edge cases)
-TRV.hitTestContour = function(sx, sy, tolerance) {
-	const layer = TRV.getActiveLayer();
+FontRig.hitTestContour = function(sx, sy, tolerance) {
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return -1;
 
-	const ctx = TRV.dom.ctx;
+	const ctx = FontRig.dom.ctx;
 	tolerance = tolerance || 8;
 
 	// Reset transform to identity for accurate hit testing —
@@ -258,14 +258,14 @@ TRV.hitTestContour = function(sx, sy, tolerance) {
 			if (contour.nodes.length < 2) { ci++; continue; }
 
 			ctx.beginPath();
-			TRV.buildContourPath(contour, shape.transform);
+			FontRig.buildContourPath(contour, shape.transform);
 
 			// Check filled area (closed contours)
 			if (ctx.isPointInPath(sx, sy, 'nonzero')) {
 				// Compute bounding box area for size comparison
 				var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 				for (var ni = 0; ni < contour.nodes.length; ni++) {
-					var sp = TRV.glyphToScreen(contour.nodes[ni].x, contour.nodes[ni].y);
+					var sp = FontRig.glyphToScreen(contour.nodes[ni].x, contour.nodes[ni].y);
 					if (sp.x < minX) minX = sp.x;
 					if (sp.y < minY) minY = sp.y;
 					if (sp.x > maxX) maxX = sp.x;
@@ -310,7 +310,7 @@ TRV.hitTestContour = function(sx, sy, tolerance) {
 			if (contour.nodes.length < 2) { ci++; continue; }
 
 			for (const node of contour.nodes) {
-				const sp = TRV.txGlyphToScreen(shape.transform, node.x, node.y);
+				const sp = FontRig.txGlyphToScreen(shape.transform, node.x, node.y);
 				const dx = sp.x - sx;
 				const dy = sp.y - sy;
 				const d2 = dx * dx + dy * dy;
@@ -328,8 +328,8 @@ TRV.hitTestContour = function(sx, sy, tolerance) {
 };
 
 // Return all node IDs belonging to contour index ci
-TRV.getContourNodeIds = function(ci) {
-	const layer = TRV.getActiveLayer();
+FontRig.getContourNodeIds = function(ci) {
+	const layer = FontRig.getActiveLayer();
 	if (!layer) return [];
 
 	let idx = 0;

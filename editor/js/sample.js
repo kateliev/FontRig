@@ -4,7 +4,7 @@
 'use strict';
 
 // Provide a sample glyph so the viewer isn't empty on first load
-TRV.loadSampleGlyph = function() {
+FontRig.loadSampleGlyph = function() {
 	const sampleXml = `<?xml version="1.0" encoding="UTF-8"?>
 <glyph mark="0" name="a" selected="False" unicodes="[97]">
 	<layer height="0" name="Light" width="534">
@@ -121,8 +121,8 @@ TRV.loadSampleGlyph = function() {
 	</layer>
 </glyph>`;
 
-	TRV.loadXmlString(sampleXml, 'sample_A.trglyph');
+	FontRig.loadXmlString(sampleXml, 'sample_A.trglyph');
 };
 
 // -- Init -----------------------------------------------------------
-TRV.loadSampleGlyph();
+FontRig.loadSampleGlyph();

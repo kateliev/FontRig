@@ -6,11 +6,11 @@
 // ===================================================================
 'use strict';
 
-TRV.theme = {
-	appTitle: 		'TR:EDIT', 
+FontRig.theme = {
+	appTitle: 		'FontRig', 
 };
 
-TRV.themeDark = {
+FontRig.themeDark = {
 	// -- Canvas background ------------------------------------------
 	bgFilled:       '#18181b',
 	bgOutline:      '#1a1a1e',
@@ -145,7 +145,7 @@ TRV.themeDark = {
 	},
 };
 
-TRV.themeLight = {
+FontRig.themeLight = {
 	// -- Canvas background ------------------------------------------
 	bgFilled:       '#ffffff',
 	bgOutline:      '#f5f5f5',
@@ -280,21 +280,21 @@ TRV.themeLight = {
 };
 
 // -- Get current theme based on body attribute ----------------------
-TRV.getCurrentTheme = function() {
+FontRig.getCurrentTheme = function() {
 	var body = document.body;
 	if (body.getAttribute('data-theme') === 'light') {
-		return TRV.themeLight;
+		return FontRig.themeLight;
 	}
-	return TRV.themeDark;
+	return FontRig.themeDark;
 };
 
 // -- Helpers --------------------------------------------------------
-TRV.getLayerColor = function(layerIdx) {
-	const colors = TRV.getCurrentTheme().layerColors;
+FontRig.getLayerColor = function(layerIdx) {
+	const colors = FontRig.getCurrentTheme().layerColors;
 	return colors[layerIdx % colors.length];
 };
 
-TRV.getBgColor = function() {
-	const theme = TRV.getCurrentTheme();
-	return TRV.state.filled ? theme.bgFilled : theme.bgOutline;
+FontRig.getBgColor = function() {
+	const theme = FontRig.getCurrentTheme();
+	return FontRig.state.filled ? theme.bgFilled : theme.bgOutline;
 };
