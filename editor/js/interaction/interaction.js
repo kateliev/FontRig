@@ -2476,11 +2476,7 @@ FontRig.updateCanvasCursor = function() {
 	const wrap = FontRig.dom.canvasWrap;
 	const state = FontRig.state;
 	if (state.spaceDown) {
-		wrap.style.cursor = state.isPanning ? 'grabbing' : 'grab';
-	} else if (state.isDragging) {
-		wrap.style.cursor = 'move';
-	} else if (state.isSelecting) {
-		wrap.style.cursor = state.selectMode === 'lasso' ? 'default' : 'crosshair';
+		wrap.style.cursor = 'grab';
 	} else {
 		wrap.style.cursor = 'default';
 	}

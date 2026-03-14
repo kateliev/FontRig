@@ -10,567 +10,29 @@
 const state = FontRig.state;
 const dom = FontRig.dom;
 
-// -- Helpers for multi-view coordinate handling ----------------------
-
-// Which cell was clicked (split or joined)
-function getCellAtScreen(sx, sy) {
-	if (!state.multiView) return null;
-	if (state.joinedView) return FontRig.getJoinedCellAt(sx, sy);
-	return FontRig.getCellAt(sx, sy);
-}
-
-// Get screen coords suitable for hit testing in active cell.
-// Split mode: cell-relative. Joined/single/strip: absolute.
-function interactionCoords(sx, sy) {
-	if (state.multiView && !state.joinedView && !state.glyphViewMode) {
-		const cell = FontRig.getCellRect(state.activeCell.row, state.activeCell.col);
-		return { sx: sx - cell.x, sy: sy - cell.y };
-	}
-	return { sx: sx, sy: sy };
-}
-
-// Execute fn with pan shifted for active cell (joined/strip mode)
-function withActiveOffset(fn) {
-	if (state.glyphViewMode && FontRig.font) {
-		FontRig.withStripOffset(state.activeCell.row, state.activeCell.col, fn);
-	} else if (state.multiView && state.joinedView) {
-		FontRig.withJoinedOffset(state.activeCell.row, state.activeCell.col, fn);
-	} else {
-		fn();
-	}
-}
+// -- Coordinate helpers moved to FontRig._* in stream-handlers.js ---
 
 // ===================================================================
-// Mouse: click, drag, selection, pan
+// Mouse: stream-based interaction via MouseTracker
 // ===================================================================
-dom.canvasWrap.addEventListener('mousedown', function(e) {
-	if (e.button !== 0) return;
+// All mouse interactions (drag, select, pan) are now handled as async
+// functions consuming EventStreams. See stream-handlers.js for the
+// individual interaction implementations.
+//
+// The MouseTracker creates an EventStream on mousedown and routes
+// mousemove/mouseup events into it. The dispatch function
+// (handleCanvasDrag) does hit testing and delegates to the appropriate
+// async handler. Hover events go to handleCanvasHover.
+// ===================================================================
 
-	// Skip if click is on a glyph widget
-	if (e.target.closest('#glyph-widget') || e.target.closest('#glyph-widgets')) {
-		return;
+FontRig._mouseTracker = new FontRig.MouseTracker({
+	element: dom.canvasWrap,
+	drag: function(stream, initialEvent) {
+		return FontRig.handleCanvasDrag(stream, initialEvent);
+	},
+	hover: function(event) {
+		FontRig.handleCanvasHover(event);
 	}
-
-	const rect = dom.canvas.getBoundingClientRect();
-	const absSx = e.clientX - rect.left;
-	const absSy = e.clientY - rect.top;
-
-	// -- Spacebar held -> pan mode
-	if (state.spaceDown) {
-		state.isPanning = true;
-		state.lastMouse = { x: e.clientX, y: e.clientY };
-		dom.canvasWrap.style.cursor = 'grabbing';
-		return;
-	}
-
-	// -- Glyph strip: click to switch glyph or layer cell
-	if (state.glyphViewMode && FontRig.font) {
-		var stripHit = FontRig.getStripSlotAt(absSx, absSy);
-		if (stripHit) {
-			// Check close button on non-active slots
-			if (!stripHit.slot.active && FontRig.workspace._closeRects) {
-				var cr = FontRig.workspace._closeRects[stripHit.slot.name];
-				if (cr && absSx >= cr.x && absSx <= cr.x + cr.w &&
-					absSy >= cr.y && absSy <= cr.y + cr.h) {
-					FontRig.removeGlyphFromStrip(stripHit.slot.name);
-					FontRig.updateGlyphPanelActive();
-					return;
-				}
-			}
-
-			if (stripHit.slot.active) {
-				// Clicked active glyph — switch layer cell if different
-				if (stripHit.row !== state.activeCell.row || stripHit.col !== state.activeCell.col) {
-					FontRig.setActiveCell(stripHit.row, stripHit.col);
-				}
-			} else {
-				// Clicked non-active glyph — switch to it
-				FontRig.switchGlyph(stripHit.slot.name);
-				return;
-			}
-		}
-	}
-
-	// -- Multi-view: switch active cell on click
-	if (state.multiView && !state.glyphViewMode) {
-		const clicked = getCellAtScreen(absSx, absSy);
-		if (clicked && (clicked.row !== state.activeCell.row || clicked.col !== state.activeCell.col)) {
-			FontRig.setActiveCell(clicked.row, clicked.col);
-		}
-	}
-
-	// Interaction coords (cell-relative in split, absolute in joined/single)
-	const { sx, sy } = interactionCoords(absSx, absSy);
-
-	// -- Transform frame: check before node hit test
-	if (FontRig.tf.active) {
-		var tfHandled = false;
-		withActiveOffset(function() {
-			tfHandled = FontRig.tfMouseDown(sx, sy, e);
-		});
-		if (tfHandled) {
-			FontRig.draw();
-			return;
-		}
-	}
-
-	// -- Check node hit (with pan offset in joined mode)
-	if (state.showNodes) {
-		let hit = null;
-		withActiveOffset(function() {
-			hit = FontRig.hitTestNode(sx, sy);
-		});
-		if (hit) {
-			if (e.shiftKey) {
-				FontRig.selectNode(hit.id, true);
-			} else if (!state.selectedNodeIds.has(hit.id)) {
-				FontRig.selectNode(hit.id, false);
-			}
-			startDrag(sx, sy, e);
-			return;
-		}
-
-		// -- Check segment hit: grab cubic segments for direct manipulation
-		let segHit = null;
-		withActiveOffset(function() {
-			segHit = FontRig.hitTestSegment(sx, sy);
-		});
-		if (segHit && segHit.seg.type === 'cubic') {
-			let gp;
-			withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
-
-			// Select the segment's nodes
-			var seg = segHit.seg;
-			var ci = segHit.ci;
-			var ids = [
-				'c' + ci + '_n' + seg.startIdx,
-				'c' + ci + '_n' + seg.endIdx,
-				'c' + ci + '_n' + seg.offIdx1,
-				'c' + ci + '_n' + seg.offIdx2
-			];
-			FontRig.selectNodes(ids, e.shiftKey);
-
-			// Bernstein basis values at hit t
-			var t = segHit.t;
-			var u = 1 - t;
-			var B1 = 3 * u * u * t;
-			var B2 = 3 * u * t * t;
-			var denom = B1 * B1 + B2 * B2;
-
-			FontRig.pushUndo();
-			state.isDragging = true;
-			state.segmentDrag = {
-				ci: ci,
-				seg: seg,
-				t: t,
-				B1: B1,
-				B2: B2,
-				denom: denom,
-				h1Id: 'c' + ci + '_n' + seg.offIdx1,
-				h2Id: 'c' + ci + '_n' + seg.offIdx2,
-				h1Start: { x: segHit.contour.nodes[seg.offIdx1].x, y: segHit.contour.nodes[seg.offIdx1].y },
-				h2Start: { x: segHit.contour.nodes[seg.offIdx2].x, y: segHit.contour.nodes[seg.offIdx2].y }
-			};
-			state.dragOriginGlyph = { x: gp.x, y: gp.y };
-			dom.canvasWrap.style.cursor = 'move';
-			return;
-		}
-
-		// Quadratic segment click: select all 3 nodes (no drag-reshape)
-		if (segHit && segHit.seg.type === 'quadratic') {
-			var seg = segHit.seg;
-			var ci = segHit.ci;
-			var ids = [
-				'c' + ci + '_n' + seg.startIdx,
-				'c' + ci + '_n' + seg.endIdx,
-				'c' + ci + '_n' + seg.offIdx
-			];
-			FontRig.selectNodes(ids, e.shiftKey);
-			return;
-		}
-	}
-
-	// -- Check anchor hit
-	if (state.showAnchors) {
-		let anchorIdx = null;
-		withActiveOffset(function() {
-			anchorIdx = FontRig.hitTestAnchor(sx, sy);
-		});
-		if (anchorIdx !== null) {
-			FontRig.pushUndo();
-			state.isDragging = true;
-			state.dragAnchorIdx = anchorIdx;
-			let gp;
-			withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
-			state.dragOriginGlyph = { x: gp.x, y: gp.y };
-			dom.canvasWrap.style.cursor = 'move';
-			return;
-		}
-	}
-
-	// -- No node hit: begin selection mode
-	// Skip if this is the second click of a double-click (let dblclick handle it)
-	if (e.detail >= 2) return;
-
-	if (e.altKey) {
-		// Alt+drag: lasso selection
-		state.isSelecting = true;
-		state.selectMode = 'lasso';
-		state.selectLassoPoints = [{ x: sx, y: sy }];
-		dom.canvasWrap.style.cursor = 'default';
-	} else {
-		// Plain drag on empty: rect selection
-		state.isSelecting = true;
-		state.selectMode = 'rect';
-		state.selectStartScreen = { x: sx, y: sy };
-		state.selectCurrentScreen = { x: sx, y: sy };
-		dom.canvasWrap.style.cursor = 'crosshair';
-	}
-
-	// Clear existing selection unless shift held
-	if (!e.shiftKey) {
-		state.selectedNodeIds.clear();
-		FontRig.draw();
-		FontRig.updateStatusSelected();
-	}
-});
-
-function startDrag(sx, sy, e) {
-	FontRig.pushUndo();
-	let gp;
-	withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
-	state.isDragging = true;
-	state.dragOriginGlyph = { x: gp.x, y: gp.y };
-
-	// Alt+drag: move on-curve only, handles stay put
-	state.dragAltMode = !!(e && e.altKey);
-
-	// Save start positions for all selected nodes
-	state.dragStartPositions = new Map();
-	for (const nodeId of state.selectedNodeIds) {
-		const ref = FontRig.findNodeById(nodeId);
-		if (ref) {
-			state.dragStartPositions.set(nodeId, { x: ref.node.x, y: ref.node.y });
-		}
-	}
-
-	// Add follower handles unless Alt is held (detached mode)
-	if (!state.dragAltMode) {
-		var followers = FontRig.getFollowerHandles(state.selectedNodeIds);
-		for (const [id, pos] of followers) {
-			if (!state.dragStartPositions.has(id)) {
-				state.dragStartPositions.set(id, { x: pos.x, y: pos.y });
-			}
-		}
-	}
-
-	// Compute tangent constraints for smooth on-curves
-	state.dragTangents = FontRig.computeDragTangents(state.dragStartPositions);
-
-	// Slide mode: if S/A/E is already held, initialize slide
-	state.slideData = null;
-	if (state.selectedNodeIds.size === 1) {
-		var slideNodeId = state.selectedNodeIds.values().next().value;
-		if (state.sKeyDown) {
-			state.slideData = FontRig.initSlideMode(slideNodeId, 'curve');
-		} else if (state.aKeyDown) {
-			state.slideData = FontRig.initSlideMode(slideNodeId, 'line');
-		}
-	}
-
-	dom.canvasWrap.style.cursor = 'move';
-}
-
-window.addEventListener('mousemove', function(e) {
-	const rect = dom.canvas.getBoundingClientRect();
-	const absSx = e.clientX - rect.left;
-	const absSy = e.clientY - rect.top;
-
-	// Preview mode: track cursor for proximity-reveal nodes
-	state.previewMouse = { x: absSx, y: absSy };
-
-	const { sx, sy } = interactionCoords(absSx, absSy);
-
-	// Cursor position in glyph coords (offset-aware)
-	let gp;
-	withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
-	dom.statusCursor.textContent = Math.round(gp.x) + ', ' + Math.round(gp.y);
-
-	// -- Transform frame drag
-	if (FontRig.tf.active && FontRig.tf.dragType) {
-		var tfHandled = false;
-		withActiveOffset(function() {
-			tfHandled = FontRig.tfMouseMove(sx, sy, e);
-		});
-		if (tfHandled) {
-			FontRig.draw(); // draw AFTER offset is restored
-			return;
-		}
-	}
-
-	// -- Rect selection
-	if (state.isSelecting && state.selectMode === 'rect') {
-		state.selectCurrentScreen = { x: sx, y: sy };
-
-		let ids;
-		withActiveOffset(function() {
-			ids = FontRig.hitTestRect(
-				state.selectStartScreen.x, state.selectStartScreen.y,
-				sx, sy
-			);
-		});
-		if (!e.shiftKey) state.selectedNodeIds.clear();
-		for (const id of ids) state.selectedNodeIds.add(id);
-
-		FontRig.draw();
-		FontRig.updateStatusSelected();
-		return;
-	}
-
-	// -- Lasso selection
-	if (state.isSelecting && state.selectMode === 'lasso') {
-		state.selectLassoPoints.push({ x: sx, y: sy });
-
-		let ids;
-		withActiveOffset(function() {
-			ids = FontRig.hitTestLasso(state.selectLassoPoints);
-		});
-		if (!e.shiftKey) state.selectedNodeIds.clear();
-		for (const id of ids) state.selectedNodeIds.add(id);
-
-		FontRig.draw();
-		FontRig.updateStatusSelected();
-		return;
-	}
-
-	// -- Segment drag: reshape curve by distributing delta to handles
-	if (state.isDragging && state.segmentDrag) {
-		withActiveOffset(function() {
-			const dgp = FontRig.screenToGlyph(sx, sy);
-			var dx = dgp.x - state.dragOriginGlyph.x;
-			var dy = dgp.y - state.dragOriginGlyph.y;
-
-			// Shift constraint: lock to dominant axis
-			if (e.shiftKey) {
-				if (Math.abs(dx) > Math.abs(dy)) dy = 0;
-				else dx = 0;
-			}
-
-			var sd = state.segmentDrag;
-			// Distribute delta to handles weighted by Bernstein basis
-			var w1 = sd.B1 / sd.denom;
-			var w2 = sd.B2 / sd.denom;
-
-			FontRig.updateNodePosition(sd.h1Id, sd.h1Start.x + dx * w1, sd.h1Start.y + dy * w1);
-			FontRig.updateNodePosition(sd.h2Id, sd.h2Start.x + dx * w2, sd.h2Start.y + dy * w2);
-
-			// Enforce collinearity on smooth nodes at segment endpoints
-			var movedHandles = new Set([sd.h1Id, sd.h2Id]);
-			FontRig.enforceSmoothCollinearity(movedHandles);
-		});
-
-		FontRig.draw();
-		FontRig.updateStatusSelected();
-		return;
-	}
-
-	// -- Anchor drag
-	if (state.isDragging && state.dragAnchorIdx !== null) {
-		withActiveOffset(function() {
-			var gp = FontRig.screenToGlyph(sx, sy);
-			var layer = FontRig.getActiveLayer();
-			if (layer && layer.anchors && layer.anchors[state.dragAnchorIdx]) {
-				var a = layer.anchors[state.dragAnchorIdx];
-				// Shift constraint: lock to axis
-				if (e.shiftKey) {
-					var dx = Math.abs(gp.x - state.dragOriginGlyph.x);
-					var dy = Math.abs(gp.y - state.dragOriginGlyph.y);
-					if (dx > dy) gp.y = state.dragOriginGlyph.y;
-					else gp.x = state.dragOriginGlyph.x;
-				}
-				a.x = Math.round(gp.x);
-				a.y = Math.round(gp.y);
-			}
-		});
-		FontRig.draw();
-		return;
-	}
-
-// -- Node drag (moves all selected + follower handles)
-	// No XML sync during drag — canvas is source of truth
-	if (state.isDragging && state.dragStartPositions) {
-		withActiveOffset(function() {
-			const dgp = FontRig.screenToGlyph(sx, sy);
-
-			// Slide mode: S held, project node along contour
-			if (state.slideData) {
-				FontRig.performSlide(state.slideData, dgp.x, dgp.y);
-				return;
-			}
-
-			var dx = dgp.x - state.dragOriginGlyph.x;
-			var dy = dgp.y - state.dragOriginGlyph.y;
-
-			// Shift constraint: lock to dominant axis
-			if (e.shiftKey) {
-				if (Math.abs(dx) > Math.abs(dy)) dy = 0;
-				else dx = 0;
-			}
-
-			// Position all nodes absolutely (selected + followers)
-			for (const [nodeId, startPos] of state.dragStartPositions) {
-				var effDx = dx, effDy = dy;
-
-				// Constrained smooth: project onto tangent direction
-				// locked tangents (line-curve) always active; free tangents (curve-curve) need Ctrl
-				var tan = state.dragTangents ? state.dragTangents.get(nodeId) : null;
-				if (tan && (tan.locked || e.ctrlKey || e.metaKey)) {
-					var proj = FontRig.projectOntoTangent(dx, dy, tan);
-					effDx = proj.dx;
-					effDy = proj.dy;
-				}
-
-				FontRig.updateNodePosition(nodeId, startPos.x + effDx, startPos.y + effDy);
-			}
-
-			// Follower handles of constrained nodes need the same projected delta
-			if (state.dragTangents && state.dragTangents.size > 0) {
-				for (const [onId, tangent] of state.dragTangents) {
-					if (!tangent.locked && !e.ctrlKey && !e.metaKey) continue;
-					var proj = FontRig.projectOntoTangent(dx, dy, tangent);
-					// Find follower handles for this on-curve and reposition them
-					var m = onId.match(/^c(\d+)_n(\d+)$/);
-					if (!m) continue;
-					var ci = parseInt(m[1]), ni = parseInt(m[2]);
-					var ref = FontRig.findNodeById(onId);
-					if (!ref) continue;
-					var nodes = ref.contour.nodes;
-					var n = nodes.length;
-					var prevId = 'c' + ci + '_n' + ((ni - 1 + n) % n);
-					var nextId = 'c' + ci + '_n' + ((ni + 1) % n);
-					// Only reposition if they're followers (in dragStartPositions but not selected)
-					if (state.dragStartPositions.has(prevId) && !state.selectedNodeIds.has(prevId)) {
-						var sp = state.dragStartPositions.get(prevId);
-						FontRig.updateNodePosition(prevId, sp.x + proj.dx, sp.y + proj.dy);
-					}
-					if (state.dragStartPositions.has(nextId) && !state.selectedNodeIds.has(nextId)) {
-						var sp = state.dragStartPositions.get(nextId);
-						FontRig.updateNodePosition(nextId, sp.x + proj.dx, sp.y + proj.dy);
-					}
-				}
-			}
-
-			// Enforce collinearity on smooth nodes (skip in Alt mode)
-			if (!state.dragAltMode) {
-				var allMoved = new Set(state.dragStartPositions.keys());
-				FontRig.enforceSmoothCollinearity(allMoved);
-			}
-		});
-
-		FontRig.draw();
-		FontRig.updateStatusSelected();
-		return;
-	}
-
-	// -- Pan
-	if (state.isPanning) {
-		const dsx = e.clientX - state.lastMouse.x;
-		const dsy = e.clientY - state.lastMouse.y;
-		state.pan.x += dsx;
-		state.pan.y += dsy;
-		state.lastMouse = { x: e.clientX, y: e.clientY };
-		FontRig.draw();
-		return;
-	}
-
-	// Preview mode / stem measurement: redraw on hover
-	if (state.previewMode || state.showStem) {
-		FontRig.draw();
-	}
-
-	// -- Hover cursor hint
-	if (!state.spaceDown) {
-		let cursor = 'default';
-		if (state.showNodes) {
-			let hit = null;
-			withActiveOffset(function() { hit = FontRig.hitTestNode(sx, sy); });
-			if (hit) cursor = 'move';
-		}
-		if (cursor === 'default' && state.showAnchors) {
-			let aHit = null;
-			withActiveOffset(function() { aHit = FontRig.hitTestAnchor(sx, sy); });
-			if (aHit !== null) cursor = 'move';
-		}
-		dom.canvasWrap.style.cursor = cursor;
-	}
-});
-
-window.addEventListener('mouseup', function(e) {
-	// -- Transform frame drag end
-	if (FontRig.tf.active && FontRig.tf.dragType) {
-		FontRig.tfMouseUp();
-		FontRig.draw();
-		return;
-	}
-
-	// -- Finalize rect selection
-	if (state.isSelecting && state.selectMode === 'rect') {
-		let ids;
-		withActiveOffset(function() {
-			ids = FontRig.hitTestRect(
-				state.selectStartScreen.x, state.selectStartScreen.y,
-				state.selectCurrentScreen.x, state.selectCurrentScreen.y
-			);
-		});
-
-		// Clear overlay state BEFORE draw so it disappears
-		state.isSelecting = false;
-		state.selectMode = null;
-		state.selectStartScreen = null;
-		state.selectCurrentScreen = null;
-
-		FontRig.selectNodes(ids, e.shiftKey);
-		FontRig.updateCanvasCursor();
-		return;
-	}
-
-	// -- Finalize lasso selection
-	if (state.isSelecting && state.selectMode === 'lasso') {
-		let ids;
-		withActiveOffset(function() {
-			ids = FontRig.hitTestLasso(state.selectLassoPoints);
-		});
-
-		// Clear overlay state BEFORE draw
-		state.isSelecting = false;
-		state.selectMode = null;
-		state.selectLassoPoints = [];
-
-		FontRig.selectNodes(ids, e.shiftKey);
-		FontRig.updateCanvasCursor();
-		return;
-	}
-
-	// -- Finalize drag (no XML sync — user clicks Refresh when needed)
-	if (state.isDragging) {
-		// Try joining open endpoints after drag (skip for anchors)
-		if (state.dragAnchorIdx === null) FontRig.tryJoinEndpoints();
-
-		state.isDragging = false;
-		state.dragStartPositions = null;
-		state.dragOriginGlyph = null;
-		state.dragAltMode = false;
-		state.dragTangents = null;
-		state.slideData = null;
-		state.segmentDrag = null;
-		state.dragAnchorIdx = null;
-	}
-
-	if (state.isPanning) {
-		state.isPanning = false;
-	}
-
-	FontRig.updateCanvasCursor();
 });
 
 // ===================================================================
@@ -580,12 +42,13 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 	const rect = dom.canvas.getBoundingClientRect();
 	const absSx = e.clientX - rect.left;
 	const absSy = e.clientY - rect.top;
-	const { sx, sy } = interactionCoords(absSx, absSy);
+	const coords = FontRig._interactionCoords(absSx, absSy);
+	const sx = coords.sx, sy = coords.sy;
 
 	// Transform frame: double-click cycles mode
 	if (FontRig.tf.active) {
 		var tfHandled = false;
-		withActiveOffset(function() {
+		FontRig._withActiveOffset(function() {
 			tfHandled = FontRig.tfDblClick(sx, sy);
 		});
 		if (tfHandled) {
@@ -596,13 +59,13 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 
 	// Double-click on a node: select whole contour (existing behavior)
 	var nodeHit = null;
-	withActiveOffset(function() {
+	FontRig._withActiveOffset(function() {
 		nodeHit = FontRig.hitTestNode(sx, sy);
 	});
 
 	if (nodeHit) {
 		var ci = -1;
-		withActiveOffset(function() {
+		FontRig._withActiveOffset(function() {
 			ci = FontRig.hitTestContour(sx, sy);
 		});
 		if (ci >= 0) {
@@ -614,7 +77,7 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 
 	// Double-click on a segment: select that segment's nodes
 	var segHit = null;
-	withActiveOffset(function() {
+	FontRig._withActiveOffset(function() {
 		segHit = FontRig.hitTestSegment(sx, sy);
 	});
 
@@ -634,7 +97,7 @@ dom.canvasWrap.addEventListener('dblclick', function(e) {
 
 	// Fallback: try contour hit
 	var ci = -1;
-	withActiveOffset(function() {
+	FontRig._withActiveOffset(function() {
 		ci = FontRig.hitTestContour(sx, sy);
 	});
 	if (ci >= 0) {
@@ -1211,7 +674,7 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	var rect = dom.canvas.getBoundingClientRect();
 	var absSx = e.clientX - rect.left;
 	var absSy = e.clientY - rect.top;
-	var coords = interactionCoords(absSx, absSy);
+	var coords = FontRig._interactionCoords(absSx, absSy);
 
 	// Menu items
 	var toggleItem = ctxMenu.querySelector('[data-action="toggleSmooth"]');
@@ -1227,7 +690,7 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	// Hit test: node first, then segment
 	var nodeHit = null;
 	var segHit = null;
-	withActiveOffset(function() {
+	FontRig._withActiveOffset(function() {
 		nodeHit = FontRig.hitTestNode(coords.sx, coords.sy);
 		if (!nodeHit) {
 			segHit = FontRig.hitTestSegment(coords.sx, coords.sy);
