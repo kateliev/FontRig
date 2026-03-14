@@ -6,61 +6,14 @@
 'use strict';
 
 // ===================================================================
-// Layer Render
+// Layer Render — dispatches through the visualization layer system
 // ===================================================================
 FontRig.renderLayer = function(layer, opts) {
-	const state = FontRig.state;
-	const preview = state.previewMode;
-	const isActive = opts && opts.isActive;
-	const canvasW = opts && opts.canvasW;
-	const canvasH = opts && opts.canvasH;
+	// Sync legacy toggle flags to vizLayers map
+	FontRig._syncVizFromState();
 
-	// Mask layer
-	if (!preview && state.showMask) {
-		const mask = FontRig.getMaskFor(layer.name);
-		if (mask) FontRig.drawMaskContours(mask);
-	}
-
-	// Contours + measurements
-	FontRig.drawContours(layer);
-	FontRig.drawStemMeasurement(layer);
-
-	// Metrics
-	if (!preview && state.showMetrics) {
-		FontRig.drawMetrics(layer, canvasW, canvasH);
-	}
-
-	// Preview nodes
-	if (preview) {
-		FontRig.drawPreviewNodes(layer);
-	}
-
-	// Nodes
-	if (!preview && state.showNodes) {
-		FontRig.drawStackedWarnings(layer);
-		FontRig.drawSelectedSegments(layer);
-		FontRig.drawNodes(layer);
-	}
-
-	// Anchors
-	if (!preview && state.showAnchors) {
-		FontRig.drawAnchors(layer);
-	}
-
-	// Selection overlay
-	if (!preview && isActive && state.isSelecting) {
-		FontRig.drawSelectionOverlay();
-	}
-
-	// Transform frame
-	if (!preview && isActive && FontRig.tf.active) {
-		FontRig.drawTransformFrame();
-	}
-
-	// Layer label
-	if (!preview) {
-		FontRig.drawLayerLabel(layer);
-	}
+	// Dispatch to the registered visualization layers
+	FontRig.drawVizLayers(layer, opts);
 };
 
 // ===================================================================
@@ -441,15 +394,14 @@ FontRig.drawStackedWarnings = function(layer) {
 };
 
 // -- Nodes & handles ------------------------------------------------
-FontRig.drawNodes = function(layer) {
+// Split into three independent functions for the visualization layer
+// system. The combined drawNodes() is kept for backward compat.
+
+// Pass 1: Handle lines (off-curve → on-curve connections)
+FontRig._drawHandleLines = function(layer) {
 	const ctx = FontRig.dom.ctx;
-	const sel = FontRig.state.selectedNodeIds;
 	const tn = FontRig.getCurrentTheme().node;
 
-	// First pass: draw handle lines
-	// Cubic BCPs connect to their parent on-curve only, NOT to each other
-	// Quadratic off-curves connect to both adjacent on-curve nodes
-	let ci = 0;
 	for (const shape of layer.shapes) {
 		for (const contour of shape.contours) {
 			const nodes = contour.nodes;
@@ -511,18 +463,23 @@ FontRig.drawNodes = function(layer) {
 					}
 				}
 			}
-			ci++;
 		}
 	}
+};
 
-	// Second pass: draw node markers
-	ci = 0;
+// Pass 2: Node markers (on-curve squares/circles, off-curve circles)
+FontRig._drawNodeMarkers = function(layer) {
+	const ctx = FontRig.dom.ctx;
+	const sel = FontRig.state.selectedNodeIds;
+	const tn = FontRig.getCurrentTheme().node;
+
+	let ci = 0;
 	for (const shape of layer.shapes) {
 		for (const contour of shape.contours) {
 			const nodes = contour.nodes;
 			const n = nodes.length;
 
-			// Find first on-curve (start point — drawn as triangle in pass 3)
+			// Find first on-curve (start point — drawn as triangle separately)
 			let firstOn = 0;
 			for (let j = 0; j < n; j++) {
 				if (nodes[j].type === 'on') { firstOn = j; break; }
@@ -572,16 +529,21 @@ FontRig.drawNodes = function(layer) {
 			ci++;
 		}
 	}
+};
 
-	// Third pass: contour start point triangles
-	ci = 0;
+// Pass 3: Start point triangles
+FontRig._drawStartPoints = function(layer) {
+	const ctx = FontRig.dom.ctx;
+	const sel = FontRig.state.selectedNodeIds;
+	const tn = FontRig.getCurrentTheme().node;
+
+	let ci = 0;
 	for (const shape of layer.shapes) {
 		for (const contour of shape.contours) {
 			const nodes = contour.nodes;
 			const n = nodes.length;
 			if (n < 2) { ci++; continue; }
 
-			// Find first on-curve (same logic as buildContourPath)
 			let firstOn = 0;
 			for (let j = 0; j < n; j++) {
 				if (nodes[j].type === 'on') { firstOn = j; break; }
@@ -592,7 +554,6 @@ FontRig.drawNodes = function(layer) {
 			const sp = FontRig.glyphToScreen(startNode.x, startNode.y);
 			const np = FontRig.glyphToScreen(nextNode.x, nextNode.y);
 
-			// Direction angle from start towards next node
 			const dx = np.x - sp.x;
 			const dy = np.y - sp.y;
 			const angle = Math.atan2(dy, dx);
@@ -604,11 +565,10 @@ FontRig.drawNodes = function(layer) {
 			ctx.translate(sp.x, sp.y);
 			ctx.rotate(angle);
 
-			// Triangle pointing in contour direction
 			ctx.beginPath();
-			ctx.moveTo(size + 4, 0);               // tip (ahead)
-			ctx.lineTo(-size + 2, -size + 1);      // base left
-			ctx.lineTo(-size + 2, size - 1);       // base right
+			ctx.moveTo(size + 4, 0);
+			ctx.lineTo(-size + 2, -size + 1);
+			ctx.lineTo(-size + 2, size - 1);
 			ctx.closePath();
 
 			ctx.fillStyle = isStartSelected ? tn.selected : tn.startPoint;
@@ -621,6 +581,13 @@ FontRig.drawNodes = function(layer) {
 			ci++;
 		}
 	}
+};
+
+// Combined (backward compat — used by preview nodes path)
+FontRig.drawNodes = function(layer) {
+	FontRig._drawHandleLines(layer);
+	FontRig._drawNodeMarkers(layer);
+	FontRig._drawStartPoints(layer);
 };
 
 
