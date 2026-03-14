@@ -117,7 +117,7 @@ dom.canvasWrap.addEventListener('wheel', function(e) {
 	const absSy = e.clientY - rect.top;
 
 	// Normal zoom (centred on cursor)
-	const { sx: mx, sy: my } = interactionCoords(absSx, absSy);
+	const { sx: mx, sy: my } = FontRig._interactionCoords(absSx, absSy);
 	const factor = e.deltaY > 0 ? FontRig.WHEEL_ZOOM_OUT : FontRig.WHEEL_ZOOM_IN;
 	const newZoom = state.zoom * factor;
 
