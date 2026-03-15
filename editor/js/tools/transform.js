@@ -564,6 +564,7 @@ FontRig._tfApplyNumeric = function(field, value) {
 
 	FontRig._tfRecalcBbox();
 	FontRig._tfUpdateStatus();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 };
 

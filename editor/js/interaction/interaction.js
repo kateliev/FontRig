@@ -119,6 +119,9 @@ FontRig._restoreSnapshot = function(snapshot) {
 	var layer = FontRig.getActiveLayer();
 	if (!layer || !snapshot) return;
 	layer.shapes = JSON.parse(JSON.stringify(snapshot));
+	// shapes reference changed — _getLayerPaths detects this automatically,
+	// but mark dirty explicitly for safety
+	FontRig.invalidatePathCache(layer);
 };
 
 // Push current state onto undo stack (call before modifying)
@@ -408,6 +411,7 @@ FontRig.openContourAtNode = function() {
 	}
 
 	sel.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
@@ -517,6 +521,7 @@ FontRig.deleteNode = function() {
 	}
 
 	sel.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
@@ -990,11 +995,11 @@ FontRig.isOpenEndpoint = function(nodeId) {
 				if (targetNi === ep.endIdx) {
 					return { contour: shape.contours[ki], shape: shape, ci: ci, ki: ki, end: 'end' };
 				}
-				return null;
-			}
-			ci++;
+			return null;
 		}
+		ci++;
 	}
+}
 	return null;
 };
 
@@ -1100,6 +1105,7 @@ FontRig._closeContour = function(contour, draggedEnd) {
 
 	contour.closed = true;
 	FontRig.state.selectedNodeIds.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 	return true;
@@ -1147,6 +1153,7 @@ FontRig._mergeContours = function(srcInfo, tgtInfo) {
 	}
 
 	FontRig.state.selectedNodeIds.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 	return true;
@@ -1422,6 +1429,7 @@ FontRig.insertNodeOnSegment = function(hit) {
 
 	// Rebuild IDs and redraw
 	FontRig.state.selectedNodeIds.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
@@ -1448,6 +1456,7 @@ FontRig.convertSegmentToLine = function(hit) {
 	}
 
 	FontRig.state.selectedNodeIds.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
@@ -1498,6 +1507,7 @@ FontRig.convertSegmentToCubic = function(hit) {
 	}
 
 	FontRig.state.selectedNodeIds.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
@@ -1530,6 +1540,7 @@ FontRig.convertSegmentToQuadratic = function(hit) {
 	}
 
 	FontRig.state.selectedNodeIds.clear();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
@@ -1776,6 +1787,7 @@ FontRig.performSlide = function(slideData, gx, gy) {
 
 	// -- LINE mode: just move the on-curve, nothing else --
 	if (slideData.mode === 'line') {
+		FontRig.invalidatePathCache();
 		return;
 	}
 
@@ -1835,6 +1847,7 @@ FontRig.performSlide = function(slideData, gx, gy) {
 				FontRig._fitSamplesToSide(nodes, inH, samples, slideData.prevOn, newNode, 'in');
 			}
 		}
+		FontRig.invalidatePathCache();
 		return;
 	}
 
@@ -1917,6 +1930,7 @@ FontRig.retractHandles = function() {
 		}
 	}
 
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
@@ -2499,7 +2513,8 @@ FontRig.moveSelectedNodes = function(dx, dy) {
 	// Enforce smooth tangent continuity on neighbors
 	FontRig.enforceSmoothForKeys(sel, dx, dy);
 
-	// No XML sync here — user clicks Refresh when needed
+	// Invalidate Path2D cache and redraw
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };

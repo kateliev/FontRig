@@ -208,10 +208,11 @@ FontRig._handleTransformDrag = async function(stream, sx, sy) {
 		FontRig._withActiveOffset(function() {
 			tfHandled = FontRig.tfMouseMove(coords.sx, coords.sy, event.e);
 		});
-		if (tfHandled) FontRig.draw();
+		if (tfHandled) { FontRig.invalidatePathCache(); FontRig.draw(); }
 	}
 
 	FontRig.tfMouseUp();
+	FontRig.invalidatePathCache();
 	FontRig.draw();
 };
 

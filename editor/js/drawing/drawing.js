@@ -6,6 +6,131 @@
 'use strict';
 
 // ===================================================================
+// Path2D Cache
+// ===================================================================
+// Lazily builds and caches Path2D objects per font-layer.  Paths are
+// stored in raw font coordinates (y-up).  At render time a single
+// ctx.transform(zoom, 0, 0, -zoom, panX, panY) maps them to screen
+// space, avoiding per-point glyphToScreen() calls.
+//
+// Cache validity:
+//   - layer.shapes reference check handles undo/redo (shapes replaced)
+//   - _pathCacheDirty flag handles in-place mutations (node drags)
+//   - Different layer object on glyph switch → no cache yet
+// ===================================================================
+
+// Trace a single contour into a Path2D in font coordinates.
+// Handles both open and closed contours.
+FontRig._traceContourToPath2d = function(path, contour) {
+	var nodes = contour.nodes;
+	var n = nodes.length;
+	if (n === 0) return;
+
+	// Find first on-curve
+	var firstOn = 0;
+	for (var j = 0; j < n; j++) {
+		if (nodes[j].type === 'on') { firstOn = j; break; }
+	}
+
+	path.moveTo(nodes[firstOn].x, nodes[firstOn].y);
+
+	var i = (firstOn + 1) % n;
+	var count = 0;
+
+	while (count < n - 1) {
+		var node = nodes[i];
+
+		if (node.type === 'on') {
+			path.lineTo(node.x, node.y);
+
+		} else if (node.type === 'curve') {
+			var b1 = node;
+			var b2 = nodes[(i + 1) % n];
+			var on = nodes[(i + 2) % n];
+			path.bezierCurveTo(b1.x, b1.y, b2.x, b2.y, on.x, on.y);
+			i = (i + 2) % n;
+			count += 2;
+
+		} else if (node.type === 'off') {
+			var off = node;
+			var on2 = nodes[(i + 1) % n];
+			path.quadraticCurveTo(off.x, off.y, on2.x, on2.y);
+			i = (i + 1) % n;
+			count += 1;
+		}
+
+		i = (i + 1) % n;
+		count++;
+	}
+
+	if (contour.closed) path.closePath();
+};
+
+// Return cached { closedPath, openPath, allPath, hasOpen, hasClosed }
+// for a layer, rebuilding only when stale.
+FontRig._getLayerPaths = function(layer) {
+	if (!layer) return null;
+
+	// Cache hit: same shapes reference and not explicitly dirtied
+	if (layer._pathCache &&
+		layer._pathCache.shapes === layer.shapes &&
+		!layer._pathCacheDirty) {
+		return layer._pathCache;
+	}
+
+	var closedPath = new Path2D();
+	var openPath   = new Path2D();
+	var allPath    = new Path2D();
+	var hasOpen    = false;
+	var hasClosed  = false;
+
+	for (var si = 0; si < layer.shapes.length; si++) {
+		var shape = layer.shapes[si];
+		for (var ki = 0; ki < shape.contours.length; ki++) {
+			var contour = shape.contours[ki];
+			if (contour.nodes.length === 0) continue;
+
+			FontRig._traceContourToPath2d(allPath, contour);
+
+			if (contour.closed) {
+				FontRig._traceContourToPath2d(closedPath, contour);
+				hasClosed = true;
+			} else {
+				FontRig._traceContourToPath2d(openPath, contour);
+				hasOpen = true;
+			}
+		}
+	}
+
+	var cache = {
+		shapes:     layer.shapes,   // reference for staleness check
+		closedPath: closedPath,
+		openPath:   openPath,
+		allPath:    allPath,
+		hasOpen:    hasOpen,
+		hasClosed:  hasClosed,
+	};
+
+	layer._pathCache = cache;
+	layer._pathCacheDirty = false;
+
+	return cache;
+};
+
+// Mark a layer's cached paths as stale.
+// Call after in-place mutations (node drags, structural edits).
+// With no argument, invalidates the active layer.
+FontRig.invalidatePathCache = function(layer) {
+	if (layer) {
+		layer._pathCacheDirty = true;
+	} else {
+		var al = FontRig.getActiveLayer();
+		if (al) al._pathCacheDirty = true;
+	}
+};
+
+
+// ===================================================================
 // Layer Render — dispatches through the visualization layer system
 // ===================================================================
 FontRig.renderLayer = function(layer, opts) {
@@ -170,57 +295,49 @@ FontRig.drawMetrics = function(layer, w, h) {
 };
 
 // -- Contours -------------------------------------------------------
+// Uses cached Path2D objects rendered via ctx.transform() so that
+// paths are only rebuilt when the glyph data actually changes, not
+// on every pan/zoom/redraw.
 FontRig.drawContours = function(layer) {
-	const ctx = FontRig.dom.ctx;
-	const t = FontRig.getCurrentTheme().contour;
+	var ctx = FontRig.dom.ctx;
+	var t = FontRig.getCurrentTheme().contour;
 	var preview = FontRig.state.previewMode;
+	var paths = FontRig._getLayerPaths(layer);
+	if (!paths) return;
 
-	// Preview mode: always filled, black on white
+	var zoom = FontRig.state.zoom;
+
+	// Apply font→screen transform: scale by zoom, flip Y, translate by pan.
+	// Composes with the existing DPR transform set in draw().
+	ctx.save();
+	ctx.transform(zoom, 0, 0, -zoom, FontRig.state.pan.x, FontRig.state.pan.y);
+
 	if (preview || FontRig.state.filled) {
 		// Filled mode: closed contours in ONE path; nonzero winding rule
-		// Same-direction contours fill solid, opposite-direction hollows out
-		ctx.beginPath();
-		for (const shape of layer.shapes) {
-			for (const contour of shape.contours) {
-				if (contour.nodes.length === 0) continue;
-				if (!contour.closed) continue; // open contours are not filled
-				FontRig.buildContourPath(contour);
+		if (paths.hasClosed) {
+			ctx.fillStyle = preview ? '#000000' : t.fill;
+			ctx.fill(paths.closedPath, 'nonzero');
+			if (!preview) {
+				ctx.strokeStyle = t.stroke;
+				ctx.lineWidth = (t.lineWidth || 1) / zoom;
+				ctx.stroke(paths.closedPath);
 			}
-		}
-		ctx.fillStyle = preview ? '#000000' : t.fill;
-		ctx.fill('nonzero');
-		if (!preview) {
-			ctx.strokeStyle = t.stroke;
-			ctx.lineWidth = t.lineWidth || 1;
-			ctx.stroke();
 		}
 
 		// Open contours: stroke only (hidden in preview)
-		if (!preview) {
-			for (const shape of layer.shapes) {
-				for (const contour of shape.contours) {
-					if (contour.nodes.length === 0 || contour.closed) continue;
-					ctx.beginPath();
-					FontRig.buildContourPath(contour);
-					ctx.strokeStyle = t.strokePlain || t.stroke;
-					ctx.lineWidth = (t.lineWidth || 1) + 0.5;
-					ctx.stroke();
-				}
-			}
+		if (!preview && paths.hasOpen) {
+			ctx.strokeStyle = t.strokePlain || t.stroke;
+			ctx.lineWidth = ((t.lineWidth || 1) + 0.5) / zoom;
+			ctx.stroke(paths.openPath);
 		}
 	} else {
-		// Outline mode: stroke each contour independently
-		for (const shape of layer.shapes) {
-			for (const contour of shape.contours) {
-				if (contour.nodes.length === 0) continue;
-				ctx.beginPath();
-				FontRig.buildContourPath(contour);
-				ctx.strokeStyle = t.strokePlain;
-				ctx.lineWidth = 1.5;
-				ctx.stroke();
-			}
-		}
+		// Outline mode: stroke all contours
+		ctx.strokeStyle = t.strokePlain;
+		ctx.lineWidth = 1.5 / zoom;
+		ctx.stroke(paths.allPath);
 	}
+
+	ctx.restore();
 };
 
 FontRig.buildContourPath = function(contour) {
@@ -865,21 +982,19 @@ FontRig.drawSelectionOverlay = function() {
 // -- Mask contours (underneath main layer) --------------------------
 FontRig.drawMaskContours = function(maskLayer) {
 	if (!maskLayer) return;
-	const ctx = FontRig.dom.ctx;
-	const tm = FontRig.getCurrentTheme().mask;
+	var paths = FontRig._getLayerPaths(maskLayer);
+	if (!paths) return;
 
-	for (const shape of maskLayer.shapes) {
-		for (const contour of shape.contours) {
-			if (contour.nodes.length === 0) continue;
+	var ctx = FontRig.dom.ctx;
+	var tm = FontRig.getCurrentTheme().mask;
+	var zoom = FontRig.state.zoom;
 
-			ctx.beginPath();
-			FontRig.buildContourPath(contour);
-
-			ctx.strokeStyle = tm.stroke;
-			ctx.lineWidth = tm.lineWidth;
-			ctx.stroke();
-		}
-	}
+	ctx.save();
+	ctx.transform(zoom, 0, 0, -zoom, FontRig.state.pan.x, FontRig.state.pan.y);
+	ctx.strokeStyle = tm.stroke;
+	ctx.lineWidth = tm.lineWidth / zoom;
+	ctx.stroke(paths.allPath);
+	ctx.restore();
 };
 
 // -- Layer name label (filled badge, centered below baseline) -------

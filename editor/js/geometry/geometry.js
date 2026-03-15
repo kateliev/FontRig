@@ -61,6 +61,9 @@ FontRig.updateNodePosition = function(nodeId, gx, gy) {
 
 	ref.node.x = Math.round(gx * 10) / 10;
 	ref.node.y = Math.round(gy * 10) / 10;
+
+	// Mark cached Path2D stale (in-place mutation)
+	if (ref.layer) FontRig.invalidatePathCache(ref.layer);
 };
 
 // -- Coordinate transforms ------------------------------------------
