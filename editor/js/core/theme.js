@@ -142,6 +142,11 @@ FontRig.themeDark = {
 		lineWidth:      	1,
 	},
 
+	// -- Glyph thumbnail fill (sidebar / grid) ---------------------
+	thumbnail: {
+		fill:         'rgba(200,200,210,0.55)',
+	},
+
 	// -- Keyaboard movement ----------------------------------------
 	keyboard: {
 			arrowStep : 		1,
@@ -274,6 +279,11 @@ FontRig.themeLight = {
 		label:     		'#0891b2',               // distance label
 		labelFont: 		'11px "IBM Plex Mono", "JetBrains Mono", monospace',
 		lineWidth:      	1.5,
+	},
+
+	// -- Glyph thumbnail fill (sidebar / grid) ---------------------
+	thumbnail: {
+		fill:         'rgba(30,30,40,0.8)',
 	},
 
 	// -- Keyaboard movement ----------------------------------------

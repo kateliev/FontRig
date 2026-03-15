@@ -118,7 +118,11 @@ FontRig.GlyphRenderer.render = function(canvas, glyphData, options) {
 	var h = canvas.height;
 	var name = options.glyphName || glyphData.name || '';
 	var useCache = options.useCache !== false;
-	var fillStyle = options.fillStyle || 'rgba(200,200,210,0.55)';
+	// Use theme-aware fill: dark mode gets light gray, light mode gets near-black
+	var themeFill = (FontRig.getCurrentTheme && FontRig.getCurrentTheme().thumbnail)
+		? FontRig.getCurrentTheme().thumbnail.fill
+		: 'rgba(200,200,210,0.55)';
+	var fillStyle = options.fillStyle || themeFill;
 
 	ctx.clearRect(0, 0, w, h);
 

@@ -135,6 +135,11 @@
 			Font
 		</button>
 
+		<button class="tb-btn" id="btn-py-init" title="Initialize / Reset Python runtime">
+			<span class="tri">action_play</span>
+			Python
+		</button>
+
 		<div class="tb-spacer"></div>
 
 		<div id="glyph-info"></div>
@@ -209,10 +214,14 @@
 
 			<!-- XML tab content -->
 			<div id="xml-tab" class="panel-content active">
-				<div id="xml-actions">
-					<button class="xml-btn" id="xml-refresh-btn" title="Regenerate XML from glyph data"><span class="tri">refresh</span> Refresh</button>
-					<button class="xml-btn xml-btn--primary" id="xml-apply-btn" title="Apply XML edits to glyph (Ctrl+Enter)"><span class="tri">action_play</span> Apply</button>
-				</div>
+			<div id="xml-actions">
+				<button class="tb-btn" id="xml-refresh-btn" title="Regenerate XML from glyph data (Refresh)">
+					<span class="tri">refresh</span>
+				</button>
+				<button class="tb-btn" id="xml-apply-btn" title="Apply XML edits to glyph (Ctrl+Enter)">
+					<span class="tri">action_play</span>
+				</button>
+			</div>
 				<textarea id="xml-content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
 			</div>
 

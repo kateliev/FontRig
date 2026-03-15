@@ -597,6 +597,25 @@ FontRig.initPanelTabs();
 FontRig.wirePythonPanel();
 FontRig.initGlyphWidget();
 
+// -- Python init button in toolbar ----------------------------------
+(function() {
+	var pyInitToolbar = document.getElementById('btn-py-init');
+	if (pyInitToolbar) {
+		pyInitToolbar.addEventListener('click', function() {
+			// Show the right sidebar, switch to Python tab, then init
+			if (FontRig._rightSidebar) {
+				if (!FontRig._rightSidebar.visible) {
+					FontRig.Sidebar.show(FontRig._rightSidebar);
+					var panelBtn = document.getElementById('btn-panel');
+					if (panelBtn) panelBtn.classList.add('active');
+				}
+				FontRig.Sidebar.switchTab(FontRig._rightSidebar, 'python');
+			}
+			FontRig.pyPanel.init();
+		});
+	}
+})();
+
 // ===================================================================
 // Wire simple toolbar buttons from bindings.js
 // ===================================================================
