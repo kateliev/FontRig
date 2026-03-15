@@ -217,6 +217,7 @@ FontRig.openFont = async function() {
 		FontRig.glyphCache.clear();
 		FontRig.dirtyGlyphs.clear();
 		FontRig.activeGlyph = null;
+		FontRig.GlyphRenderer.clearCache();
 
 		// Update UI
 		FontRig.buildGlyphPanel();

@@ -144,8 +144,57 @@ FontRig.GlyphWidgetPanel.setViewMode = function(mode) {
 
 	gw._updateModeButtons();
 
-	// Rebuild entries (canvas sizes differ between modes)
-	gw.rebuild();
+	var list = gw._listEl;
+	if (!list || !FontRig.font) {
+		// No entries yet — fall back to full rebuild
+		gw.rebuild();
+		return;
+	}
+
+	// Fast path: swap CSS class + resize canvases + sync re-render.
+	// Avoids destroying/recreating DOM and restarting IntersectionObserver.
+	list.className = 'glyph-widget-list glyph-widget-list--' + mode;
+
+	var isGrid = mode === 'grid';
+	var thumbW = isGrid ? 48 : 28;
+	var thumbH = isGrid ? 48 : 36;
+
+	var canvases = list.querySelectorAll('.gw-thumb');
+	for (var i = 0; i < canvases.length; i++) {
+		canvases[i].width = thumbW;
+		canvases[i].height = thumbH;
+	}
+
+	// Sync re-render all loaded thumbnails from Path2D cache
+	gw._rerenderAll();
+};
+
+// ===================================================================
+// Synchronously re-render all loaded thumbnails from the Path2D cache.
+// Called after canvas resize (mode switch). Since it's just
+// ctx.fill(cachedPath2d) per glyph with no disk I/O, even hundreds
+// of entries complete in a few milliseconds.  Entries that were never
+// loaded (no thumbLoaded) are left for IntersectionObserver to handle.
+// ===================================================================
+FontRig.GlyphWidgetPanel._rerenderAll = function() {
+	var gw = FontRig.GlyphWidgetPanel;
+	var list = gw._listEl;
+	if (!list) return;
+
+	var entries = list.querySelectorAll('.gw-entry');
+
+	for (var i = 0; i < entries.length; i++) {
+		var el = entries[i];
+		// Only re-render entries that were previously loaded
+		if (el.dataset.thumbLoaded !== 'true') continue;
+
+		var name = el.dataset.name;
+		var canvas = el.querySelector('.gw-thumb');
+		if (!name || !canvas) continue;
+
+		// Render from Path2D cache (synchronous, no disk I/O)
+		FontRig.GlyphRenderer.render(canvas, null, { glyphName: name, cacheOnly: true });
+	}
 };
 
 // ===================================================================

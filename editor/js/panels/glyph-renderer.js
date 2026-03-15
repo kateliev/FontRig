@@ -43,7 +43,8 @@ FontRig.GlyphRenderer._buildPath = function(glyphData) {
 		for (var ki = 0; ki < shape.contours.length; ki++) {
 			var contour = shape.contours[ki];
 			if (!contour.closed || contour.nodes.length === 0) continue;
-			FontRig.GlyphRenderer._traceContour(path, contour.nodes);
+			// Reuse the shared contour tracer from drawing.js
+			FontRig._traceContourToPath2d(path, contour);
 		}
 	}
 
@@ -51,54 +52,6 @@ FontRig.GlyphRenderer._buildPath = function(glyphData) {
 		path: path,
 		advW: layer.width || (FontRig.font ? FontRig.font.metrics.upm : 1000)
 	};
-};
-
-// ===================================================================
-// Trace a single contour into a Path2D (in font coordinates)
-// ===================================================================
-// Paths are stored in raw font coordinates (y-up). The transform
-// to screen coordinates is applied at render time via ctx.setTransform.
-// ===================================================================
-FontRig.GlyphRenderer._traceContour = function(path, nodes) {
-	var n = nodes.length;
-	if (n === 0) return;
-
-	// Find first on-curve
-	var firstOn = 0;
-	for (var j = 0; j < n; j++) {
-		if (nodes[j].type === 'on') { firstOn = j; break; }
-	}
-
-	path.moveTo(nodes[firstOn].x, nodes[firstOn].y);
-
-	var i = (firstOn + 1) % n;
-	var count = 0;
-
-	while (count < n - 1) {
-		var node = nodes[i];
-
-		if (node.type === 'on') {
-			path.lineTo(node.x, node.y);
-		} else if (node.type === 'curve') {
-			var b1 = node;
-			var b2 = nodes[(i + 1) % n];
-			var on = nodes[(i + 2) % n];
-			path.bezierCurveTo(b1.x, b1.y, b2.x, b2.y, on.x, on.y);
-			i = (i + 2) % n;
-			count += 2;
-		} else if (node.type === 'off') {
-			var off = node;
-			var on = nodes[(i + 1) % n];
-			path.quadraticCurveTo(off.x, off.y, on.x, on.y);
-			i = (i + 1) % n;
-			count += 1;
-		}
-
-		i = (i + 1) % n;
-		count++;
-	}
-
-	path.closePath();
 };
 
 // ===================================================================
@@ -116,8 +69,9 @@ FontRig.GlyphRenderer.render = function(canvas, glyphData, options) {
 	var ctx = canvas.getContext('2d');
 	var w = canvas.width;
 	var h = canvas.height;
-	var name = options.glyphName || glyphData.name || '';
+	var name = options.glyphName || (glyphData && glyphData.name) || '';
 	var useCache = options.useCache !== false;
+	var cacheOnly = !!options.cacheOnly;
 	// Use theme-aware fill: dark mode gets light gray, light mode gets near-black
 	var themeFill = (FontRig.getCurrentTheme && FontRig.getCurrentTheme().thumbnail)
 		? FontRig.getCurrentTheme().thumbnail.fill
@@ -130,6 +84,9 @@ FontRig.GlyphRenderer.render = function(canvas, glyphData, options) {
 	var cached = useCache ? FontRig.GlyphRenderer._pathCache.get(name) : null;
 
 	if (!cached) {
+		// cacheOnly: skip if no cached Path2D available (avoid disk I/O)
+		if (cacheOnly || !glyphData) return false;
+
 		cached = FontRig.GlyphRenderer._buildPath(glyphData);
 		if (!cached) return false; // empty glyph
 
