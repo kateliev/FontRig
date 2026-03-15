@@ -43,8 +43,7 @@ FontRig.DetachablePanel.create = function(options) {
 		
 		channel: null,
 		detachedWindow: null,
-		isDetached: false,
-		role: 'main'
+		isDetached: false
 	};
 
 	panel.detach = function() {
@@ -136,17 +135,27 @@ FontRig.DetachablePanel.send = function(id, type, data) {
 	var panel = _instances[id];
 	if (!panel || !panel.isDetached) return;
 
-	var msg = {
-		type: type,
-		data: data
-	};
-
-	if (panel.channel) {
-		panel.channel.postMessage(msg);
+	// For stateUpdate, use the same envelope as _sendState: { type, state }
+	// For everything else, use: { type, ...data }
+	var msg;
+	if (type === 'stateUpdate') {
+		msg = { type: 'stateUpdate', state: data };
+	} else {
+		msg = { type: type, data: data };
 	}
 
-	// Fallback for file:// protocol - use window.opener
-	if (panel.detachedWindow && !panel.detachedWindow.closed && panel.detachedWindow.opener) {
+	// Use BroadcastChannel if available, otherwise fall back to postMessage
+	if (panel.channel) {
+		try {
+			panel.channel.postMessage(msg);
+			return; // channel works, no need for fallback
+		} catch (e) {
+			// BroadcastChannel failed (e.g. file:// protocol), fall through
+		}
+	}
+
+	// Fallback for file:// protocol — use direct postMessage
+	if (panel.detachedWindow && !panel.detachedWindow.closed) {
 		try {
 			panel.detachedWindow.postMessage(msg, '*');
 		} catch (e) {

@@ -7,45 +7,11 @@
 'use strict';
 
 // -- Panel tab switching ------------------------------------------------
-// Note: When the sidebar framework is active, tab switching is handled
-// by Sidebar.switchTab via sidebar-init.js onTabSwitch callback.
-// These functions are kept for backward compatibility and for the
-// detached panel window.
-FontRig.initPanelTabs = function() {
-	// Old-style panel tabs (in #panel-tabs) — still used by detached panel
-	var tabs = document.querySelectorAll('#panel-tabs .panel-tab');
-	tabs.forEach(function(tab) {
-		tab.addEventListener('click', function() {
-			FontRig.switchPanelTab(this.dataset.panel);
-		});
-	});
-};
-
+// Tab switching is handled by Sidebar.switchTab via sidebar-init.js.
 FontRig.switchPanelTab = function(tabName) {
 	FontRig.state.activePanel = tabName;
-
-	// If right sidebar framework exists, use it for tab switching
 	if (FontRig._rightSidebar) {
 		FontRig.Sidebar.switchTab(FontRig._rightSidebar, tabName);
-		return;
-	}
-
-	// Fallback: old-style tab switching (for detached panel)
-	document.querySelectorAll('.panel-tab').forEach(function(tab) {
-		tab.classList.toggle('active', tab.dataset.panel === tabName);
-	});
-
-	document.querySelectorAll('.panel-content').forEach(function(panel) {
-		panel.classList.toggle('active', panel.id === tabName + '-tab');
-	});
-
-	var xmlInfo = document.getElementById('xml-tab-info');
-	var pyInfo = document.getElementById('py-tab-info');
-	if (xmlInfo) xmlInfo.style.display = tabName === 'xml' ? '' : 'none';
-	if (pyInfo) pyInfo.style.display = tabName === 'python' ? '' : 'none';
-
-	if (tabName === 'xml' && FontRig.state.showXml) {
-		FontRig.buildXmlPanel();
 	}
 
 	if (tabName === 'python') {

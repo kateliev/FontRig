@@ -369,11 +369,6 @@ dom.layerSelect.addEventListener('change', function() {
 })();
 
 // ===================================================================
-// Glyph panel — click and search
-// ===================================================================
-// Now handled by GlyphWidgetPanel (glyph-widget-panel.js).
-// The old #glyph-list handlers are no longer needed.
-
 // File input / Drag and drop
 // ===================================================================
 dom.fileInput.addEventListener('change', function(e) {
@@ -514,9 +509,12 @@ document.addEventListener('keyup', function(e) {
 });
 
 // ===================================================================
-// Split handle drag
+// Split handle drag (legacy — replaced by sidebar resize system)
 // ===================================================================
+// Kept as guard in case old DOM is still present; otherwise no-op.
 (function initSplitHandle() {
+	if (!dom.splitHandle) return;
+
 	let isDragging = false;
 
 	dom.splitHandle.addEventListener('mousedown', function(e) {
@@ -532,6 +530,7 @@ document.addEventListener('keyup', function(e) {
 
 		const mainRect = dom.main.getBoundingClientRect();
 		const panel = dom.sidePanel;
+		if (!panel) return;
 
 		const mouseX = e.clientX - mainRect.left;
 		const panelWidth = mainRect.width - mouseX - dom.splitHandle.offsetWidth / 2;
@@ -590,9 +589,8 @@ dom.xmlContent.addEventListener('click', function() {
 });
 
 // ===================================================================
-// Panel tabs + Python REPL
+// Python REPL + Glyph widget
 // ===================================================================
-FontRig.initPanelTabs();
 FontRig.wirePythonPanel();
 FontRig.initGlyphWidget();
 

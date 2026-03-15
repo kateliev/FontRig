@@ -828,7 +828,7 @@ function rebuildLineMaps(text) {
 
 function highlightNode(nodeId) {
 	var content = document.getElementById('xml-content');
-	var lineIdx = xmlNodeNodeMap[nodeId];
+	var lineIdx = xmlNodeLineMap[nodeId];
 	if (lineIdx === undefined) return;
 	var text = content.value;
 	var lines = text.split('\n');
@@ -906,7 +906,7 @@ function onMessage(msg) {
 		}
 
 	} else if (msg.type === 'thumbnail') {
-		receiveThumbnail(msg.data.name, msg.data.data);
+		receiveThumbnail(msg.data.name, msg.data.data, msg.data.width, msg.data.height);
 	} else if (msg.type === 'selectionChanged') {
 		if (msg.ids && msg.ids.length > 0) {
 			highlightNode(msg.ids[0]);
@@ -916,12 +916,19 @@ function onMessage(msg) {
 	}
 }
 
-function receiveThumbnail(name, dataUrl) {
+function receiveThumbnail(name, dataUrl, imgWidth, imgHeight) {
 	var el = document.querySelector('.gw-thumb[data-name="' + name + '"]');
 	if (!el || !dataUrl) return;
 
 	var img = new Image();
 	img.onload = function() {
+		// Set canvas backing store to the DPR-scaled resolution from sender.
+		// CSS size stays at 28x36 (or 48x48 for grid) — the browser
+		// downscales the high-res backing store for crisp display.
+		if (imgWidth && imgHeight) {
+			el.width = imgWidth;
+			el.height = imgHeight;
+		}
 		var ctx = el.getContext('2d');
 		ctx.drawImage(img, 0, 0);
 	};

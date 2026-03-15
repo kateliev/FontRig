@@ -2436,8 +2436,6 @@ FontRig.loadXmlString = function(xmlString, filename) {
 		FontRig.activeGlyph = null;
 		// Hide left sidebar when loading a loose file
 		if (FontRig._hideLeftSidebar) FontRig._hideLeftSidebar();
-		var glyphPanel = document.getElementById('glyph-panel');
-		if (glyphPanel) glyphPanel.classList.remove('visible');
 
 		FontRig.dom.layerSelect.innerHTML = '';
 		for (const layer of FontRig.state.glyphData.layers) {

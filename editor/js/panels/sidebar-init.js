@@ -120,21 +120,14 @@ if (pyPanel && oldPyTab) {
 	}
 }
 
-// Now hide the old side-panel and split-handle (they're replaced)
-var oldSidePanel = document.getElementById('side-panel');
-if (oldSidePanel) {
-	oldSidePanel.style.display = 'none';
+// Hide the source containers after content has been moved out
+var oldXmlTabEl = document.getElementById('xml-tab');
+if (oldXmlTabEl && oldXmlTabEl.children.length === 0) {
+	oldXmlTabEl.style.display = 'none';
 }
-var oldSplitHandle = document.getElementById('split-handle');
-if (oldSplitHandle) {
-	oldSplitHandle.style.display = 'none';
-}
-
-// Also hide the old glyph-panel (replaced by left sidebar)
-var oldGlyphPanel = document.getElementById('glyph-panel');
-if (oldGlyphPanel) {
-	oldGlyphPanel.style.display = 'none';
-	oldGlyphPanel.classList.remove('visible');
+var oldPyTabEl = document.getElementById('python-tab');
+if (oldPyTabEl && oldPyTabEl.children.length === 0) {
+	oldPyTabEl.style.display = 'none';
 }
 
 // ===================================================================
@@ -238,32 +231,8 @@ if (FontRig.DetachablePanel) {
 		tabId: 'font-info',
 		width: 350,
 		getState: function() {
-			var fontInfo = null;
-			if (FontRig.font && FontRig.font.info) {
-				var info = FontRig.font.info;
-				fontInfo = {
-					familyName: info.family || info.familyName || 'Unknown',
-					styleName: info.style || info.styleName || 'Regular',
-					version: info.version || '',
-					upm: FontRig.font.metrics ? FontRig.font.metrics.upm : 1000,
-					ascender: FontRig.font.metrics ? FontRig.font.metrics.ascender : '',
-					descender: FontRig.font.metrics ? FontRig.font.metrics.descender : '',
-					xHeight: FontRig.font.metrics ? FontRig.font.metrics.xHeight : '',
-					capHeight: FontRig.font.metrics ? FontRig.font.metrics.capHeight : '',
-					masters: []
-				};
-				if (FontRig.font.masters) {
-					for (var i = 0; i < FontRig.font.masters.length; i++) {
-						var m = FontRig.font.masters[i];
-						fontInfo.masters.push({
-							name: m.layerName || 'Master ' + (i + 1),
-							axisValues: m.axisValues || ''
-						});
-					}
-				}
-			}
 			return {
-				fontInfo: fontInfo,
+				fontInfo: FontRig._getFontInfoState(),
 				glyphCount: FontRig.font ? FontRig.font.manifest.length : 0
 			};
 		}
@@ -279,6 +248,8 @@ if (FontRig.DetachablePanel) {
 			return;
 		}
 
+		// pyBridge.run() is synchronous (Pyodide's runPython is sync).
+		// If this ever becomes async, this call must be awaited.
 		var result = FontRig.pyBridge.run(code);
 
 		FontRig.DetachablePanel.send('python', 'pyResult', {
@@ -306,6 +277,13 @@ if (FontRig.DetachablePanel) {
 		if (FontRig._thumbDetachRunning) return;
 		FontRig._thumbDetachRunning = true;
 
+		// Render at DPR-scaled resolution for crisp thumbnails.
+		// The detached panel will receive the full-resolution PNG
+		// and draw it directly (no further upscaling needed).
+		var dpr = window.devicePixelRatio || 1;
+		var cssW = 28;
+		var cssH = 36;
+
 		while (FontRig._thumbDetachQueue.length > 0) {
 			var name = FontRig._thumbDetachQueue.shift();
 
@@ -321,13 +299,28 @@ if (FontRig.DetachablePanel) {
 				continue;
 			}
 
+			// Reuse GlyphRenderer which handles DPR, Path2D caching,
+			// and proper vector rendering — same quality as sidebar.
 			var cvs = document.createElement('canvas');
-			cvs.width = 28;
-			cvs.height = 36;
-			FontRig._fontPanelRenderThumb(cvs, glyphData);
+			cvs.style.width = cssW + 'px';
+			cvs.style.height = cssH + 'px';
+			cvs.dataset.cssW = cssW;
+			cvs.dataset.cssH = cssH;
 
+			FontRig.GlyphRenderer.render(cvs, glyphData, {
+				glyphName: name,
+				fillStyle: 'rgba(200,200,210,0.55)'
+			});
+
+			// Send the DPR-scaled dimensions along with the image data
+			// so the detached panel can set the correct canvas size.
 			var dataUrl = cvs.toDataURL('image/png');
-			FontRig.DetachablePanel.send('glyphs', 'thumbnail', { name: name, data: dataUrl });
+			FontRig.DetachablePanel.send('glyphs', 'thumbnail', {
+				name: name,
+				data: dataUrl,
+				width: cvs.width,
+				height: cvs.height
+			});
 
 			if (FontRig._thumbDetachQueue.length > 0 && FontRig._thumbDetachQueue.length % 8 === 0) {
 				await new Promise(function(r) { requestAnimationFrame(r); });
@@ -335,84 +328,6 @@ if (FontRig.DetachablePanel) {
 		}
 
 		FontRig._thumbDetachRunning = false;
-	};
-
-	FontRig._fontPanelRenderThumb = function(cvs, glyphData) {
-		var ctx = cvs.getContext('2d');
-		var w = cvs.width;
-		var h = cvs.height;
-
-		var layerName = FontRig.getDefaultLayerName(glyphData);
-		var layer = FontRig.getLayerByName(glyphData, layerName);
-		if (!layer || layer.shapes.length === 0) return;
-
-		var upm = FontRig.font ? FontRig.font.metrics.upm : 1000;
-		var desc = FontRig.font ? Math.abs(FontRig.font.metrics.descender) : 200;
-		var advW = layer.width || upm;
-		var totalH = upm + desc * 0.3;
-
-		var scale = Math.min((w - 4) / advW, (h - 4) / totalH);
-		var ox = (w - advW * scale) / 2;
-		var oy = h - 3 - desc * 0.3 * scale;
-
-		ctx.clearRect(0, 0, w, h);
-
-		ctx.beginPath();
-		for (var si = 0; si < layer.shapes.length; si++) {
-			var shape = layer.shapes[si];
-			for (var ki = 0; ki < shape.contours.length; ki++) {
-				var contour = shape.contours[ki];
-				if (!contour.closed || contour.nodes.length === 0) continue;
-				FontRig._traceContourToPath(ctx, contour.nodes, scale, ox, oy);
-			}
-		}
-
-		ctx.fillStyle = 'rgba(200,200,210,0.55)';
-		ctx.fill('nonzero');
-	};
-
-	FontRig._traceContourToPath = function(ctx, nodes, scale, ox, oy) {
-		var n = nodes.length;
-		if (n === 0) return;
-
-		var firstOn = 0;
-		for (var j = 0; j < n; j++) {
-			if (nodes[j].type === 'on') { firstOn = j; break; }
-		}
-
-		var tx = function(x) { return x * scale + ox; };
-		var ty = function(y) { return -y * scale + oy; };
-
-		ctx.moveTo(tx(nodes[firstOn].x), ty(nodes[firstOn].y));
-
-		var i = (firstOn + 1) % n;
-		var count = 0;
-
-		while (count < n - 1) {
-			var node = nodes[i];
-
-			if (node.type === 'on') {
-				ctx.lineTo(tx(node.x), ty(node.y));
-			} else if (node.type === 'curve') {
-				var b1 = node;
-				var b2 = nodes[(i + 1) % n];
-				var on = nodes[(i + 2) % n];
-				ctx.bezierCurveTo(tx(b1.x), ty(b1.y), tx(b2.x), ty(b2.y), tx(on.x), ty(on.y));
-				i = (i + 2) % n;
-				count += 2;
-			} else if (node.type === 'off') {
-				var off = node;
-				var on = nodes[(i + 1) % n];
-				ctx.quadraticCurveTo(tx(off.x), ty(off.y), tx(on.x), ty(on.y));
-				i = (i + 1) % n;
-				count += 1;
-			}
-
-			i = (i + 1) % n;
-			count++;
-		}
-
-		ctx.closePath();
 	};
 }
 
@@ -497,7 +412,7 @@ FontRig.refreshThumbnail = function(name) {
 // -- Hook switchGlyph to notify detached panels ----------------------
 var origSwitchGlyph = FontRig.switchGlyph;
 FontRig.switchGlyph = async function(name) {
-	var result = origSwitchGlyph.apply(this, arguments);
+	var result = await origSwitchGlyph.apply(this, arguments);
 
 	// Notify detached panels
 	if (FontRig.DetachablePanel) {
@@ -539,7 +454,7 @@ FontRig.switchGlyph = async function(name) {
 // -- Hook openFont to notify detached panels ------------------------
 var origOpenFont = FontRig.openFont;
 FontRig.openFont = async function() {
-	var result = origOpenFont.apply(this, arguments);
+	var result = await origOpenFont.apply(this, arguments);
 
 	if (FontRig.DetachablePanel) {
 		// Rebuild and notify glyphs panel

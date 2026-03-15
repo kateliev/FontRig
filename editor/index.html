@@ -147,14 +147,6 @@
 
 	<!-- Main -->
 	<div id="main">
-		<!-- Glyph list panel (visible when .trfont open) -->
-		<div id="glyph-panel">
-			<div id="glyph-panel-header">
-				<input type="text" id="glyph-search" placeholder="Filter glyphs..." spellcheck="false" autocomplete="off">
-				<span id="glyph-count"></span>
-			</div>
-			<div id="glyph-list"></div>
-		</div>
 		<div id="canvas-wrap">
 			<canvas id="glyph-canvas"></canvas>
 			<div id="glyph-widgets"></div>
@@ -194,26 +186,9 @@
 				<span class="hint">Drop .trglyph file, use Load, or Font button</span>
 			</div>
 		</div>
-		<div id="split-handle"></div>
-		<div id="side-panel">
-			<!-- Tab header -->
-			<div id="panel-tabs">
-				<button class="panel-tab active" data-panel="xml">XML</button>
-				<button class="panel-tab" data-panel="python">Python</button>
-				<button class="panel-popout" id="btn-popout" title="Detach panel to new window">
-					<span class="tri">arrows_expand</span>
-				</button>
-				<span class="panel-tab-info" id="xml-tab-info">
-					<span id="xml-node-count"></span>
-					<span class="parse-status ok" id="parse-status">OK</span>
-				</span>
-				<span class="panel-tab-info" id="py-tab-info" style="display:none">
-					<span class="py-status py-status--idle" id="py-status">Not loaded</span>
-				</span>
-			</div>
 
-			<!-- XML tab content -->
-			<div id="xml-tab" class="panel-content active">
+		<!-- XML tab content (moved into right sidebar by sidebar-init.js) -->
+		<div id="xml-tab" style="display:none">
 			<div id="xml-actions">
 				<button class="tb-btn" id="xml-refresh-btn" title="Regenerate XML from glyph data (Refresh)">
 					<span class="tri">refresh</span>
@@ -222,21 +197,27 @@
 					<span class="tri">action_play</span>
 				</button>
 			</div>
-				<textarea id="xml-content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
-			</div>
+			<textarea id="xml-content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+			<span id="xml-tab-info">
+				<span id="xml-node-count"></span>
+				<span class="parse-status ok" id="parse-status">OK</span>
+			</span>
+		</div>
 
-			<!-- Python tab content -->
-			<div id="python-tab" class="panel-content">
-				<div id="py-output"></div>
-				<div id="py-input-wrap">
-					<textarea id="py-input" rows="1" disabled placeholder="Click Init to load Python runtime" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
-					<div id="py-input-actions">
-						<button class="py-btn py-btn--primary" id="py-init-btn">Init Python</button>
-						<button class="py-btn" id="py-clear-btn">Clear</button>
-						<span class="hint">Shift+Enter to run</span>
-					</div>
+		<!-- Python tab content (moved into right sidebar by sidebar-init.js) -->
+		<div id="python-tab" style="display:none">
+			<div id="py-output"></div>
+			<div id="py-input-wrap">
+				<textarea id="py-input" rows="1" disabled placeholder="Click Init to load Python runtime" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+				<div id="py-input-actions">
+					<button class="py-btn py-btn--primary" id="py-init-btn">Init Python</button>
+					<button class="py-btn" id="py-clear-btn">Clear</button>
+					<span class="hint">Shift+Enter to run</span>
 				</div>
 			</div>
+			<span id="py-tab-info" style="display:none">
+				<span class="py-status py-status--idle" id="py-status">Not loaded</span>
+			</span>
 		</div>
 	</div>
 
