@@ -96,8 +96,13 @@ if (xmlPanel && oldXmlTab) {
 	while (oldXmlTab.firstChild) {
 		xmlPanel.appendChild(oldXmlTab.firstChild);
 	}
-	// Copy the class for styling
-	xmlPanel.classList.add('panel-content');
+	// Move XML status info (node count + parse status) to bottom
+	var xmlTabInfo = document.getElementById('xml-tab-info');
+	if (xmlTabInfo) {
+		xmlTabInfo.className = 'fr-sidebar__statusbar';
+		xmlTabInfo.style.display = '';
+		xmlPanel.appendChild(xmlTabInfo);
+	}
 }
 
 // Move existing Python tab content into the new right sidebar panel
@@ -107,7 +112,20 @@ if (pyPanel && oldPyTab) {
 	while (oldPyTab.firstChild) {
 		pyPanel.appendChild(oldPyTab.firstChild);
 	}
-	pyPanel.classList.add('panel-content');
+	// Move Python status info to bottom
+	var pyTabInfo = document.getElementById('py-tab-info');
+	if (pyTabInfo) {
+		pyTabInfo.className = 'fr-sidebar__statusbar';
+		pyTabInfo.style.display = '';
+		pyPanel.appendChild(pyTabInfo);
+	}
+}
+
+// Also move the popout button to the XML panel's action bar
+var popoutBtn = document.getElementById('btn-popout');
+var xmlActions = document.getElementById('xml-actions');
+if (popoutBtn && xmlActions) {
+	xmlActions.appendChild(popoutBtn);
 }
 
 // Now hide the old side-panel and split-handle (they're replaced)

@@ -2180,6 +2180,48 @@ body {
 .fr-sidebar__handle:hover::after,
 .fr-sidebar__handle.dragging::after { opacity: 0.5; }
 
+/* -- Panel status bar (bottom of tab content) ----------------------- */
+.fr-sidebar__statusbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	background: var(--bg-tertiary);
+	border-top: 1px solid var(--border);
+	font-size: 10px;
+	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	color: var(--text-dim);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.fr-sidebar__statusbar .parse-status {
+	font-size: 10px;
+	padding: 1px 6px;
+	border-radius: 3px;
+	margin-left: 6px;
+}
+
+.fr-sidebar__statusbar .parse-status.ok {
+	color: #50c878;
+	background: rgba(80,200,120,0.1);
+}
+
+.fr-sidebar__statusbar .parse-status.error {
+	color: #ff6b6b;
+	background: rgba(255,107,107,0.1);
+}
+
+.fr-sidebar__statusbar .py-status {
+	font-size: 10px;
+	padding: 1px 6px;
+	border-radius: 3px;
+}
+
+.fr-sidebar__statusbar .py-status--idle { color: var(--text-dim); background: rgba(104,104,112,0.15); }
+.fr-sidebar__statusbar .py-status--ready { color: #50c878; background: rgba(80,200,120,0.1); }
+.fr-sidebar__statusbar .py-status--error { color: #ff6b6b; background: rgba(255,107,107,0.1); }
+
 /* ===================================================================
    Unified Glyph Widget (list + grid modes)
    =================================================================== */

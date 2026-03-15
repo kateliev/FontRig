@@ -176,8 +176,9 @@ FontRig.GlyphWidgetPanel.rebuild = function() {
 		return;
 	}
 
-	// Clear renderer queue and path cache for fresh start
-	FontRig.GlyphRenderer._queue = [];
+	// Clear renderer queue for fresh start (drain in-place to avoid
+	// race with a running _processQueue that references the same array)
+	FontRig.GlyphRenderer._queue.length = 0;
 
 	var isGrid = gw._viewMode === 'grid';
 	var thumbW = isGrid ? 48 : 28;

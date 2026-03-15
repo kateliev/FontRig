@@ -239,14 +239,15 @@ FontRig.Sidebar._wireResize = function(sidebar) {
 
 		var containerRect = sidebar.container.getBoundingClientRect();
 		var mouseX = e.clientX - containerRect.left;
+		var handleW = sidebar.handleEl.offsetWidth || 5;
 		var totalWidth;
 
 		if (sidebar.position === 'left') {
-			// Mouse position is the desired total sidebar width
-			totalWidth = mouseX;
+			// Sidebar sits before the handle; mouse is on the handle
+			totalWidth = mouseX - handleW / 2;
 		} else {
-			// Total width = distance from mouse to right edge
-			totalWidth = containerRect.width - mouseX;
+			// Sidebar sits after the handle; mouse is on the handle
+			totalWidth = containerRect.width - mouseX - handleW / 2;
 		}
 
 		totalWidth = Math.max(sidebar.minWidth, Math.min(sidebar.maxWidth, totalWidth));

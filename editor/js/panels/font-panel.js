@@ -332,14 +332,23 @@ FontRig.openFont = async function() {
 	return result;
 };
 
-var origCloseFont = FontRig.closeFont;
-FontRig.closeFont = function() {
-	var result = origCloseFont.apply(this, arguments);
-	// Notify detached font panel
-	if (FontRig.fontPanelBridge.isDetached) {
-		FontRig._fontPanelSendState();
-	}
-	return result;
-};
+// Only wrap closeFont if it exists (it may not be defined yet)
+if (typeof FontRig.closeFont === 'function') {
+	var origCloseFont = FontRig.closeFont;
+	FontRig.closeFont = function() {
+		var result = origCloseFont.apply(this, arguments);
+		if (FontRig.fontPanelBridge.isDetached) {
+			FontRig._fontPanelSendState();
+		}
+		return result;
+	};
+} else {
+	// Define closeFont with panel notification support
+	FontRig.closeFont = function() {
+		if (FontRig.fontPanelBridge.isDetached) {
+			FontRig._fontPanelSendState();
+		}
+	};
+}
 
 })();

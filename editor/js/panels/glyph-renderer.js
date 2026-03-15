@@ -181,27 +181,36 @@ FontRig.GlyphRenderer._processQueue = async function() {
 	if (FontRig.GlyphRenderer._running) return;
 	FontRig.GlyphRenderer._running = true;
 
-	var queue = FontRig.GlyphRenderer._queue;
-	var processed = 0;
+	try {
+		var processed = 0;
 
-	while (queue.length > 0) {
-		var item = queue.shift();
-		await FontRig.GlyphRenderer._processItem(item);
-		processed++;
+		// Always reference the live queue property (not a local copy)
+		while (FontRig.GlyphRenderer._queue.length > 0) {
+			var item = FontRig.GlyphRenderer._queue.shift();
 
-		// Yield every 12 items to keep UI responsive
-		if (processed % 12 === 0 && queue.length > 0) {
-			await new Promise(function(resolve) {
-				if (typeof requestIdleCallback === 'function') {
-					requestIdleCallback(function() { resolve(); }, { timeout: 100 });
-				} else {
-					requestAnimationFrame(resolve);
-				}
-			});
+			try {
+				await FontRig.GlyphRenderer._processItem(item);
+			} catch (err) {
+				console.warn('GlyphRenderer: failed to render "' + (item.name || '?') + '":', err);
+				if (item.element) item.element.dataset.thumbLoaded = 'error';
+			}
+
+			processed++;
+
+			// Yield every 12 items to keep UI responsive
+			if (processed % 12 === 0 && FontRig.GlyphRenderer._queue.length > 0) {
+				await new Promise(function(resolve) {
+					if (typeof requestIdleCallback === 'function') {
+						requestIdleCallback(function() { resolve(); }, { timeout: 100 });
+					} else {
+						requestAnimationFrame(resolve);
+					}
+				});
+			}
 		}
+	} finally {
+		FontRig.GlyphRenderer._running = false;
 	}
-
-	FontRig.GlyphRenderer._running = false;
 };
 
 FontRig.GlyphRenderer._processItem = async function(item) {

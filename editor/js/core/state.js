@@ -91,4 +91,5 @@ FontRig.dom = {
 	gwLsb:          document.getElementById('gw-lsb'),
 	gwAdvance:      document.getElementById('gw-advance'),
 	gwRsb:          document.getElementById('gw-rsb'),
+	pyInput:        document.getElementById('py-input'),
 };
