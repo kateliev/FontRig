@@ -559,7 +559,7 @@ FontRig._drawStartPoints = function(layer) {
 			const angle = Math.atan2(dy, dx);
 
 			const isStartSelected = sel.has('c' + ci + '_n' + firstOn);
-			const size = 8;
+			const size = tn.startSize;
 
 			ctx.save();
 			ctx.translate(sp.x, sp.y);
@@ -745,7 +745,7 @@ FontRig.drawPreviewNodes = function(layer) {
 			var dy = np.y - sp.y;
 			var angle = Math.atan2(dy, dx);
 			var isStartSelected = sel.has('c' + ci + '_n' + firstOn);
-			var size = 8;
+			var size = tn.startSize;
 
 			ctx.globalAlpha = a;
 			ctx.save();

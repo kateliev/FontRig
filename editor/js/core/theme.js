@@ -63,7 +63,7 @@ FontRig.themeDark = {
 
 	// -- Nodes & handles --------------------------------------------
 	node: {
-		onCorner:     '#e8e8ec',           // on-curve corner
+		onCorner:     '#5b9def',           // on-curve corner
 		onSmooth:     '#50c878',           // on-curve smooth
 		offCurve:     '#5b9def',           // cubic/quadratic off-curve
 		selected:     '#ff6b6b',           // any selected node
@@ -73,6 +73,7 @@ FontRig.themeDark = {
 		radius:       4,                   // node circle radius
 		strokeWidth:  1.5,                 // node stroke width
 		handleWidth:  1,                   // handle line width
+		startSize:    6,                   // start point triangle size
 	},
 
 	// -- Anchors ----------------------------------------------------
@@ -157,76 +158,77 @@ FontRig.themeDark = {
 
 FontRig.themeLight = {
 	// -- Canvas background ------------------------------------------
-	bgFilled:       '#ffffff',
-	bgOutline:      '#f5f5f5',
+	bgFilled:       '#fafafa',
+	bgOutline:      '#f0f0f0',
 	bgPreview: 		'#ffffff',
-	bgFadeRgb:      '245,245,245',
+	bgFadeRgb:      '250,250,250',
 
 	// -- Contour outlines -------------------------------------------
 	contour: {
-		fill:         'rgba(30,30,30,0.08)',
-		stroke:       'rgba(30,30,30,0.5)',
-		strokePlain:  '#404048',           // outline mode (no fill)
-		lineWidth:    1.5,                 // slightly thicker for light bg
+		fill:         'rgba(56,58,66,0.08)',
+		stroke:       'rgba(56,58,66,0.5)',
+		strokePlain:  '#383a42',           // outline mode (no fill)
+		lineWidth:    1,
 	},
 
 	// -- Mask layer outlines ----------------------------------------
 	mask: {
-		stroke:       'rgba(234,88,12,0.4)',
-		lineWidth:    2,
+		stroke:       'rgba(193,132,1,0.5)',
+		lineWidth:    1.5,
 	},
 
 	// -- Metrics (baseline, advance, sidebearings) ------------------
 	metrics: {
-		baseline:     'rgba(234,88,12,0.3)',
-		sidebearing:  'rgba(234,88,12,0.4)',
-		advance:      'rgba(37,99,235,0.5)',
-		labelBase:    'rgba(234,88,12,0.6)',
-		labelBaseFg:  'rgba(234,88,12,0.7)',
-		labelAdvance: 'rgba(37,99,235,0.8)',
+		baseline:     'rgba(193,132,1,0.35)',
+		sidebearing:  'rgba(193,132,1,0.45)',
+		advance:      'rgba(64,120,242,0.5)',
+		labelBase:    'rgba(193,132,1,0.7)',
+		labelBaseFg:  'rgba(193,132,1,0.8)',
+		labelAdvance: 'rgba(64,120,242,0.8)',
 		// Styling
-		lineWidth:    1.5,                 // thicker for light bg
-		baselineDash: [6, 4],    // dash for baseline/advance lines
+		lineWidth:    1,
+		baselineDash: [0],    // dash for baseline/advance lines
 		metricDash:   [3, 3],    // dash for sidebearing lines
 		font:         '9px "IBM Plex Mono", "JetBrains Mono", monospace',
 		labelFont:    '10px "IBM Plex Mono", "JetBrains Mono", monospace',
 		// Font metrics (ascender, descender, x-height, cap-height)
 		fontMetricsColors: {
-			ascender:   'rgba(22,163,74,0.3)',
-			descender:  'rgba(22,163,74,0.3)',
-			xHeight:     'rgba(180,83,9,0.25)',
-			capHeight:   'rgba(180,83,9,0.25)',
+			ascender:   'rgba(80,161,79,0.35)',
+			descender:  'rgba(80,161,79,0.35)',
+			xHeight:     'rgba(193,132,1,0.3)',
+			capHeight:   'rgba(193,132,1,0.3)',
 		},
-		fontMetricsDash: [3, 5],
+		fontMetricsDash: [0],
 	},
 
 	// -- Nodes & handles --------------------------------------------
 	node: {
-		onCorner:     '#1a1a1e',           // on-curve corner
-		onSmooth:     '#16a34a',           // on-curve smooth
-		offCurve:     '#2563eb',           // cubic/quadratic off-curve
-		selected:     '#dc2626',           // any selected node
+		onCorner:     '#383a42',           // on-curve corner
+		onSmooth:     '#50a14f',           // on-curve smooth
+		offCurve:     '#4078f2',           // cubic/quadratic off-curve
+		selected:    '#e45649',           // any selected node
 		outline:      'rgba(255,255,255,0.9)',   // node stroke (white for contrast)
-		handleLine:   'rgba(37,99,235,0.5)',
-		startPoint:   '#dc2626',           // contour start triangle
-		radius:       5,                   // slightly larger for light bg
-		strokeWidth:  2,                   // thicker stroke for light bg
-		handleWidth:  1.5,                // thicker handle lines
+		handleLine:   'rgba(64,120,242,0.5)',
+		startPoint:   '#e45649',           // contour start triangle
+		radius:       4,                   // node circle radius
+		strokeWidth:  1.5,                 // node stroke width
+		handleWidth:  1,                   // handle line width
+		startSize:    6,                   // start point triangle size
 	},
 
 	// -- Anchors ----------------------------------------------------
 	anchor: {
-		fill:         '#dc2626',
+		fill:         '#e45649',
 		outline:      'rgba(255,255,255,0.9)',
-		crosshair:    'rgba(220,38,38,0.5)',
-		label:        'rgba(220,38,38,0.9)',
+		crosshair:    'rgba(228,86,73,0.5)',
+		label:        'rgba(228,86,73,0.9)',
 	},
 
 	// -- Selection overlay (rect / lasso) ---------------------------
 	selection: {
-		fill:         'rgba(37,99,235,0.1)',
-		stroke:       'rgba(37,99,235,0.7)',
-		strokeWidth:  1.5,
+		fill:         'rgba(64,120,242,0.1)',
+		stroke:       'rgba(64,120,242,0.7)',
+		strokeWidth:  1,
 	},
 
 	// -- Layer label badge -------------------------------------------
@@ -237,24 +239,24 @@ FontRig.themeLight = {
 
 	// -- Per-layer color palette (cycled by index) ------------------
 	layerColors: [
-		'#2563eb',  // blue
-		'#dc2626',  // red
-		'#16a34a',  // green
-		'#7c3aed',  // purple
-		'#d97706',  // amber
-		'#0891b2',  // cyan
-		'#db2777',  // pink
-		'#65a30d',  // lime
+		'#4078f2',  // blue
+		'#e45649',  // red
+		'#50a14f',  // green
+		'#a626a4',  // purple
+		'#c18401',  // orange
+		'#0184bc',  // cyan
+		'#e45649',  // (no pink in one-light, use red)
+		'#50a14f',  // (no lime in one-light, use green)
 	],
 
 	// -- Grid / multi-view ------------------------------------------
 	grid: {
-		dividerHairline:   'rgba(0,0,0,0.1)',
-		dividerHairlineJ:  'rgba(0,0,0,0.08)', 	// joined mode
+		dividerHairline:   'rgba(0,0,0,0.08)',
+		dividerHairlineJ:  'rgba(0,0,0,0.06)', 	// joined mode
 		dividerFadeAlpha:  	0.5,                       	// split mode fade
 		dividerFadeAlphaJ: 	0.45,                      	// joined mode fade
-		activeBorder:      'rgba(37,99,235,0.5)',
-		strokeWidth:       1.5,                      // thicker dividers
+		activeBorder:      'rgba(64,120,242,0.4)',
+		strokeWidth:       1,                        	// divider line width
 		fade: 				24,
 		joinedGap: 			80,							// joined mode gap between cells
 		stripGap: 			40,  						// glyph strip gap between glyphs
@@ -263,27 +265,27 @@ FontRig.themeLight = {
 	// -- Cell highlight in glyphs mode ------------------------------
 	activeCellHightlight: {
 		backgroundGradient: 
-							[[0, 'rgba(37,99,235,0)'],
-							[0.15, 'rgba(37,99,235,0.06)'],
-							[0.85, 'rgba(37,99,235,0.06)'],
-							[1, 'rgba(37,99,235,0)']],
-		strokeStyle: 		'rgba(37,99,235,0.2)',
-		strokeWidth:       1.5,
+							[[0, 'rgba(64,120,242,0)'],
+							[0.15, 'rgba(64,120,242,0.06)'],
+							[0.85, 'rgba(64,120,242,0.06)'],
+							[1, 'rgba(64,120,242,0)']],
+		strokeStyle: 		'rgba(64,120,242,0.2)',
+		strokeWidth:       1,
 	},
 
 	// -- On stem measurment ----------------------------------------
 	onStemMeasurment: {
-		line:      		'rgba(8,145,178,0.8)',   // cyan measurement line
-		linePreview: 	'rgba(8,145,178,0.6)', // lighter for BW preview
-		mark:      		'#0891b2',               // endpoint marks
-		label:     		'#0891b2',               // distance label
+		line:      		'rgba(1,132,188,0.8)',   // cyan measurement line
+		linePreview: 	'rgba(1,132,188,0.6)', // lighter for BW preview
+		mark:      		'#0184bc',               // endpoint marks
+		label:     		'#0184bc',               // distance label
 		labelFont: 		'11px "IBM Plex Mono", "JetBrains Mono", monospace',
-		lineWidth:      	1.5,
+		lineWidth:      	1,
 	},
 
 	// -- Glyph thumbnail fill (sidebar / grid) ---------------------
 	thumbnail: {
-		fill:         'rgba(30,30,40,0.8)',
+		fill:         'rgba(56,58,66,0.8)',
 	},
 
 	// -- Keyaboard movement ----------------------------------------
