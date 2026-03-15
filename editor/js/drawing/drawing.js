@@ -163,20 +163,10 @@ FontRig.drawMetrics = function(layer, w, h) {
 	// Labels
 	ctx.font = t.labelFont || '10px "JetBrains Mono", monospace';
 
-	ctx.fillStyle = t.labelBaseFg;
-	ctx.textAlign = 'left';
-	ctx.fillText('LSB (x=0)', lsbX + 4, baseY - 6);
-
 	ctx.fillStyle = t.labelAdvance;
 	ctx.textAlign = 'right';
-	ctx.fillText(`ADV (${advW})`, rsbX - 4, baseY - 6);
-
-	ctx.fillStyle = t.labelBase;
-	ctx.textAlign = 'left';
-	ctx.fillText('Baseline', lsbX + 4, baseY + 14);
-
-	ctx.fillStyle = t.labelBase;
-	ctx.fillText(`Height (${advH})`, lsbX + 4, topY + 14);
+	var labelY = FontRig.glyphToScreen(0, -30).y;
+	ctx.fillText(`ADV ${advW}`, rsbX - 4, labelY);
 };
 
 // -- Contours -------------------------------------------------------
