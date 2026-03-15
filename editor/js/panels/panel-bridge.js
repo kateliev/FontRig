@@ -49,11 +49,15 @@ if (typeof FontRig !== 'undefined') {
 
 		FontRig.panelBridge.isDetached = true;
 
-		// Hide inline panel
+		// Hide inline panel (new sidebar framework or legacy)
 		FontRig.state.showXml = false;
-		FontRig.dom.sidePanel.classList.remove('visible');
-		FontRig.dom.splitHandle.classList.remove('visible');
-		FontRig.dom.sidePanel.style.width = '';
+		if (FontRig._rightSidebar) {
+			FontRig.Sidebar.hide(FontRig._rightSidebar);
+		} else {
+			FontRig.dom.sidePanel.classList.remove('visible');
+			FontRig.dom.splitHandle.classList.remove('visible');
+			FontRig.dom.sidePanel.style.width = '';
+		}
 
 		// Update button state
 		var btn = document.getElementById('btn-panel');

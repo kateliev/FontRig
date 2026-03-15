@@ -45,7 +45,10 @@ FontRig.detachFontPanel = function() {
 
 	FontRig.fontPanelBridge.isDetached = true;
 
-	// Hide inline glyph panel if visible
+	// Hide left sidebar if visible (new framework or legacy)
+	if (FontRig._leftSidebar) {
+		FontRig.Sidebar.hide(FontRig._leftSidebar);
+	}
 	var glyphPanel = document.getElementById('glyph-panel');
 	if (glyphPanel) {
 		glyphPanel.classList.remove('visible');
@@ -70,8 +73,11 @@ FontRig.attachFontPanel = function() {
 	var btn = document.getElementById('btn-font-panel');
 	if (btn) btn.classList.remove('detached');
 
-	// Show inline glyph panel if font is loaded
+	// Show left sidebar if font is loaded (new framework or legacy)
 	if (FontRig.font) {
+		if (FontRig._leftSidebar) {
+			FontRig.Sidebar.show(FontRig._leftSidebar);
+		}
 		var glyphPanel = document.getElementById('glyph-panel');
 		if (glyphPanel) {
 			glyphPanel.classList.add('visible');

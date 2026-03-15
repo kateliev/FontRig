@@ -1994,3 +1994,449 @@ body {
 	color: var(--frw-text-secondary);
 	line-height: 1.4;
 }
+
+/* ===================================================================
+   Sidebar Framework
+   =================================================================== */
+
+/* -- Sidebar container ---------------------------------------------- */
+.fr-sidebar {
+	display: none;
+	flex-direction: row;
+	background: var(--bg-secondary);
+	overflow: hidden;
+	min-width: 0;
+	flex-shrink: 0;
+}
+
+.fr-sidebar.visible { display: flex; }
+
+.fr-sidebar--left {
+	border-right: 1px solid var(--border);
+}
+
+.fr-sidebar--right {
+	border-left: 1px solid var(--border);
+}
+
+/* -- Vertical tab bar ----------------------------------------------- */
+/* Tabs sit on the INSIDE edge of each sidebar (closest to canvas).
+   Left sidebar:  tabs on right edge  → border-left on tab bar
+   Right sidebar: tabs on left edge   → border-right on tab bar */
+.fr-sidebar__tabs {
+	display: flex;
+	flex-direction: column;
+	width: 32px;
+	min-width: 32px;
+	background: var(--bg-tertiary);
+	padding: 4px 0;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+/* Left sidebar: tab bar is on the right (inner) edge */
+.fr-sidebar--left .fr-sidebar__tabs {
+	border-left: 1px solid var(--border-subtle);
+}
+
+/* Right sidebar: tab bar is on the left (inner) edge */
+.fr-sidebar--right .fr-sidebar__tabs {
+	border-right: 1px solid var(--border-subtle);
+}
+
+.fr-sidebar__tab {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0;
+	padding: 8px 2px;
+	background: none;
+	border: none;
+	color: var(--text-dim);
+	cursor: pointer;
+	transition: color 0.12s, background 0.12s;
+	position: relative;
+}
+
+/* Active indicator: left sidebar uses right border, right sidebar uses left border */
+.fr-sidebar--left .fr-sidebar__tab {
+	border-right: 2px solid transparent;
+}
+
+.fr-sidebar--right .fr-sidebar__tab {
+	border-left: 2px solid transparent;
+}
+
+.fr-sidebar__tab:hover {
+	color: var(--text-secondary);
+	background: var(--bg-hover);
+}
+
+.fr-sidebar__tab.active {
+	color: var(--accent);
+	background: var(--bg-secondary);
+}
+
+.fr-sidebar--left .fr-sidebar__tab.active {
+	border-right-color: var(--accent);
+}
+
+.fr-sidebar--right .fr-sidebar__tab.active {
+	border-left-color: var(--accent);
+}
+
+/* -- Icon-only mode (default) --------------------------------------- */
+.fr-sidebar__tab .tri {
+	font-size: 16px;
+	line-height: 1;
+}
+
+/* Hide label by default (icon-only mode) */
+.fr-sidebar__tab-label {
+	display: none;
+	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	font-size: 9px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+/* -- Text-only mode (activated via data-sidebar-tabs="text") -------- */
+/* Applied on <body> or #app via theme.js flag */
+[data-sidebar-tabs="text"] .fr-sidebar__tab .tri {
+	display: none;
+}
+
+[data-sidebar-tabs="text"] .fr-sidebar__tab-label {
+	display: block;
+	writing-mode: vertical-lr;
+	text-orientation: mixed;
+	transform: rotate(180deg);
+	padding: 4px 0;
+}
+
+[data-sidebar-tabs="text"] .fr-sidebar__tabs {
+	width: 24px;
+	min-width: 24px;
+}
+
+/* -- Content area --------------------------------------------------- */
+.fr-sidebar__content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	min-width: 0;
+}
+
+/* -- Tab panels ----------------------------------------------------- */
+.fr-sidebar__panel {
+	display: none;
+	flex-direction: column;
+	flex: 1;
+	overflow: hidden;
+}
+
+.fr-sidebar__panel.active {
+	display: flex;
+}
+
+/* -- Resize handle -------------------------------------------------- */
+.fr-sidebar__handle {
+	display: none;
+	width: 5px;
+	cursor: col-resize;
+	background: var(--border);
+	position: relative;
+	flex-shrink: 0;
+	transition: background 0.12s;
+	z-index: 5;
+}
+
+.fr-sidebar__handle.visible { display: block; }
+
+.fr-sidebar__handle:hover,
+.fr-sidebar__handle.dragging {
+	background: var(--accent-dim);
+}
+
+.fr-sidebar__handle::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 3px;
+	height: 32px;
+	border-left: 1px solid var(--text-dim);
+	border-right: 1px solid var(--text-dim);
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+
+.fr-sidebar__handle:hover::after,
+.fr-sidebar__handle.dragging::after { opacity: 0.5; }
+
+/* ===================================================================
+   Unified Glyph Widget (list + grid modes)
+   =================================================================== */
+
+/* -- Widget header -------------------------------------------------- */
+.glyph-widget-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px;
+	border-bottom: 1px solid var(--border-subtle);
+	flex-shrink: 0;
+}
+
+.glyph-widget-header input {
+	flex: 1;
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: 3px;
+	color: var(--text-primary);
+	font: 11px 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	padding: 4px 6px;
+	outline: none;
+	min-width: 0;
+}
+
+.glyph-widget-header input:focus { border-color: var(--accent-dim); }
+
+.glyph-widget-count {
+	font: 10px 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	color: var(--text-dim);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.glyph-widget-mode {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	flex-shrink: 0;
+}
+
+.glyph-widget-mode button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 20px;
+	padding: 0;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	color: var(--text-dim);
+	cursor: pointer;
+	transition: all 0.12s;
+}
+
+.glyph-widget-mode button:hover {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+
+.glyph-widget-mode button.active {
+	background: var(--accent-bg);
+	color: var(--accent);
+	border-color: var(--accent-dim);
+}
+
+.glyph-widget-mode button .tri {
+	font-size: 14px;
+	line-height: 1;
+}
+
+/* -- Glyph list container ------------------------------------------- */
+.glyph-widget-list {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+
+/* -- List mode entries ---------------------------------------------- */
+.glyph-widget-list--list .gw-entry {
+	display: flex;
+	align-items: center;
+	padding: 2px 8px;
+	cursor: pointer;
+	font: 11px 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	color: var(--text-secondary);
+	border-left: 2px solid transparent;
+	gap: 4px;
+}
+
+.glyph-widget-list--list .gw-entry:hover { background: var(--bg-hover); }
+
+.glyph-widget-list--list .gw-entry.active {
+	background: var(--accent-bg);
+	border-left-color: var(--accent);
+	color: var(--text-primary);
+}
+
+.glyph-widget-list--list .gw-entry.in-strip {
+	border-left-color: var(--accent-dim);
+}
+
+.glyph-widget-list--list .gw-thumb {
+	width: 28px;
+	height: 36px;
+	flex-shrink: 0;
+	border-radius: 2px;
+	background: rgba(255,255,255,0.03);
+}
+
+.glyph-widget-list--list .gw-name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.glyph-widget-list--list .gw-uni {
+	font-size: 9px;
+	color: var(--text-dim);
+	flex-shrink: 0;
+}
+
+.glyph-widget-list--list .gw-dirty {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	opacity: 0;
+}
+
+.glyph-widget-list--list .gw-entry.dirty .gw-dirty {
+	background: var(--accent);
+	opacity: 1;
+}
+
+/* -- Grid mode entries ---------------------------------------------- */
+.glyph-widget-list--grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+	gap: 3px;
+	padding: 4px;
+	align-content: start;
+}
+
+.glyph-widget-list--grid .gw-entry {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 4px 2px;
+	cursor: pointer;
+	border-radius: 4px;
+	border: 1px solid transparent;
+	transition: background 0.1s, border-color 0.1s;
+}
+
+.glyph-widget-list--grid .gw-entry:hover {
+	background: var(--bg-hover);
+}
+
+.glyph-widget-list--grid .gw-entry.active {
+	background: var(--accent-bg);
+	border-color: var(--accent-dim);
+}
+
+.glyph-widget-list--grid .gw-entry.in-strip {
+	border-color: var(--accent-dim);
+}
+
+.glyph-widget-list--grid .gw-thumb {
+	width: 48px;
+	height: 48px;
+	border-radius: 2px;
+	background: rgba(255,255,255,0.03);
+}
+
+.glyph-widget-list--grid .gw-name {
+	font: 9px 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	color: var(--text-secondary);
+	text-align: center;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 100%;
+	margin-top: 2px;
+}
+
+.glyph-widget-list--grid .gw-uni { display: none; }
+
+.glyph-widget-list--grid .gw-dirty {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	opacity: 0;
+}
+
+.glyph-widget-list--grid .gw-entry {
+	position: relative;
+}
+
+.glyph-widget-list--grid .gw-entry.dirty .gw-dirty {
+	background: var(--accent);
+	opacity: 1;
+}
+
+/* ===================================================================
+   Font Info Panel (sidebar tab content)
+   =================================================================== */
+.font-info-panel {
+	padding: 12px;
+	overflow-y: auto;
+	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	font-size: 11px;
+}
+
+.font-info-title {
+	font-family: 'DM Sans', sans-serif;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-primary);
+	margin-bottom: 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.font-info-section {
+	margin-bottom: 12px;
+}
+
+.font-info-section-label {
+	font-size: 9px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-dim);
+	margin-bottom: 6px;
+	font-weight: 600;
+}
+
+.font-info-row {
+	display: flex;
+	justify-content: space-between;
+	padding: 3px 0;
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.font-info-row .label {
+	color: var(--text-dim);
+	font-size: 10px;
+}
+
+.font-info-row .value {
+	color: var(--text-secondary);
+	font-size: 10px;
+	text-align: right;
+}

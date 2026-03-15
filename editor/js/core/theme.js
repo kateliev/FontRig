@@ -7,7 +7,12 @@
 'use strict';
 
 FontRig.theme = {
-	appTitle: 		'FontRig', 
+	appTitle: 		'FontRig',
+
+	// -- Sidebar tab display mode -----------------------------------
+	// 'icon' : show icon only (default, wider tab bar)
+	// 'text' : show rotated text labels only (narrower tab bar)
+	sidebarTabMode: 'icon',
 };
 
 FontRig.themeDark = {
@@ -298,3 +303,21 @@ FontRig.getBgColor = function() {
 	const theme = FontRig.getCurrentTheme();
 	return FontRig.state.filled ? theme.bgFilled : theme.bgOutline;
 };
+
+// -- Apply sidebar tab display mode ---------------------------------
+// Reads FontRig.theme.sidebarTabMode and sets a data attribute
+// on the app container so CSS can switch between icon/text modes.
+FontRig.applySidebarTabMode = function() {
+	var mode = FontRig.theme.sidebarTabMode || 'icon';
+	var app = document.getElementById('app');
+	if (app) {
+		if (mode === 'text') {
+			app.setAttribute('data-sidebar-tabs', 'text');
+		} else {
+			app.removeAttribute('data-sidebar-tabs');
+		}
+	}
+};
+
+// Apply on load
+FontRig.applySidebarTabMode();

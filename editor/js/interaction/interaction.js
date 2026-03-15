@@ -2420,6 +2420,8 @@ FontRig.loadXmlString = function(xmlString, filename) {
 		FontRig.glyphCache.clear();
 		FontRig.dirtyGlyphs.clear();
 		FontRig.activeGlyph = null;
+		// Hide left sidebar when loading a loose file
+		if (FontRig._hideLeftSidebar) FontRig._hideLeftSidebar();
 		var glyphPanel = document.getElementById('glyph-panel');
 		if (glyphPanel) glyphPanel.classList.remove('visible');
 

@@ -169,11 +169,12 @@ FontRig.scope = {
 
 		if (mode === 'selection') {
 			// Glyphs selected in the font panel (checked/highlighted entries)
-			var list = document.getElementById('glyph-list');
+			var list = (FontRig.GlyphWidgetPanel && FontRig.GlyphWidgetPanel.getListElement())
+				|| document.getElementById('glyph-list');
 			if (!list) return FontRig.activeGlyph ? [FontRig.activeGlyph] : [];
 
 			var names = [];
-			var entries = list.querySelectorAll('.glyph-entry.active, .glyph-entry.in-strip');
+			var entries = list.querySelectorAll('.gw-entry.active, .gw-entry.in-strip, .glyph-entry.active, .glyph-entry.in-strip');
 			for (var i = 0; i < entries.length; i++) {
 				if (entries[i].dataset.name) names.push(entries[i].dataset.name);
 			}

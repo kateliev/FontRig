@@ -155,7 +155,7 @@ document.getElementById('btn-outline').addEventListener('click', function() {
 	FontRig.draw();
 });
 
-// XML panel (has panel show/hide logic)
+// XML/Python panel (right sidebar toggle)
 document.getElementById('btn-panel').addEventListener('click', function(e) {
 	// Shift+click or click when detached → toggle detach
 	if (e.shiftKey || FontRig.panelBridge.isDetached) {
@@ -167,26 +167,8 @@ document.getElementById('btn-panel').addEventListener('click', function(e) {
 		return;
 	}
 
-	state.showXml = !state.showXml;
 	this.classList.toggle('active');
-
-	const panel = dom.sidePanel;
-
-	if (state.showXml) {
-		const mainWidth = dom.main.clientWidth;
-		panel.style.width = Math.round(mainWidth * 0.4) + 'px';
-		panel.classList.add('visible');
-		dom.splitHandle.classList.add('visible');
-	} else {
-		panel.classList.remove('visible');
-		dom.splitHandle.classList.remove('visible');
-		panel.style.width = '';
-	}
-
-	requestAnimationFrame(function() {
-		FontRig.draw();
-		if (state.showXml && state.activePanel === 'xml') FontRig.buildXmlPanel();
-	});
+	FontRig._toggleRightSidebar();
 });
 
 // Popout button inside panel header
@@ -194,10 +176,10 @@ document.getElementById('btn-popout').addEventListener('click', function() {
 	FontRig.detachPanel();
 });
 
-// Font panel button
+// Font panel button — toggles left sidebar; shift+click for detach
 document.getElementById('btn-font-panel').addEventListener('click', function(e) {
-	// Shift+click → toggle detach
-	if (e.shiftKey || FontRig.fontPanelBridge.isDetached) {
+	// Shift+click → toggle detach (legacy detached window)
+	if (e.shiftKey) {
 		if (FontRig.fontPanelBridge.isDetached) {
 			FontRig.attachFontPanel();
 		} else {
@@ -206,12 +188,15 @@ document.getElementById('btn-font-panel').addEventListener('click', function(e) 
 		return;
 	}
 
-	// Just focus the detached panel if already detached
+	// Focus detached panel if already detached
 	if (FontRig.fontPanelBridge.isDetached && FontRig.fontPanelBridge.detachedWindow) {
 		FontRig.fontPanelBridge.detachedWindow.focus();
-	} else {
-		// Open detached font panel
-		FontRig.detachFontPanel();
+		return;
+	}
+
+	// Toggle left sidebar visibility
+	if (FontRig._leftSidebar) {
+		FontRig.Sidebar.toggle(FontRig._leftSidebar);
 	}
 });
 
@@ -387,43 +372,8 @@ dom.layerSelect.addEventListener('change', function() {
 // ===================================================================
 // Glyph panel — click and search
 // ===================================================================
-(function() {
-	var glyphList = document.getElementById('glyph-list');
-	var glyphSearch = document.getElementById('glyph-search');
-	var glyphCount = document.getElementById('glyph-count');
-
-	if (glyphList) {
-		// Single click: switch to glyph
-		glyphList.addEventListener('click', function(e) {
-			var entry = e.target.closest('.glyph-entry');
-			if (!entry) return;
-			var name = entry.dataset.name;
-			if (name) FontRig.switchGlyph(name);
-		});
-
-		// Double click: add glyph to workspace strip
-		glyphList.addEventListener('dblclick', function(e) {
-			var entry = e.target.closest('.glyph-entry');
-			if (!entry) return;
-			var name = entry.dataset.name;
-			if (!name || !FontRig.state.glyphViewMode) return;
-
-			FontRig.addGlyphToStrip(name);
-			FontRig.updateGlyphPanelActive();
-		});
-	}
-
-	if (glyphSearch) {
-		glyphSearch.addEventListener('input', function() {
-			FontRig.filterGlyphPanel(this.value);
-			// Update visible count
-			if (glyphCount && glyphList) {
-				var visible = glyphList.querySelectorAll('.glyph-entry:not([style*="display: none"])');
-				glyphCount.textContent = visible.length + '/' + (FontRig.font ? FontRig.font.manifest.length : 0);
-			}
-		});
-	}
-})();
+// Now handled by GlyphWidgetPanel (glyph-widget-panel.js).
+// The old #glyph-list handlers are no longer needed.
 
 // File input / Drag and drop
 // ===================================================================
