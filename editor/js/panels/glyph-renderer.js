@@ -58,27 +58,39 @@ FontRig.GlyphRenderer._buildPath = function(glyphData) {
 // Render a glyph thumbnail onto a canvas
 // ===================================================================
 // Options:
-//   canvas     : HTMLCanvasElement
-//   glyphData  : parsed glyph object
+//   canvas     : HTMLCanvasElement (set data-css-w / data-css-h for logical size)
+//   glyphData  : parsed glyph object (nullable when cacheOnly is set)
 //   glyphName  : string (for cache key, optional)
-//   fillStyle  : string (default 'rgba(200,200,210,0.55)')
+//   fillStyle  : string (default from theme, black in light mode)
 //   useCache   : boolean (default true)
+//   cacheOnly  : boolean — only render if Path2D is already cached
 // ===================================================================
 FontRig.GlyphRenderer.render = function(canvas, glyphData, options) {
 	options = options || {};
-	var ctx = canvas.getContext('2d');
-	var w = canvas.width;
-	var h = canvas.height;
 	var name = options.glyphName || (glyphData && glyphData.name) || '';
 	var useCache = options.useCache !== false;
 	var cacheOnly = !!options.cacheOnly;
-	// Use theme-aware fill: dark mode gets light gray, light mode gets near-black
 	var themeFill = (FontRig.getCurrentTheme && FontRig.getCurrentTheme().thumbnail)
 		? FontRig.getCurrentTheme().thumbnail.fill
-		: 'rgba(200,200,210,0.55)';
+		: '#000000';
 	var fillStyle = options.fillStyle || themeFill;
 
-	ctx.clearRect(0, 0, w, h);
+	// HiDPI: scale the backing store for crisp rendering.
+	// CSS size stays the same; canvas resolution doubles on 2x displays.
+	var dpr = window.devicePixelRatio || 1;
+	var cssW = parseInt(canvas.dataset.cssW) || canvas.clientWidth || 28;
+	var cssH = parseInt(canvas.dataset.cssH) || canvas.clientHeight || 36;
+
+	// Size the backing store to match DPR
+	var needW = Math.round(cssW * dpr);
+	var needH = Math.round(cssH * dpr);
+	if (canvas.width !== needW || canvas.height !== needH) {
+		canvas.width = needW;
+		canvas.height = needH;
+	}
+
+	var ctx = canvas.getContext('2d');
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 	// Get or build cached path
 	var cached = useCache ? FontRig.GlyphRenderer._pathCache.get(name) : null;
@@ -95,15 +107,15 @@ FontRig.GlyphRenderer.render = function(canvas, glyphData, options) {
 		}
 	}
 
-	// Compute fit transform for this canvas size
+	// Compute fit transform for the CSS canvas size, then scale by DPR
 	var upm = FontRig.font ? FontRig.font.metrics.upm : 1000;
 	var desc = FontRig.font ? Math.abs(FontRig.font.metrics.descender) : 200;
 	var advW = cached.advW;
 	var totalH = upm + desc * 0.3;
 
-	var scale = Math.min((w - 4) / advW, (h - 4) / totalH);
-	var ox = (w - advW * scale) / 2;
-	var oy = h - 3 - desc * 0.3 * scale;
+	var scale = Math.min((cssW - 4) / advW, (cssH - 4) / totalH) * dpr;
+	var ox = (canvas.width - advW * scale) / 2;
+	var oy = canvas.height - 3 * dpr - desc * 0.3 * scale;
 
 	// Draw with transform (flip Y for font→screen)
 	ctx.save();

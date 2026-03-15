@@ -161,8 +161,10 @@ FontRig.GlyphWidgetPanel.setViewMode = function(mode) {
 
 	var canvases = list.querySelectorAll('.gw-thumb');
 	for (var i = 0; i < canvases.length; i++) {
-		canvases[i].width = thumbW;
-		canvases[i].height = thumbH;
+		canvases[i].style.width = thumbW + 'px';
+		canvases[i].style.height = thumbH + 'px';
+		canvases[i].dataset.cssW = thumbW;
+		canvases[i].dataset.cssH = thumbH;
 	}
 
 	// Sync re-render all loaded thumbnails from Path2D cache
@@ -240,11 +242,13 @@ FontRig.GlyphWidgetPanel.rebuild = function() {
 		div.className = 'gw-entry';
 		div.dataset.name = name;
 
-		// Thumbnail canvas
+		// Thumbnail canvas — set CSS size; render() handles DPR scaling
 		var cvs = document.createElement('canvas');
 		cvs.className = 'gw-thumb';
-		cvs.width = thumbW;
-		cvs.height = thumbH;
+		cvs.style.width = thumbW + 'px';
+		cvs.style.height = thumbH + 'px';
+		cvs.dataset.cssW = thumbW;
+		cvs.dataset.cssH = thumbH;
 		div.appendChild(cvs);
 
 		// Name label

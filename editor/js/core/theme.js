@@ -145,7 +145,7 @@ FontRig.themeDark = {
 
 	// -- Glyph thumbnail fill (sidebar / grid) ---------------------
 	thumbnail: {
-		fill:         'rgba(200,200,210,0.55)',
+		fill:         '#e0e0e4',
 	},
 
 	// -- Keyaboard movement ----------------------------------------
@@ -285,7 +285,7 @@ FontRig.themeLight = {
 
 	// -- Glyph thumbnail fill (sidebar / grid) ---------------------
 	thumbnail: {
-		fill:         'rgba(56,58,66,0.8)',
+		fill:         '#000000',
 	},
 
 	// -- Keyaboard movement ----------------------------------------
