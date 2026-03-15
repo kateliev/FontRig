@@ -2146,6 +2146,55 @@ body {
 	display: flex;
 }
 
+.fr-sidebar__panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 8px;
+	background: var(--bg-secondary);
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.fr-sidebar__panel-title {
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.fr-sidebar__detach {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: 4px;
+	color: var(--text-dim);
+	cursor: pointer;
+	transition: all 0.12s;
+}
+
+.fr-sidebar__detach:hover {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+
+.fr-sidebar__detach.detached {
+	color: var(--accent);
+	background: var(--accent-bg);
+}
+
+.fr-sidebar__panel-content {
+	flex: 1;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
 /* -- Resize handle -------------------------------------------------- */
 .fr-sidebar__handle {
 	display: none;

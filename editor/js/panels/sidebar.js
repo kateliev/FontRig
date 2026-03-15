@@ -46,12 +46,13 @@ FontRig.Sidebar._savePref = function(key, value) {
 //   defaultWidth : number (px) or string like '40%'
 //   minWidth     : number (px), default 150
 //   maxWidth     : number (px), default 600
-//   tabs         : [{ id, label, icon }] — ordered tab definitions
+//   tabs         : [{ id, label, icon, detachable }] — ordered tab definitions
 //   defaultTab   : tab id to activate on creation
 //   container    : parent DOM element (defaults to #main)
 //   onResize     : function() — called during/after resize
 //   onTabSwitch  : function(tabId, prevTabId) — called on tab change
 //   onToggle     : function(visible) — called on show/hide
+//   onDetach     : function(tabId) — called when tab is detached
 // ===================================================================
 FontRig.Sidebar.create = function(options) {
 	var id = options.id;
@@ -77,6 +78,7 @@ FontRig.Sidebar.create = function(options) {
 		onResize: options.onResize || null,
 		onTabSwitch: options.onTabSwitch || null,
 		onToggle: options.onToggle || null,
+		onDetach: options.onDetach || null,
 	};
 
 	// -- Build DOM --------------------------------------------------
@@ -156,6 +158,37 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 		panel.className = 'fr-sidebar__panel';
 		panel.id = sidebar.id + '-panel-' + tabDef.id;
 		panel.dataset.panel = tabDef.id;
+
+		// Add header with detach button
+		var header = document.createElement('div');
+		header.className = 'fr-sidebar__panel-header';
+
+		var title = document.createElement('span');
+		title.className = 'fr-sidebar__panel-title';
+		title.textContent = tabDef.label || tabDef.id;
+		header.appendChild(title);
+
+		if (tabDef.detachable !== false) {
+			var detachBtn = document.createElement('button');
+			detachBtn.className = 'fr-sidebar__detach';
+			detachBtn.id = 'btn-detach-' + tabDef.id;
+			detachBtn.title = 'Detach to window';
+			detachBtn.innerHTML = '<span class="tri">arrows_expand</span>';
+			detachBtn.addEventListener('click', function(e) {
+				e.stopPropagation();
+				var tid = this.id.replace('btn-detach-', '');
+				if (sidebar.onDetach) {
+					sidebar.onDetach(tid);
+				}
+			});
+			header.appendChild(detachBtn);
+		}
+
+		panel.appendChild(header);
+
+		var content = document.createElement('div');
+		content.className = 'fr-sidebar__panel-content';
+		panel.appendChild(content);
 
 		contentArea.appendChild(panel);
 		sidebar.panelEls[tabDef.id] = panel;
@@ -336,6 +369,17 @@ FontRig.Sidebar.toggle = function(sidebar) {
 // Get panel element for a tab (for inserting content)
 // ===================================================================
 FontRig.Sidebar.getPanel = function(sidebar, tabId) {
+	var panel = sidebar.panelEls[tabId] || null;
+	if (panel) {
+		return panel.querySelector('.fr-sidebar__panel-content');
+	}
+	return null;
+};
+
+// ===================================================================
+// Get panel wrapper (includes header) for a tab
+// ===================================================================
+FontRig.Sidebar.getPanelWrapper = function(sidebar, tabId) {
 	return sidebar.panelEls[tabId] || null;
 };
 

@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FontRig | Detached Panel</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+	@font-face {
+		font-family: 'TypeRig Icons';
+		src: url('../assets/fonts/icons/typerig-icons.ttf') format('truetype');
+		font-weight: normal;
+		font-style: normal;
+		font-feature-settings: 'rlig' 1;
+	}
+
+	:root {
+		--bg-primary: #1a1a1e;
+		--bg-secondary: #222226;
+		--bg-tertiary: #2a2a2e;
+		--bg-hover: #2e2e34;
+		--text-primary: #e8e8ec;
+		--text-secondary: #a8a8b0;
+		--text-dim: #666670;
+		--border: #333338;
+		--border-subtle: #2a2a30;
+		--accent: #5b9def;
+		--accent-dim: #3a5a8a;
+		--accent-bg: rgba(91,157,239,0.12);
+		--error-bg: rgba(220,60,60,0.08);
+		--error-border: rgba(220,60,60,0.25);
+	}
+
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+
+	body {
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		font-family: 'DM Sans', 'Inter', 'Segoe UI', sans-serif;
+		height: 100vh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.tri {
+		font-family: 'TypeRig Icons';
+		font-size: 14px;
+		line-height: 1;
+		font-style: normal;
+		font-weight: normal;
+	}
+
+	/* -- Header --------------------------------------------------- */
+	#panel-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 12px;
+		background: var(--bg-secondary);
+		border-bottom: 1px solid var(--border);
+	}
+
+	#panel-header .logo {
+		font-family: 'JetBrains Mono', monospace;
+		font-weight: 600;
+		font-size: 11px;
+		color: var(--accent);
+		letter-spacing: 0.5px;
+	}
+
+	.panel-info {
+		margin-left: auto;
+		font: 10px 'JetBrains Mono', monospace;
+		color: var(--text-dim);
+	}
+
+	.parse-status { padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+	.parse-status.ok { background: rgba(80,200,120,0.15); color: #50c878; }
+	.parse-status.error { background: rgba(220,60,60,0.15); color: #dc3c3c; }
+
+	/* -- Content -------------------------------------------------- */
+	#panel-body {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.panel-content {
+		display: none;
+		flex: 1;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.panel-content.active {
+		display: flex;
+	}
+
+	/* -- XML tab -------------------------------------------------- */
+	.xml-actions {
+		display: flex;
+		gap: 6px;
+		padding: 6px 8px;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+
+	.xml-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 10px;
+		background: var(--bg-tertiary);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		color: var(--text-secondary);
+		font: 12px 'DM Sans', sans-serif;
+		cursor: pointer;
+	}
+
+	.xml-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+	.xml-btn--primary { border-color: var(--accent-dim); color: var(--accent); }
+	.xml-btn--primary:hover { background: var(--accent-bg); }
+
+	#xml-content {
+		flex: 1;
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		border: none;
+		padding: 8px;
+		font: 11px/1.65 'JetBrains Mono', monospace;
+		resize: none;
+		outline: none;
+		tab-size: 2;
+		overflow: auto;
+	}
+
+	#xml-content.has-error {
+		background: var(--error-bg);
+		border-left: 2px solid var(--error-border);
+	}
+
+	/* -- Python tab ----------------------------------------------- */
+	#py-output {
+		flex: 1;
+		overflow-y: auto;
+		padding: 8px;
+		font: 11px/1.5 'JetBrains Mono', monospace;
+		color: var(--text-secondary);
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
+
+	.py-entry { margin-bottom: 4px; }
+	.py-input { color: #7cb3f0; }
+	.py-output { color: var(--text-secondary); }
+	.py-error { color: #e06060; }
+	.py-info { color: var(--text-dim); font-style: italic; }
+
+	#py-input-wrap {
+		border-top: 1px solid var(--border);
+		padding: 6px 8px;
+	}
+
+	#py-input {
+		width: 100%;
+		background: var(--bg-tertiary);
+		color: var(--text-primary);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		padding: 6px 8px;
+		font: 11px/1.4 'JetBrains Mono', monospace;
+		resize: vertical;
+		min-height: 28px;
+		outline: none;
+	}
+
+	#py-input:focus { border-color: var(--accent-dim); }
+
+	#py-input-actions {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-top: 4px;
+	}
+
+	.py-btn {
+		padding: 3px 8px;
+		background: var(--bg-tertiary);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		color: var(--text-secondary);
+		font: 11px 'DM Sans', sans-serif;
+		cursor: pointer;
+	}
+	.py-btn:hover { background: var(--bg-hover); }
+	.py-btn--primary { border-color: var(--accent-dim); color: var(--accent); }
+
+	.hint {
+		font: 10px 'JetBrains Mono', monospace;
+		color: var(--text-dim);
+		margin-left: auto;
+	}
+
+	.py-status {
+		font: 10px 'JetBrains Mono', monospace;
+		color: var(--text-dim);
+	}
+	.py-status--running { color: var(--accent); }
+
+	/* -- Font Info tab -------------------------------------------- */
+	#font-info-content {
+		padding: 12px;
+		overflow-y: auto;
+		font-size: 12px;
+	}
+
+	.font-info-title {
+		font-size: 16px;
+		font-weight: 600;
+		margin-bottom: 12px;
+		color: var(--text-primary);
+	}
+
+	.font-info-section {
+		margin-bottom: 16px;
+	}
+
+	.font-info-section-label {
+		font-size: 11px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--text-dim);
+		margin-bottom: 6px;
+		border-bottom: 1px solid var(--border-subtle);
+		padding-bottom: 4px;
+	}
+
+	.font-info-row {
+		display: flex;
+		justify-content: space-between;
+		padding: 3px 0;
+	}
+
+	.font-info-row .label {
+		color: var(--text-secondary);
+	}
+
+	.font-info-row .value {
+		color: var(--text-primary);
+		font-family: 'JetBrains Mono', monospace;
+	}
+
+	/* -- Glyphs tab ---------------------------------------------- */
+	.glyph-widget-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+
+	.glyph-widget-header input {
+		flex: 1;
+		padding: 6px 10px;
+		background: var(--bg-tertiary);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		color: var(--text-primary);
+		font-size: 12px;
+		outline: none;
+	}
+
+	.glyph-widget-header input:focus {
+		border-color: var(--accent-dim);
+	}
+
+	.glyph-widget-count {
+		font: 10px 'JetBrains Mono', monospace;
+		color: var(--text-dim);
+		white-space: nowrap;
+	}
+
+	.glyph-widget-mode {
+		display: flex;
+		gap: 2px;
+	}
+
+	.glyph-widget-mode button {
+		padding: 4px;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 4px;
+		color: var(--text-dim);
+		cursor: pointer;
+	}
+
+	.glyph-widget-mode button:hover {
+		background: var(--bg-hover);
+		color: var(--text-secondary);
+	}
+
+	.glyph-widget-mode button.active {
+		background: var(--accent-bg);
+		border-color: var(--accent-dim);
+		color: var(--accent);
+	}
+
+	.glyph-widget-list {
+		flex: 1;
+		overflow-y: auto;
+		padding: 4px;
+	}
+
+	.glyph-widget-list--list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.glyph-widget-list--grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+		gap: 4px;
+		align-content: start;
+	}
+
+	.gw-entry {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 6px;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.glyph-widget-list--grid .gw-entry {
+		flex-direction: column;
+		padding: 6px 4px;
+	}
+
+	.gw-entry:hover {
+		background: var(--bg-hover);
+	}
+
+	.gw-entry.active {
+		background: var(--accent-bg);
+		border: 1px solid var(--accent-dim);
+	}
+
+	.gw-entry canvas {
+		flex-shrink: 0;
+	}
+
+	.glyph-widget-list--list .gw-entry canvas {
+		width: 28px;
+		height: 36px;
+	}
+
+	.glyph-widget-list--grid .gw-entry canvas {
+		width: 48px;
+		height: 48px;
+	}
+
+	.gw-name {
+		font-size: 11px;
+		color: var(--text-secondary);
+	}
+
+	.glyph-widget-list--grid .gw-name {
+		margin-top: 4px;
+		text-align: center;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.gw-uni {
+		font-size: 10px;
+		color: var(--text-dim);
+		font-family: 'JetBrains Mono', monospace;
+	}
+
+	/* -- No font loaded ------------------------------------------- */
+	.no-font {
+		display: flex;
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		color: var(--text-dim);
+		font-size: 13px;
+	}
+
+	/* -- Disconnected overlay ------------------------------------- */
+	#disconnected {
+		display: none;
+		position: fixed;
+		inset: 0;
+		background: rgba(0,0,0,0.7);
+		z-index: 100;
+		justify-content: center;
+		align-items: center;
+	}
+
+	#disconnected.visible { display: flex; }
+
+	#disconnected .msg {
+		background: var(--bg-secondary);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 24px 32px;
+		text-align: center;
+		color: var(--text-secondary);
+		font: 13px 'DM Sans', sans-serif;
+	}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="panel-header">
+	<span class="logo" id="panel-logo">TR:PANEL</span>
+	<span class="panel-info" id="panel-info"></span>
+</div>
+
+<div id="panel-body">
+	<!-- Content injected dynamically based on panel type -->
+	<div id="panel-content" class="panel-content active"></div>
+</div>
+
+<div id="disconnected">
+	<div class="msg">Main window closed.<br>This panel will close automatically.</div>
+</div>
+
+<script>
+'use strict';
+
+// Get panel type from URL
+var params = new URLSearchParams(window.location.search);
+var panelType = params.get('panel') || 'xml';
+
+var channel = null;
+var channelName = 'trv-detach-' + panelType;
+
+// Panel-specific state
+var state = {
+	xml: '',
+	glyphName: '',
+	activeLayer: '',
+	nodeCount: { on: 0, off: 0 },
+	parseStatus: 'ok',
+	fontInfo: null,
+	glyphList: [],
+	currentGlyph: null,
+	viewMode: 'list'
+};
+
+// XML line maps
+var xmlLineNodeMap = {};
+var xmlNodeLineMap = {};
+
+// Python history
+var pyHistory = [];
+var pyHistoryIdx = -1;
+var pyExecuteId = 0;
+
+// -- BroadcastChannel -----------------------------------------------
+try {
+	channel = new BroadcastChannel(channelName);
+} catch (e) {
+	console.warn('BroadcastChannel not available, falling back to opener');
+}
+
+function send(msg) {
+	if (channel) {
+		channel.postMessage(msg);
+	} else if (window.opener) {
+		window.opener.postMessage(msg, '*');
+	}
+}
+
+// -- Panel-specific rendering ---------------------------------------
+function renderPanel() {
+	var content = document.getElementById('panel-content');
+	var logo = document.getElementById('panel-logo');
+	var info = document.getElementById('panel-info');
+
+	switch (panelType) {
+		case 'xml':
+			logo.textContent = 'TR:XML';
+			content.innerHTML = getXmlHtml();
+			wireXmlEvents();
+			break;
+
+		case 'python':
+			logo.textContent = 'TR:PYTHON';
+			content.innerHTML = getPythonHtml();
+			wirePythonEvents();
+			break;
+
+		case 'glyphs':
+			logo.textContent = 'TR:GLYPHS';
+			content.innerHTML = getGlyphsHtml();
+			wireGlyphsEvents();
+			break;
+
+		case 'font-info':
+			logo.textContent = 'TR:FONT';
+			content.innerHTML = getFontInfoHtml();
+			renderFontInfo();
+			break;
+	}
+}
+
+function getXmlHtml() {
+	return '<div class="xml-actions">' +
+		'<button class="xml-btn" id="xml-refresh-btn"><span class="tri">refresh</span> Refresh</button>' +
+		'<button class="xml-btn xml-btn--primary" id="xml-apply-btn"><span class="tri">action_play</span> Apply</button>' +
+		'</div>' +
+		'<textarea id="xml-content" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>';
+}
+
+function getPythonHtml() {
+	return '<div id="py-output"></div>' +
+		'<div id="py-input-wrap">' +
+		'<textarea id="py-input" rows="1" placeholder="Shift+Enter to run" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>' +
+		'<div id="py-input-actions">' +
+		'<span class="py-status" id="py-status">Via main window</span>' +
+		'</div>' +
+		'</div>';
+}
+
+function getGlyphsHtml() {
+	return '<div class="glyph-widget-header">' +
+		'<input type="text" id="glyph-search" placeholder="Filter glyphs..." spellcheck="false" autocomplete="off">' +
+		'<span class="glyph-widget-count" id="glyph-count"></span>' +
+		'<div class="glyph-widget-mode">' +
+		'<button id="btn-list" class="active" title="List view"><span class="tri">align_group_to_group</span></button>' +
+		'<button id="btn-grid" title="Grid view"><span class="tri">viewport_quad</span></button>' +
+		'</div>' +
+		'</div>' +
+		'<div class="glyph-widget-list glyph-widget-list--list" id="glyph-list"></div>';
+}
+
+function getFontInfoHtml() {
+	return '<div id="font-info-content"><div class="no-font">No font loaded</div></div>';
+}
+
+// -- XML events ----------------------------------------------------
+function wireXmlEvents() {
+	var content = document.getElementById('xml-content');
+	if (content) {
+		content.value = state.xml;
+		
+		document.getElementById('xml-refresh-btn').addEventListener('click', function() {
+			send({ type: 'xmlRefresh' });
+		});
+
+		document.getElementById('xml-apply-btn').addEventListener('click', function() {
+			send({ type: 'xmlApply', xml: content.value });
+		});
+
+		content.addEventListener('keydown', function(e) {
+			if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+				e.preventDefault();
+				send({ type: 'xmlApply', xml: content.value });
+			}
+		});
+
+		content.addEventListener('click', function() {
+			var pos = content.selectionStart;
+			var text = content.value.substring(0, pos);
+			var lineIdx = text.split('\n').length - 1;
+			var nodeId = xmlLineNodeMap[lineIdx];
+			if (nodeId) {
+				send({ type: 'selectNode', nodeId: nodeId });
+			}
+		});
+	}
+}
+
+// -- Python events -------------------------------------------------
+function wirePythonEvents() {
+	var pyInput = document.getElementById('py-input');
+	var pyOutput = document.getElementById('py-output');
+
+	if (!pyInput) return;
+
+	pyInput.addEventListener('keydown', function(e) {
+		if (e.key === 'Enter' && e.shiftKey) {
+			e.preventDefault();
+			pyExecute();
+		}
+		if (e.key === 'ArrowUp' && !e.shiftKey && pyInput.value.indexOf('\n') === -1) {
+			var pos = pyInput.selectionStart;
+			if (pos === 0 && pyHistory.length > 0) {
+				e.preventDefault();
+				if (pyHistoryIdx > 0) pyHistoryIdx--;
+				pyInput.value = pyHistory[pyHistoryIdx] || '';
+				pyInput.style.height = 'auto';
+				pyInput.style.height = Math.min(pyInput.scrollHeight, 160) + 'px';
+			}
+		}
+		if (e.key === 'ArrowDown' && !e.shiftKey && pyInput.value.indexOf('\n') === -1) {
+			var pos = pyInput.selectionStart;
+			if (pos === pyInput.value.length && pyHistory.length > 0) {
+				e.preventDefault();
+				pyHistoryIdx++;
+				if (pyHistoryIdx >= pyHistory.length) {
+					pyHistoryIdx = pyHistory.length;
+					pyInput.value = '';
+				} else {
+					pyInput.value = pyHistory[pyHistoryIdx] || '';
+				}
+				pyInput.style.height = 'auto';
+				pyInput.style.height = Math.min(pyInput.scrollHeight, 160) + 'px';
+			}
+		}
+	});
+
+	pyInput.addEventListener('input', function() {
+		this.style.height = 'auto';
+		this.style.height = Math.min(this.scrollHeight, 160) + 'px';
+	});
+}
+
+function pyExecute() {
+	var pyInput = document.getElementById('py-input');
+	var pyOutput = document.getElementById('py-output');
+	var pyStatus = document.getElementById('py-status');
+	var code = pyInput.value.trim();
+	if (!code) return;
+
+	var lines = code.split('\n');
+	var formatted = lines.map(function(line, i) {
+		return (i === 0 ? '>>> ' : '... ') + line;
+	}).join('\n');
+	pyAppendOutput(formatted, 'input');
+
+	pyHistory.push(code);
+	pyHistoryIdx = pyHistory.length;
+
+	var id = ++pyExecuteId;
+	pyStatus.textContent = 'Running...';
+	pyStatus.className = 'py-status py-status--running';
+	send({ type: 'pyExecute', code: code, id: id });
+
+	pyInput.value = '';
+	pyInput.style.height = 'auto';
+}
+
+function pyAppendOutput(text, type) {
+	var pyOutput = document.getElementById('py-output');
+	var entry = document.createElement('div');
+	entry.className = 'py-entry py-' + (type || 'output');
+	entry.textContent = text;
+	pyOutput.appendChild(entry);
+	pyOutput.scrollTop = pyOutput.scrollHeight;
+}
+
+// -- Glyphs events -------------------------------------------------
+function wireGlyphsEvents() {
+	var list = document.getElementById('glyph-list');
+	var search = document.getElementById('glyph-search');
+
+	document.getElementById('btn-list').addEventListener('click', function() {
+		setViewMode('list');
+	});
+
+	document.getElementById('btn-grid').addEventListener('click', function() {
+		setViewMode('grid');
+	});
+
+	if (search) {
+		search.addEventListener('input', function() {
+			filterGlyphs(this.value);
+		});
+	}
+
+	if (list) {
+		list.addEventListener('click', function(e) {
+			var entry = e.target.closest('.gw-entry');
+			if (entry) {
+				var name = entry.dataset.name;
+				send({ type: 'selectGlyph', glyphName: name });
+			}
+		});
+	}
+}
+
+function setViewMode(mode) {
+	state.viewMode = mode;
+	document.getElementById('btn-list').classList.toggle('active', mode === 'list');
+	document.getElementById('btn-grid').classList.toggle('active', mode === 'grid');
+	
+	var list = document.getElementById('glyph-list');
+	if (list) {
+		list.className = 'glyph-widget-list glyph-widget-list--' + mode;
+	}
+	
+	renderGlyphList();
+}
+
+function filterGlyphs(query) {
+	var list = document.getElementById('glyph-list');
+	if (!list) return;
+
+	var q = query.toLowerCase();
+	var entries = list.querySelectorAll('.gw-entry');
+	var visibleCount = 0;
+
+	for (var i = 0; i < entries.length; i++) {
+		var name = entries[i].dataset.name.toLowerCase();
+		var visible = !q || name.indexOf(q) >= 0;
+		entries[i].style.display = visible ? '' : 'none';
+		if (visible) visibleCount++;
+	}
+
+	var total = state.glyphList.length;
+	document.getElementById('glyph-count').textContent = q ? visibleCount + '/' + total : total;
+}
+
+// -- Font Info ------------------------------------------------------
+function renderFontInfo() {
+	var container = document.getElementById('font-info-content');
+	if (!container || !state.fontInfo) {
+		if (container) container.innerHTML = '<div class="no-font">No font loaded</div>';
+		return;
+	}
+
+	var info = state.fontInfo;
+	var html = '<div class="font-info-title">' + (info.familyName || 'Unknown Font') + '</div>';
+
+	html += '<div class="font-info-section"><div class="font-info-section-label">Identification</div>';
+	html += '<div class="font-info-row"><span class="label">Family</span><span class="value">' + (info.familyName || '—') + '</span></div>';
+	html += '<div class="font-info-row"><span class="label">Style</span><span class="value">' + (info.styleName || '—') + '</span></div>';
+	html += '<div class="font-info-row"><span class="label">Version</span><span class="value">' + (info.version || '—') + '</span></div>';
+	html += '</div>';
+
+	html += '<div class="font-info-section"><div class="font-info-section-label">Metrics</div>';
+	html += '<div class="font-info-row"><span class="label">UPM</span><span class="value">' + (info.upm || '—') + '</span></div>';
+	html += '<div class="font-info-row"><span class="label">Ascender</span><span class="value">' + (info.ascender || '—') + '</span></div>';
+	html += '<div class="font-info-row"><span class="label">Descender</span><span class="value">' + (info.descender || '—') + '</span></div>';
+	html += '<div class="font-info-row"><span class="label">x-Height</span><span class="value">' + (info.xHeight || '—') + '</span></div>';
+	html += '<div class="font-info-row"><span class="label">Cap-Height</span><span class="value">' + (info.capHeight || '—') + '</span></div>';
+	html += '</div>';
+
+	if (info.masters && info.masters.length > 0) {
+		html += '<div class="font-info-section"><div class="font-info-section-label">Masters</div>';
+		for (var i = 0; i < info.masters.length; i++) {
+			var m = info.masters[i];
+			html += '<div class="font-info-row"><span class="label">' + m.name + '</span><span class="value">' + m.axisValues + '</span></div>';
+		}
+		html += '</div>';
+	}
+
+	container.innerHTML = html;
+}
+
+// -- Glyph list rendering -------------------------------------------
+function renderGlyphList() {
+	var list = document.getElementById('glyph-list');
+	if (!list) return;
+
+	list.innerHTML = '';
+
+	var isGrid = state.viewMode === 'grid';
+
+	for (var i = 0; i < state.glyphList.length; i++) {
+		var g = state.glyphList[i];
+		var div = document.createElement('div');
+		div.className = 'gw-entry';
+		div.dataset.name = g.name;
+
+		if (g.name === state.currentGlyph) {
+			div.classList.add('active');
+		}
+
+		var cvs = document.createElement('canvas');
+		cvs.className = 'gw-thumb';
+		cvs.dataset.name = g.name;
+		cvs.width = 28;
+		cvs.height = 36;
+		div.appendChild(cvs);
+
+		var nameSpan = document.createElement('span');
+		nameSpan.className = 'gw-name';
+		nameSpan.textContent = g.name;
+		div.appendChild(nameSpan);
+
+		if (!isGrid && g.unicode) {
+			var uniSpan = document.createElement('span');
+			uniSpan.className = 'gw-uni';
+			uniSpan.textContent = 'U+' + g.unicode;
+			div.appendChild(uniSpan);
+		}
+
+		list.appendChild(div);
+
+		send({ type: 'requestThumbnail', glyphName: g.name });
+	}
+
+	document.getElementById('glyph-count').textContent = state.glyphList.length;
+}
+
+// -- Rebuild XML line maps -----------------------------------------
+function rebuildLineMaps(text) {
+	xmlLineNodeMap = {};
+	xmlNodeLineMap = {};
+
+	var lines = text.split('\n');
+	var globalContourIdx = 0, nodeIdx = 0, inContour = false;
+
+	for (var i = 0; i < lines.length; i++) {
+		var line = lines[i].trim();
+		if (line.startsWith('<contour')) { inContour = true; nodeIdx = 0; }
+		else if (line === '</contour>') { if (inContour) globalContourIdx++; inContour = false; }
+		else if (inContour && line.startsWith('<node ')) {
+			var id = 'c' + globalContourIdx + '_n' + nodeIdx;
+			xmlLineNodeMap[i] = id;
+			xmlNodeLineMap[id] = i;
+			nodeIdx++;
+		}
+	}
+}
+
+function highlightNode(nodeId) {
+	var content = document.getElementById('xml-content');
+	var lineIdx = xmlNodeNodeMap[nodeId];
+	if (lineIdx === undefined) return;
+	var text = content.value;
+	var lines = text.split('\n');
+	var charStart = 0;
+	for (var i = 0; i < lineIdx; i++) charStart += lines[i].length + 1;
+	var charEnd = charStart + (lines[lineIdx] || '').length;
+	content.focus();
+	content.setSelectionRange(charStart, charEnd);
+	var lineHeight = 11 * 1.65;
+	content.scrollTop = Math.max(0, lineIdx * lineHeight - content.clientHeight / 2);
+}
+
+// -- Message handling -----------------------------------------------
+function onMessage(msg) {
+	if (msg.type === 'stateUpdate') {
+		var s = msg.state;
+		
+		if (s.xml !== undefined) {
+			state.xml = s.xml;
+			var content = document.getElementById('xml-content');
+			if (content) {
+				content.value = s.xml || '';
+				rebuildLineMaps(s.xml || '');
+			}
+		}
+
+		if (s.glyphName !== undefined) {
+			state.glyphName = s.glyphName;
+			var info = document.getElementById('panel-info');
+			if (info) {
+				info.textContent = s.glyphName + (s.activeLayer ? ' / ' + s.activeLayer : '');
+			}
+		}
+
+		if (s.nodeCount !== undefined) {
+			state.nodeCount = s.nodeCount;
+			var info = document.getElementById('panel-info');
+			if (info && s.nodeCount) {
+				info.textContent = (info.textContent ? info.textContent + ' | ' : '') + 
+					s.nodeCount.on + ' on / ' + s.nodeCount.off + ' off';
+			}
+		}
+
+		if (s.parseStatus !== undefined) {
+			state.parseStatus = s.parseStatus;
+			var statusEl = document.querySelector('.parse-status');
+			if (statusEl) {
+				statusEl.textContent = s.parseStatus;
+				statusEl.className = 'parse-status ' + (s.parseStatus === 'ok' ? 'ok' : 'error');
+			}
+		}
+
+		if (s.fontInfo !== undefined) {
+			state.fontInfo = s.fontInfo;
+			renderFontInfo();
+		}
+
+		if (s.glyphList !== undefined) {
+			state.glyphList = s.glyphList;
+			state.currentGlyph = s.currentGlyph;
+			renderGlyphList();
+		}
+
+		if (s.glyphCount !== undefined) {
+			var info = document.getElementById('panel-info');
+			if (info) info.textContent = s.glyphCount + ' glyphs';
+		}
+
+		if (s.currentGlyph !== undefined && state.glyphList.length > 0) {
+			state.currentGlyph = s.currentGlyph;
+			var entries = document.querySelectorAll('.gw-entry');
+			for (var i = 0; i < entries.length; i++) {
+				entries[i].classList.toggle('active', entries[i].dataset.name === s.currentGlyph);
+			}
+		}
+
+	} else if (msg.type === 'thumbnail') {
+		receiveThumbnail(msg.data.name, msg.data.data);
+	} else if (msg.type === 'selectionChanged') {
+		if (msg.ids && msg.ids.length > 0) {
+			highlightNode(msg.ids[0]);
+		}
+	} else if (msg.type === 'pyResult') {
+		onPyResult(msg);
+	}
+}
+
+function receiveThumbnail(name, dataUrl) {
+	var el = document.querySelector('.gw-thumb[data-name="' + name + '"]');
+	if (!el || !dataUrl) return;
+
+	var img = new Image();
+	img.onload = function() {
+		var ctx = el.getContext('2d');
+		ctx.drawImage(img, 0, 0);
+	};
+	img.src = dataUrl;
+}
+
+function onPyResult(msg) {
+	var pyStatus = document.getElementById('py-status');
+	if (pyStatus) {
+		pyStatus.textContent = 'Via main window';
+		pyStatus.className = 'py-status';
+	}
+
+	if (msg.output) {
+		pyAppendOutput(msg.output, 'output');
+	}
+
+	if (msg.error) {
+		pyAppendOutput(msg.error, 'error');
+	}
+
+	if (msg.glyphChanged) {
+		pyAppendOutput('↻ glyph updated in viewer', 'info');
+	}
+}
+
+// -- Channel setup --------------------------------------------------
+if (channel) {
+	channel.onmessage = function(e) { onMessage(e.data); };
+}
+
+window.addEventListener('message', function(e) {
+	if (e.data && e.data.type) onMessage(e.data);
+});
+
+send({ type: 'panelReady' });
+
+// -- Connection monitoring -------------------------------------------
+var checkInterval = setInterval(function() {
+	if (window.opener && window.opener.closed) {
+		document.getElementById('disconnected').classList.add('visible');
+		clearInterval(checkInterval);
+		setTimeout(function() { window.close(); }, 2000);
+	}
+}, 1000);
+
+window.addEventListener('beforeunload', function() {
+	send({ type: 'panelClosed' });
+});
+
+// -- Initial render -------------------------------------------------
+renderPanel();
+</script>
+</body>
+</html>

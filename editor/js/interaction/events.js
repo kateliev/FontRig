@@ -157,12 +157,11 @@ document.getElementById('btn-outline').addEventListener('click', function() {
 
 // XML/Python panel (right sidebar toggle)
 document.getElementById('btn-panel').addEventListener('click', function(e) {
-	// Shift+click or click when detached → toggle detach
-	if (e.shiftKey || FontRig.panelBridge.isDetached) {
-		if (FontRig.panelBridge.isDetached) {
-			FontRig.attachPanel();
-		} else {
-			FontRig.detachPanel();
+	// Shift+click → detach the current tab
+	if (e.shiftKey && FontRig.DetachablePanel) {
+		var activeTab = FontRig._rightSidebar ? FontRig._rightSidebar.activeTab : 'xml';
+		if (FontRig.DetachablePanel.get(activeTab)) {
+			FontRig.DetachablePanel.detach(activeTab);
 		}
 		return;
 	}
@@ -171,27 +170,27 @@ document.getElementById('btn-panel').addEventListener('click', function(e) {
 	FontRig._toggleRightSidebar();
 });
 
-// Popout button inside panel header
-document.getElementById('btn-popout').addEventListener('click', function() {
-	FontRig.detachPanel();
-});
-
 // Font panel button — toggles left sidebar; shift+click for detach
 document.getElementById('btn-font-panel').addEventListener('click', function(e) {
-	// Shift+click → toggle detach (legacy detached window)
-	if (e.shiftKey) {
-		if (FontRig.fontPanelBridge.isDetached) {
-			FontRig.attachFontPanel();
-		} else {
-			FontRig.detachFontPanel();
+	// Shift+click → detach the current tab
+	if (e.shiftKey && FontRig.DetachablePanel) {
+		var activeTab = FontRig._leftSidebar ? FontRig._leftSidebar.activeTab : 'glyphs';
+		if (FontRig.DetachablePanel.get(activeTab)) {
+			FontRig.DetachablePanel.detach(activeTab);
 		}
 		return;
 	}
 
 	// Focus detached panel if already detached
-	if (FontRig.fontPanelBridge.isDetached && FontRig.fontPanelBridge.detachedWindow) {
-		FontRig.fontPanelBridge.detachedWindow.focus();
-		return;
+	if (FontRig.DetachablePanel && FontRig.DetachablePanel.isAnyDetached()) {
+		var leftTabs = ['glyphs', 'font-info'];
+		for (var i = 0; i < leftTabs.length; i++) {
+			var panel = FontRig.DetachablePanel.get(leftTabs[i]);
+			if (panel && panel.isDetached && panel.detachedWindow) {
+				panel.detachedWindow.focus();
+				return;
+			}
+		}
 	}
 
 	// Toggle left sidebar visibility
