@@ -129,6 +129,16 @@ FontRig.GlyphWidgetPanel.mount = function(containerEl, ctx) {
 	inst.setViewMode = function(mode) { _setViewMode(inst, mode); };
 	inst.getListElement = function() { return inst._listEl; };
 
+	// -- Handle events from main window (for workplane sync) -------
+	inst.onMainWindowEvent = function(eventType) {
+		if (eventType === 'fontChanged') {
+			_rebuild(inst);
+		} else if (eventType === 'glyphChanged') {
+			_updateActive(inst);
+			_updateDirty(inst);
+		}
+	};
+
 	return inst;
 };
 

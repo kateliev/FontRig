@@ -30,6 +30,16 @@ var _counter = 0;
 // Open a new workplane window
 // ===================================================================
 FontRig.Workplane.open = function() {
+	// Check for file:// protocol
+	if (window.location.protocol === 'file:') {
+		alert('Cannot open Workplane from file:// protocol.\n\n' +
+			'Please serve FontRig via HTTP:\n' +
+			'cd /Users/kateliev/Remote/FontRig/editor\n' +
+			'python -m http.server 8000\n\n' +
+			'Then open: http://localhost:8000');
+		return null;
+	}
+
 	_counter++;
 	var id = 'wp-' + _counter;
 
@@ -54,13 +64,17 @@ FontRig.Workplane.open = function() {
 	var channelName = 'trv-workplane-' + id;
 	var channel = null;
 
+	console.log('[WorkplaneManager] Creating channel:', channelName);
+
 	try {
 		channel = new BroadcastChannel(channelName);
 		channel.onmessage = function(e) {
+			console.log('[WorkplaneManager] onmessage received:', e.data);
+			console.log('[WorkplaneManager] Received:', e.data);
 			FontRig.Workplane._onMessage(id, e.data);
 		};
 	} catch (e) {
-		// BroadcastChannel not available
+		console.error('[WorkplaneManager] BroadcastChannel error:', e);
 	}
 
 	var entry = {
@@ -144,7 +158,16 @@ FontRig.Workplane.broadcast = function(type, data) {
 // Notify workplanes of font change
 // ===================================================================
 FontRig.Workplane.notifyFontChanged = function() {
-	FontRig.Workplane.broadcast('fontChanged', null);
+	var fontData = null;
+	if (FontRig.font && FontRig.font.current) {
+		fontData = {
+			name: FontRig.font.current.name || 'Untitled',
+			unitsPerEm: FontRig.font.current.unitsPerEm || 1000,
+			ascender: FontRig.font.current.ascender || 800,
+			descender: FontRig.font.current.descender || -200,
+		};
+	}
+	FontRig.Workplane.broadcast('fontChanged', fontData);
 };
 
 // ===================================================================
@@ -158,11 +181,37 @@ FontRig.Workplane.notifyGlyphChanged = function() {
 // Handle messages from workplanes
 // ===================================================================
 FontRig.Workplane._onMessage = function(workplaneId, msg) {
+	console.log('[WorkplaneManager] _onMessage called:', workplaneId, msg);
 	if (!msg || !msg.type) return;
 
+	if (msg.type === 'workplaneConnect') {
+		// Workplane just opened - send init data
+		console.log('[WorkplaneManager] Received workplaneConnect, looking for:', workplaneId);
+		console.log('[WorkplaneManager] Available workplanes:', Object.keys(_workplanes));
+		var entry = _workplanes[workplaneId];
+		if (entry && entry.channel) {
+			// Gather current font state
+			var fontData = null;
+			if (FontRig.font && FontRig.font.current) {
+				fontData = {
+					name: FontRig.font.current.name || 'Untitled',
+					unitsPerEm: FontRig.font.current.unitsPerEm || 1000,
+					ascender: FontRig.font.current.ascender || 800,
+					descender: FontRig.font.current.descender || -200,
+				};
+			}
+			
+			entry.channel.postMessage({
+				type: 'init',
+				fontData: fontData,
+			});
+			console.log('[Workplane] Sent init to:', workplaneId);
+		}
+	}
+
 	if (msg.type === 'workplaneReady') {
-		// Workplane just connected — it has access to FontRig via
-		// window.opener so shared state is already available
+		// Workplane confirmed it's ready
+		console.log('[Workplane] Ready:', workplaneId);
 	}
 
 	if (msg.type === 'workplaneClosed') {

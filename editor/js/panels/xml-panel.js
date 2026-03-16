@@ -117,6 +117,13 @@ FontRig.XmlPanel.mount = function(containerEl, ctx) {
 	inst.setParseStatus = function(ok, msg) { _setParseStatus(inst, ok, msg); };
 	inst.highlightNode = function(nodeId) { _highlightNode(inst, nodeId); };
 
+	// -- Handle events from main window (for workplane sync) -------
+	inst.onMainWindowEvent = function(eventType) {
+		if (eventType === 'glyphChanged') {
+			_syncFromData(inst);
+		}
+	};
+
 	// -- Initial sync -----------------------------------------------
 	_syncFromData(inst);
 

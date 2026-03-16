@@ -32,6 +32,13 @@ FontRig.FontInfoPanel.mount = function(containerEl, ctx) {
 	// Attach public methods
 	inst.update = function() { _update(inst); };
 
+	// -- Handle events from main window (for workplane sync) -------
+	inst.onMainWindowEvent = function(eventType) {
+		if (eventType === 'fontChanged') {
+			_update(inst);
+		}
+	};
+
 	return inst;
 };
 

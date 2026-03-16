@@ -142,6 +142,12 @@ FontRig.PythonPanel.mount = function(containerEl, ctx) {
 		if (inst._inputEl) setTimeout(function() { inst._inputEl.focus(); }, 50);
 	};
 
+	// -- Handle events from main window (for workplane sync) -------
+	inst.onMainWindowEvent = function(eventType) {
+		// Python panel doesn't need to react to main window events
+		// but we include the hook for consistency
+	};
+
 	return inst;
 };
 

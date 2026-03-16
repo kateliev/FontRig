@@ -236,6 +236,31 @@ body {
 	</div>
 </div>
 
+<!-- Load all required scripts (same as index.html) -->
+<script src="../js/geometry/bezier.js"></script>
+<script src="../js/core/state.js"></script>
+<script src="../js/core/theme.js"></script>
+<script src="../js/data/parser.js"></script>
+<script src="../js/data/serializer.js"></script>
+<script src="../js/data/font.js"></script>
+<script src="../js/geometry/geometry.js"></script>
+<script src="../js/widgets/fr-widgets.js"></script>
+<script src="../js/dialogs/fr-dialogs.js"></script>
+<script src="../js/drawing/drawing.js"></script>
+<script src="../js/drawing/visualization-layers.js"></script>
+<script src="../js/widgets/glyph-widget.js"></script>
+<script src="../js/widgets/multi-view.js"></script>
+<script src="../js/panels/xml-panel.js"></script>
+<script src="../js/panels/sidebar.js"></script>
+<script src="../js/panels/sidebar-config.js"></script>
+<script src="../js/panels/glyph-renderer.js"></script>
+<script src="../js/panels/glyph-widget-panel.js"></script>
+<script src="../js/panels/font-info-panel.js"></script>
+<script src="../js/panels/detachable-panel.js"></script>
+<script src="../js/python/pyodide-bridge.js"></script>
+<script src="../js/python/python-panel.js"></script>
+<script src="../js/panels/sidebar-init.js"></script>
+
 <!-- Disconnected overlay -->
 <div id="disconnected">
 	<div class="msg">Main window closed.<br>This workplane will close automatically.</div>
@@ -243,6 +268,28 @@ body {
 
 <script>
 'use strict';
+
+console.log('[Workplane] Starting...');
+
+// -- Check for file:// protocol ---------------------------------------
+if (window.location.protocol === 'file:') {
+	console.error('[Workplane] ERROR: Running on file:// protocol');
+	console.error('[Workplane] BroadcastChannel does not work across file:// origins');
+	console.error('[Workplane] Please serve FontRig via HTTP: python -m http.server');
+	document.body.innerHTML = '<div style="padding:40px;font-family:monospace;background:#220;color:#f88;">' +
+		'<h2>Cannot run Workplane from file://</h2>' +
+		'<p>BroadcastChannel does not work across file:// origins.</p>' +
+		'<p>Please serve FontRig via HTTP:</p>' +
+		'<pre>cd /Users/kateliev/Remote/FontRig/editor\npython -m http.server 8000</pre>' +
+		'<p>Then open: <a href="http://localhost:8000">http://localhost:8000</a></p>' +
+		'</div>';
+	throw new Error('Workplane requires HTTP server');
+}
+
+// -- Check FontRig loaded ---------------------------------------------
+console.log('[Workplane] FontRig:', typeof FontRig);
+console.log('[Workplane] FontRig.Sidebar:', typeof FontRig?.Sidebar);
+console.log('[Workplane] FontRig.SidebarConfig:', typeof FontRig?.SidebarConfig);
 
 // ===================================================================
 // Workplane — Client-side logic
@@ -263,46 +310,114 @@ var state = {
 	panels: [],         // array of panel configs
 	nextPanelIdx: 0,    // auto-increment panel id counter
 	fontData: null,     // cached font state from main window
+	isConnected: false,
 };
 
 // -- BroadcastChannel to main window --------------------------------
 var channel = null;
+console.log('[Workplane] Creating BroadcastChannel:', channelName);
 try {
 	channel = new BroadcastChannel(channelName);
 } catch (e) {
-	console.warn('BroadcastChannel not available');
+	console.warn('BroadcastChannel not available:', e);
 }
 
 function send(msg) {
 	if (channel) {
-		try { channel.postMessage(msg); } catch (e) { /* silent */ }
+		try { channel.postMessage(msg); } catch (e) { console.error('[Workplane] Send error:', e); }
 	}
 }
 
-// ===================================================================
-// Sidebar framework — lightweight shim
-// ===================================================================
-// The workplane needs to create sidebars. We load a minimal set
-// of framework functionality by building it inline. The sidebar
-// framework uses pure DOM and has no external dependencies beyond
-// FontRig.dom.main (which we shim).
-// ===================================================================
+// -- Wait for main window to connect ---------------------------------
+// We don't rely on window.opener. Instead, we wait for the main
+// window to send us initialization data via BroadcastChannel.
+var connectionTimeout = null;
+var isReady = false;
 
-// -- FontRig shim for the workplane context -------------------------
-var FontRig = window.opener ? window.opener.FontRig : null;
-var FRWidget = window.opener ? window.opener.FRWidget : null;
+function showConnecting() {
+	var el = document.getElementById('disconnected');
+	el.querySelector('.msg').innerHTML = 'Connecting to main window...<br>Please wait.';
+	el.classList.add('visible');
+}
 
-console.log('[Workplane] window.opener:', window.opener ? 'exists' : 'null');
-console.log('[Workplane] FontRig:', FontRig ? 'loaded' : 'null');
-console.log('[Workplane] location:', window.location.href);
-console.log('[Workplane] referrer:', document.referrer);
+function showConnected() {
+	var el = document.getElementById('disconnected');
+	el.classList.remove('visible');
+}
 
-// If opener is gone, we cannot function
-if (!FontRig) {
-	document.getElementById('disconnected').classList.add('visible');
-	console.error('[Workplane] FATAL: Cannot access main window FontRig object');
-	console.error('[Workplane] This usually means window.opener was blocked or cleared.');
-	console.error('[Workplane] Try: 1) Allow popups 2) Disable browser extensions that block opener 3) Check for cross-origin issues');
+function showDisconnected() {
+	var el = document.getElementById('disconnected');
+	el.querySelector('.msg').innerHTML = 'Main window closed.<br>This workplane will close automatically.';
+	el.classList.add('visible');
+}
+
+// Show connecting initially
+showConnecting();
+
+if (!channel) {
+	showDisconnected();
+	console.error('[Workplane] BroadcastChannel not available');
+} else {
+	// Listen for messages from main window
+	channel.onmessage = function(e) {
+		console.log('[Workplane] onmessage fired:', e.data);
+		var msg = e.data;
+		console.log('[Workplane] Received:', msg.type);
+		
+		if (msg.type === 'init') {
+			// Received initialization data from main window
+			isReady = true;
+			state.fontData = msg.fontData;
+			state.isConnected = true;
+			showConnected();
+			
+			// Notify main window we're ready
+			send({ type: 'workplaneReady', workplaneId: workplaneId });
+		}
+		
+		if (msg.type === 'fontChanged') {
+			// Font was changed in main window
+			state.fontData = msg.fontData;
+			notifyWidgets('fontChanged');
+		}
+		
+		if (msg.type === 'glyphChanged') {
+			// Glyph was changed in main window
+			notifyWidgets('glyphChanged');
+		}
+	};
+	
+	// Tell main window we're here - with a small delay to ensure main window is ready
+	setTimeout(function() {
+		console.log('[Workplane] Sending workplaneConnect after delay');
+		send({ type: 'workplaneConnect', workplaneId: workplaneId });
+	}, 500);
+	
+	// Set timeout - if no init within 5 seconds, show warning
+	connectionTimeout = setTimeout(function() {
+		if (!isReady) {
+			console.warn('[Workplane] No init received from main window within 5s');
+			// Still allow manual panel creation - widgets will work with default state
+			isReady = true;
+			showConnected();
+		}
+	}, 5000);
+}
+
+// -- Notify all widget instances of changes --------------------------
+function notifyWidgets(eventType) {
+	if (!FontRig || !FontRig.SidebarConfig) return;
+	
+	var instances = FontRig.SidebarConfig.instances;
+	for (var sidebarId in instances) {
+		var sidebarInstances = instances[sidebarId];
+		for (var widgetId in sidebarInstances) {
+			var inst = sidebarInstances[widgetId];
+			if (inst && inst.onMainWindowEvent) {
+				inst.onMainWindowEvent(eventType);
+			}
+		}
+	}
 }
 
 // -- Panel management -----------------------------------------------

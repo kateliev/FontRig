@@ -67,9 +67,10 @@ const FontRig = {
 // Populate DOM refs after DOM is ready
 // Note: XML and Python panel elements are now created dynamically
 // per-instance by XmlPanel.mount() / PythonPanel.mount().
+// In workplane context, some elements may not exist - use optional chaining.
 FontRig.dom = {
 	canvas:         document.getElementById('glyph-canvas'),
-	ctx:            document.getElementById('glyph-canvas').getContext('2d'),
+	ctx:            document.getElementById('glyph-canvas')?.getContext('2d'),
 	canvasWrap:     document.getElementById('canvas-wrap'),
 	main:           document.getElementById('main'),
 	emptyState:     document.getElementById('empty-state'),

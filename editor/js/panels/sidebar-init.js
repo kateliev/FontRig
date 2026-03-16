@@ -85,7 +85,12 @@ SBC.registerWidget({
 // SIDEBAR CREATION
 // ===================================================================
 
-var _quarterWidth = Math.round(dom.main.clientWidth * 0.25) || 280;
+// Skip sidebar creation if we're in workplane context (no main DOM)
+if (!dom.main) {
+	console.log('[SidebarInit] Running in workplane context - skipping default sidebars');
+} else {
+
+var _quarterWidth = Math.round((dom.main?.clientWidth || 0) * 0.25) || 280;
 
 // -- LEFT SIDEBAR ---------------------------------------------------
 FontRig._leftSidebar = FontRig.Sidebar.createFromConfig('left-sidebar', {
@@ -102,6 +107,8 @@ FontRig._rightSidebar = FontRig.Sidebar.createFromConfig('right-sidebar', {
 		FontRig.state.showXml = visible;
 	},
 });
+
+}
 
 // ===================================================================
 // BRIDGE FUNCTIONS — fan out to all instances
