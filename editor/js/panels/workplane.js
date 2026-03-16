@@ -117,6 +117,13 @@ FontRig.Workplane.open = function() {
 
 			if (msg.type === 'workplaneReady') {
 				console.log('[WorkplaneManager] Workplane ready:', id);
+				// Send current state to newly connected workplane
+				if (FontRig.font) {
+					channel.postMessage({ type: 'fontChanged' });
+				}
+				if (FontRig.activeGlyph) {
+					channel.postMessage({ type: 'glyphChanged' });
+				}
 			}
 
 			if (msg.type === 'workplaneClosed') {
@@ -125,6 +132,13 @@ FontRig.Workplane.open = function() {
 
 			if (msg.type === 'panelAdded') {
 				console.log('[WorkplaneManager] Panel added in', id);
+			}
+
+			if (msg.type === 'selectGlyph') {
+				console.log('[WorkplaneManager] Glyph selected in workplane:', msg.glyphName);
+				if (msg.glyphName && FontRig.switchGlyph) {
+					FontRig.switchGlyph(msg.glyphName);
+				}
 			}
 		};
 	} catch (e) {

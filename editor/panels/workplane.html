@@ -780,6 +780,19 @@ document.getElementById('wp-title').textContent = 'Workplane ' + workplaneId.rep
 document.title = 'FontRig | Workplane ' + workplaneId.replace('wp-', '#');
 
 console.log('[Workplane] Ready. ID:', workplaneId, 'Font:', FontRig.font ? 'loaded' : 'none');
+
+// -- Override switchGlyph to notify main window --
+// This must run AFTER all scripts are loaded (hence at the end of the file).
+// In workplane, clicking a glyph should switch it in the main window,
+// not locally (which fails due to missing DOM elements).
+if (FontRig._isWorkplane && FontRig.switchGlyph) {
+	var origSwitchGlyph = FontRig.switchGlyph;
+	FontRig.switchGlyph = async function(name) {
+		console.log('[Workplane] Sending selectGlyph to main:', name);
+		send({ type: 'selectGlyph', glyphName: name });
+		// Don't call origSwitchGlyph locally - the main window will handle it
+	};
+}
 </script>
 </body>
 </html>
