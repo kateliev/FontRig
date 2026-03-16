@@ -7,6 +7,7 @@
 'use strict';
 
 // -- Mark color palette (mirrors Python MARK_COLORS) ------------------
+// White (#FFFFFF) is treated as "no color" - clears the mark
 FontRig.MARK_COLORS = {
 	'Red':         '#FF3B30',
 	'Orange':      '#FF9500',
@@ -22,12 +23,21 @@ FontRig.MARK_COLORS = {
 	'Dark Gray':   '#636366',
 };
 
-// Ordered list for the dropdown
+// Ordered list for the dropdown (no Black)
 FontRig.MARK_COLOR_ORDER = [
 	'Red', 'Orange', 'Brown', 'Yellow',
 	'Light Green', 'Dark Green', 'Cyan', 'Blue',
 	'Purple', 'Pink', 'Light Gray', 'Dark Gray'
 ];
+
+// -- Helper: check if mark represents "no color" --------------------
+// Returns true if mark is empty, white, or undefined
+FontRig._isNoMark = function(mark) {
+	if (!mark) return true;
+	var normalized = mark.toUpperCase();
+	if (normalized === '#FFFFFF' || normalized === '#FFF' || normalized === '#FFFFFFFF') return true;
+	return false;
+};
 
 // -- Compute widget position and size (centered on glyph middle) ------
 FontRig._getWidgetRect = function(advW, verticalOffset) {
@@ -76,7 +86,7 @@ FontRig._resolveGlyphData = function(glyphName) {
 FontRig._updateMarkSwatch = function(mark) {
 	var swatch = FontRig.dom.gwMark;
 	if (!swatch) return;
-	if (mark) {
+	if (mark && !FontRig._isNoMark(mark)) {
 		swatch.style.backgroundColor = mark;
 		swatch.classList.add('gw-mark-swatch--active');
 	} else {
@@ -477,6 +487,11 @@ FontRig._setGlyphMark = function(hexColor) {
 
 	var glyphData = FontRig._resolveGlyphData(glyphName);
 	if (!glyphData) return;
+
+	// Treat white as "no color" (clears the mark)
+	if (hexColor && FontRig._isNoMark(hexColor)) {
+		hexColor = '';
+	}
 
 	glyphData.mark = hexColor || '';
 	FontRig.dirtyGlyphs.add(glyphName);

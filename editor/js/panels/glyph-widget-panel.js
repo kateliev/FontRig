@@ -333,10 +333,18 @@ function _hexToRgba(hex, alpha) {
 	return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
 }
 
+// -- Helper: check if mark represents "no color" --------------------
+function _isNoMark(mark) {
+	if (!mark) return true;
+	var normalized = mark.toUpperCase();
+	if (normalized === '#FFFFFF' || normalized === '#FFF' || normalized === '#FFFFFFFF') return true;
+	return false;
+}
+
 // -- Apply mark tint to a single entry element -----------------------
 // Uses a CSS custom property so hover/active states layer on top.
 function _applyMarkTint(el, mark) {
-	if (mark && /^#[0-9A-Fa-f]{6}$/.test(mark)) {
+	if (mark && !_isNoMark(mark) && /^#[0-9A-Fa-f]{6}$/.test(mark)) {
 		el.style.setProperty('--mark-color', _hexToRgba(mark, 0.15));
 		el.classList.add('gw-marked');
 	} else {

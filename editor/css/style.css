@@ -517,15 +517,15 @@ body {
 .glyph-widget .gw-field--mark {
 	cursor: pointer;
 	position: relative;
-	min-width: 42px;
-	flex: 0 0 auto;
-	justify-content: center;
+	min-width: 70px;
+	height: 24px;
+	flex: 1;
 	gap: 4px;
 }
 
 .glyph-widget .gw-mark-swatch {
-	width: 10px;
-	height: 10px;
+	width: 12px;
+	height: 12px;
 	border-radius: 50%;
 	border: 1px solid var(--border);
 	flex-shrink: 0;
@@ -545,10 +545,10 @@ body {
 	background: var(--bg-secondary);
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	padding: 4px;
+	padding: 6px;
 	box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 	z-index: 30;
-	width: 130px;
+	width: 150px;
 }
 
 .glyph-widget .gw-mark-dropdown.visible {
@@ -558,12 +558,12 @@ body {
 .glyph-widget .gw-mark-option {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 3px 6px;
-	border-radius: 3px;
+	gap: 8px;
+	padding: 5px 8px;
+	border-radius: 4px;
 	cursor: pointer;
 	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
-	font-size: 9px;
+	font-size: 11px;
 	color: var(--text-secondary);
 }
 
@@ -573,8 +573,8 @@ body {
 }
 
 .glyph-widget .gw-mark-dot {
-	width: 8px;
-	height: 8px;
+	width: 12px;
+	height: 12px;
 	border-radius: 50%;
 	flex-shrink: 0;
 }
