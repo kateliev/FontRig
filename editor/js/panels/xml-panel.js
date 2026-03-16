@@ -1,145 +1,174 @@
 // ===================================================================
-// FontRig — XML Panel
+// FontRig — XML Panel (Multi-Instance)
 // ===================================================================
-// XML sync model: manual Refresh (data→XML) and Apply (XML→data).
+// XML sync model: manual Refresh (data->XML) and Apply (XML->data).
 // No live sync during editing — canvas is the source of truth.
-// Node selection → XML highlight is kept (one direction only).
+// Node selection -> XML highlight is kept (one direction only).
+//
+// Supports multiple instances: the primary instance uses the original
+// DOM IDs for backward compatibility; clones create fresh DOM.
+// All instances sync from the same glyph data source.
 // ===================================================================
 'use strict';
 
-FontRig.buildXmlPanel = function() {
+// ===================================================================
+// Mount: create an XML panel instance into a container
+// ===================================================================
+FontRig.XmlPanel = {};
+
+FontRig.XmlPanel.mount = function(containerEl, ctx) {
+	if (!containerEl) return null;
+
+	var inst = {
+		_containerEl: containerEl,
+		_textareaEl: null,
+		_nodeCountEl: null,
+		_parseStatusEl: null,
+		_refreshBtnEl: null,
+		_applyBtnEl: null,
+		_lineNodeMap: {},
+		_nodeLineMap: {},
+	};
+
+	containerEl.innerHTML = '';
+
+	// -- Actions bar ------------------------------------------------
+	var actions = document.createElement('div');
+	actions.className = 'xml-panel__actions';
+
+	var refreshBtn = document.createElement('button');
+	refreshBtn.className = 'tb-btn';
+	refreshBtn.title = 'Regenerate XML from glyph data (Refresh)';
+	refreshBtn.innerHTML = '<span class="tri">refresh</span>';
+	actions.appendChild(refreshBtn);
+	inst._refreshBtnEl = refreshBtn;
+
+	var applyBtn = document.createElement('button');
+	applyBtn.className = 'tb-btn';
+	applyBtn.title = 'Apply XML edits to glyph (Ctrl+Enter)';
+	applyBtn.innerHTML = '<span class="tri">action_play</span>';
+	actions.appendChild(applyBtn);
+	inst._applyBtnEl = applyBtn;
+
+	containerEl.appendChild(actions);
+
+	// -- Textarea ---------------------------------------------------
+	var textarea = document.createElement('textarea');
+	textarea.className = 'xml-panel__content';
+	textarea.spellcheck = false;
+	textarea.autocomplete = 'off';
+	textarea.autocorrect = 'off';
+	textarea.autocapitalize = 'off';
+	containerEl.appendChild(textarea);
+	inst._textareaEl = textarea;
+
+	// -- Status bar --------------------------------------------------
+	var statusBar = document.createElement('span');
+	statusBar.className = 'fr-sidebar__statusbar';
+
+	var nodeCount = document.createElement('span');
+	nodeCount.className = 'xml-panel__node-count';
+	statusBar.appendChild(nodeCount);
+	inst._nodeCountEl = nodeCount;
+
+	var parseStatus = document.createElement('span');
+	parseStatus.className = 'parse-status ok';
+	parseStatus.textContent = 'OK';
+	statusBar.appendChild(parseStatus);
+	inst._parseStatusEl = parseStatus;
+
+	containerEl.appendChild(statusBar);
+
+	// -- Wire events ------------------------------------------------
+	refreshBtn.addEventListener('click', function() {
+		FontRig.xmlRefresh();
+	});
+
+	applyBtn.addEventListener('click', function() {
+		if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
+		_applyFromInstance(inst);
+	});
+
+	textarea.addEventListener('keydown', function(e) {
+		if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+			e.preventDefault();
+			if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
+			_applyFromInstance(inst);
+		}
+	});
+
+	textarea.addEventListener('click', function() {
+		var pos = textarea.selectionStart;
+		var text = textarea.value.substring(0, pos);
+		var lineIdx = text.split('\n').length - 1;
+		var nodeId = inst._lineNodeMap[lineIdx];
+		if (nodeId) {
+			FontRig.state.selectedNodeIds.clear();
+			FontRig.state.selectedNodeIds.add(nodeId);
+			FontRig.draw();
+			if (typeof FontRig.updateStatusSelected === 'function') {
+				FontRig.updateStatusSelected();
+			}
+		}
+	});
+
+	// -- Attach public methods --------------------------------------
+	inst.syncFromData = function() { _syncFromData(inst); };
+	inst.setParseStatus = function(ok, msg) { _setParseStatus(inst, ok, msg); };
+	inst.highlightNode = function(nodeId) { _highlightNode(inst, nodeId); };
+
+	// -- Initial sync -----------------------------------------------
+	_syncFromData(inst);
+
+	return inst;
+};
+
+// ===================================================================
+// Internal: sync textarea from current glyph data
+// ===================================================================
+function _syncFromData(inst) {
 	if (!FontRig.state.rawXml) {
-		FontRig.dom.xmlContent.value = '';
-		FontRig.dom.xmlNodeCount.textContent = '';
+		inst._textareaEl.value = '';
+		inst._nodeCountEl.textContent = '';
 		return;
 	}
 
-	const formatted = FontRig.formatXml(FontRig.state.rawXml);
-	FontRig.dom.xmlContent.value = formatted;
+	var formatted = FontRig.formatXml(FontRig.state.rawXml);
+	inst._textareaEl.value = formatted;
 
-	FontRig.rebuildLineMaps(formatted);
-	FontRig.updateNodeCount();
-	FontRig.setParseStatus(true);
-};
+	_rebuildLineMaps(inst, formatted);
+	_updateNodeCount(inst);
+	_setParseStatus(inst, true);
+}
 
-FontRig.rebuildLineMaps = function(text) {
-	FontRig.xmlLineNodeMap = {};
-	FontRig.xmlNodeLineMap = {};
-
-	const lines = text.split('\n');
-	let globalContourIdx = 0;
-	let nodeIdx = 0;
-	let inContour = false;
-
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i].trim();
-
-		if (line.startsWith('<contour')) {
-			inContour = true;
-			nodeIdx = 0;
-		} else if (line === '</contour>') {
-			if (inContour) globalContourIdx++;
-			inContour = false;
-		} else if (inContour && line.startsWith('<node ')) {
-			const id = `c${globalContourIdx}_n${nodeIdx}`;
-			FontRig.xmlLineNodeMap[i] = id;
-			FontRig.xmlNodeLineMap[id] = i;
-			nodeIdx++;
-		}
-	}
-};
-
-FontRig.updateNodeCount = function() {
-	const layer = FontRig.getActiveLayer();
-	if (layer) {
-		const allNodes = FontRig.getAllNodes(layer);
-		const onCount = allNodes.filter(n => n.type === 'on').length;
-		const offCount = allNodes.length - onCount;
-		FontRig.dom.xmlNodeCount.textContent = `${onCount} on / ${offCount} off`;
-	} else {
-		FontRig.dom.xmlNodeCount.textContent = '';
-	}
-};
-
-FontRig.setParseStatus = function(ok, msg) {
-	const el = FontRig.dom.parseStatus;
-	if (ok) {
-		el.textContent = 'OK';
-		el.className = 'parse-status ok';
-		FontRig.dom.xmlContent.classList.remove('has-error');
-	} else {
-		el.textContent = msg || 'Error';
-		el.className = 'parse-status error';
-		FontRig.dom.xmlContent.classList.add('has-error');
-	}
-};
-
-// Highlight first selected node in XML textarea (for multi-selection,
-// scroll to first; all are conceptually selected).
-// Direction: canvas → XML (one way only)
-FontRig.highlightXmlNode = function(nodeId) {
-	if (!FontRig.state.showXml) return;
-	if (!nodeId) return;
-
-	const lineIdx = FontRig.xmlNodeLineMap[nodeId];
-	if (lineIdx === undefined) return;
-
-	const textarea = FontRig.dom.xmlContent;
-	const text = textarea.value;
-	const lines = text.split('\n');
-
-	let charStart = 0;
-	for (let i = 0; i < lineIdx; i++) {
-		charStart += lines[i].length + 1;
-	}
-	const charEnd = charStart + (lines[lineIdx] || '').length;
-
-	textarea.focus();
-	textarea.setSelectionRange(charStart, charEnd);
-
-	const lineHeight = 12 * 1.65;
-	const scrollTarget = lineIdx * lineHeight - textarea.clientHeight / 2;
-	textarea.scrollTop = Math.max(0, scrollTarget);
-};
-
-// -- Refresh: glyph data → XML textarea -----------------------------
-// Regenerates XML from the current in-memory glyph, replacing
-// whatever is in the textarea. Called by Refresh button.
-FontRig.xmlRefresh = function() {
-	if (!FontRig.state.glyphData) return;
-	const newXml = FontRig.glyphToXml(FontRig.state.glyphData);
-	FontRig.state.rawXml = newXml;
-
-	const formatted = FontRig.formatXml(newXml);
-	FontRig.dom.xmlContent.value = formatted;
-	FontRig.rebuildLineMaps(formatted);
-	FontRig.updateNodeCount();
-	FontRig.setParseStatus(true);
-};
-
-// -- Apply: XML textarea → glyph data ------------------------------
-// Parses the textarea content and replaces the in-memory glyph.
-// Called by Apply button or Ctrl+Enter in the XML textarea.
-FontRig.xmlApply = function() {
-	const xmlString = FontRig.dom.xmlContent.value;
+// ===================================================================
+// Internal: apply from a specific instance's textarea
+// ===================================================================
+function _applyFromInstance(inst) {
+	var xmlString = inst._textareaEl.value;
 
 	try {
-		const newGlyph = FontRig.parseGlyphXML(xmlString);
+		var newGlyph = FontRig.parseGlyphXML(xmlString);
 
 		FontRig.state.glyphData = newGlyph;
 		FontRig.state.rawXml = xmlString;
 
-		// Update layer selector if layers changed
-		const currentLayer = FontRig.state.activeLayer;
+		// Update layer selector
+		var currentLayer = FontRig.state.activeLayer;
 		FontRig.dom.layerSelect.innerHTML = '';
-		for (const layer of newGlyph.layers) {
-			const opt = document.createElement('option');
+		for (var i = 0; i < newGlyph.layers.length; i++) {
+			var layer = newGlyph.layers[i];
+			var opt = document.createElement('option');
 			opt.value = layer.name;
 			opt.textContent = layer.name || '(unnamed)';
 			FontRig.dom.layerSelect.appendChild(opt);
 		}
 
-		if (newGlyph.layers.find(l => l.name === currentLayer)) {
+		var found = false;
+		for (var i = 0; i < newGlyph.layers.length; i++) {
+			if (newGlyph.layers[i].name === currentLayer) { found = true; break; }
+		}
+		if (found) {
 			FontRig.dom.layerSelect.value = currentLayer;
 			FontRig.state.activeLayer = currentLayer;
 		} else if (newGlyph.layers.length > 0) {
@@ -147,44 +176,188 @@ FontRig.xmlApply = function() {
 			FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 		}
 
-		let infoHtml = `<span>${newGlyph.name || '?'}</span>`;
-		if (newGlyph.unicodes) infoHtml += ` U+${newGlyph.unicodes}`;
+		var infoHtml = '<span>' + (newGlyph.name || '?') + '</span>';
+		if (newGlyph.unicodes) infoHtml += ' U+' + newGlyph.unicodes;
 		FontRig.dom.glyphInfo.innerHTML = infoHtml;
 
-		FontRig.rebuildLineMaps(xmlString);
-		FontRig.updateNodeCount();
-		FontRig.setParseStatus(true);
+		// Sync all XML instances after apply
+		FontRig.buildXmlPanel();
 		FontRig.draw();
 
 	} catch (e) {
-		FontRig.setParseStatus(false, 'Parse error');
+		_setParseStatus(inst, false, 'Parse error');
+	}
+}
+
+function _rebuildLineMaps(inst, text) {
+	inst._lineNodeMap = {};
+	inst._nodeLineMap = {};
+
+	var lines = text.split('\n');
+	var globalContourIdx = 0, nodeIdx = 0, inContour = false;
+
+	for (var i = 0; i < lines.length; i++) {
+		var line = lines[i].trim();
+		if (line.indexOf('<contour') === 0) {
+			inContour = true;
+			nodeIdx = 0;
+		} else if (line === '</contour>') {
+			if (inContour) globalContourIdx++;
+			inContour = false;
+		} else if (inContour && line.indexOf('<node ') === 0) {
+			var id = 'c' + globalContourIdx + '_n' + nodeIdx;
+			inst._lineNodeMap[i] = id;
+			inst._nodeLineMap[id] = i;
+			nodeIdx++;
+		}
+	}
+
+	// Also update global maps for backward compatibility
+	FontRig.xmlLineNodeMap = inst._lineNodeMap;
+	FontRig.xmlNodeLineMap = inst._nodeLineMap;
+}
+
+function _updateNodeCount(inst) {
+	var layer = FontRig.getActiveLayer();
+	if (layer) {
+		var allNodes = FontRig.getAllNodes(layer);
+		var onCount = allNodes.filter(function(n) { return n.type === 'on'; }).length;
+		var offCount = allNodes.length - onCount;
+		inst._nodeCountEl.textContent = onCount + ' on / ' + offCount + ' off';
+	} else {
+		inst._nodeCountEl.textContent = '';
+	}
+}
+
+function _setParseStatus(inst, ok, msg) {
+	var el = inst._parseStatusEl;
+	if (ok) {
+		el.textContent = 'OK';
+		el.className = 'parse-status ok';
+		inst._textareaEl.classList.remove('has-error');
+	} else {
+		el.textContent = msg || 'Error';
+		el.className = 'parse-status error';
+		inst._textareaEl.classList.add('has-error');
+	}
+}
+
+function _highlightNode(inst, nodeId) {
+	if (!nodeId) return;
+
+	var lineIdx = inst._nodeLineMap[nodeId];
+	if (lineIdx === undefined) return;
+
+	var textarea = inst._textareaEl;
+	var text = textarea.value;
+	var lines = text.split('\n');
+
+	var charStart = 0;
+	for (var i = 0; i < lineIdx; i++) {
+		charStart += lines[i].length + 1;
+	}
+	var charEnd = charStart + (lines[lineIdx] || '').length;
+
+	textarea.focus();
+	textarea.setSelectionRange(charStart, charEnd);
+
+	var lineHeight = 12 * 1.65;
+	var scrollTarget = lineIdx * lineHeight - textarea.clientHeight / 2;
+	textarea.scrollTop = Math.max(0, scrollTarget);
+}
+
+// ===================================================================
+// Legacy global API — delegates to all instances
+// ===================================================================
+// These functions maintain backward compatibility with code that
+// calls FontRig.buildXmlPanel(), FontRig.xmlRefresh(), etc.
+// They fan out to all mounted XML instances.
+// ===================================================================
+
+FontRig.buildXmlPanel = function() {
+	if (!FontRig.state.rawXml) return;
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+	SBC.forEachInstance('xml', function(inst) {
+		inst.syncFromData();
+	});
+};
+
+FontRig.rebuildLineMaps = function(text) {
+	// Rebuild on all instances
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+	SBC.forEachInstance('xml', function(inst) {
+		_rebuildLineMaps(inst, text);
+	});
+};
+
+FontRig.updateNodeCount = function() {
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+	SBC.forEachInstance('xml', function(inst) {
+		_updateNodeCount(inst);
+	});
+};
+
+FontRig.setParseStatus = function(ok, msg) {
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+	SBC.forEachInstance('xml', function(inst) {
+		_setParseStatus(inst, ok, msg);
+	});
+};
+
+FontRig.highlightXmlNode = function(nodeId) {
+	if (!FontRig.state.showXml) return;
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+	SBC.forEachInstance('xml', function(inst) {
+		_highlightNode(inst, nodeId);
+	});
+};
+
+FontRig.xmlRefresh = function() {
+	if (!FontRig.state.glyphData) return;
+	var newXml = FontRig.glyphToXml(FontRig.state.glyphData);
+	FontRig.state.rawXml = newXml;
+	FontRig.buildXmlPanel();
+};
+
+FontRig.xmlApply = function() {
+	// Apply from the first available instance
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+	var instances = SBC.getInstances('xml');
+	if (instances.length > 0) {
+		_applyFromInstance(instances[0]);
 	}
 };
 
-// -- XML formatter --------------------------------------------------
+// -- XML formatter (stateless, unchanged) ---------------------------
 FontRig.formatXml = function(xml) {
-	let result = '';
-	let indent = 0;
-	const tab = '  ';
+	var result = '';
+	var indent = 0;
+	var tab = '  ';
 
 	xml = xml.replace(/>\s*</g, '><').trim();
 
-	const tokens = xml.match(/<[^>]+>|[^<]+/g) || [];
+	var tokens = xml.match(/<[^>]+>|[^<]+/g) || [];
 
-	for (const token of tokens) {
-		if (token.startsWith('<?')) {
-			// Processing instruction — no indent change
+	for (var i = 0; i < tokens.length; i++) {
+		var token = tokens[i];
+		if (token.indexOf('<?') === 0) {
 			result += tab.repeat(indent) + token + '\n';
-		} else if (token.startsWith('</')) {
+		} else if (token.indexOf('</') === 0) {
 			indent--;
 			result += tab.repeat(Math.max(0, indent)) + token + '\n';
-		} else if (token.startsWith('<') && token.endsWith('/>')) {
+		} else if (token.indexOf('<') === 0 && token.indexOf('/>') === token.length - 2) {
 			result += tab.repeat(indent) + token + '\n';
-		} else if (token.startsWith('<')) {
+		} else if (token.indexOf('<') === 0) {
 			result += tab.repeat(indent) + token + '\n';
 			indent++;
 		} else {
-			const trimmed = token.trim();
+			var trimmed = token.trim();
 			if (trimmed) result += tab.repeat(indent) + trimmed + '\n';
 		}
 	}

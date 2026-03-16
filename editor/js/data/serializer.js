@@ -174,12 +174,8 @@ FontRig.syncXmlFromData = function() {
 	var newXml = FontRig.glyphToXml(FontRig.state.glyphData);
 	FontRig.state.rawXml = newXml;
 
-	// Update textarea when XML panel is visible
+	// Update all XML panel instances when visible
 	if (FontRig.state.showXml) {
-		var formatted = FontRig.formatXml(newXml);
-		FontRig.dom.xmlContent.value = formatted;
-		FontRig.rebuildLineMaps(formatted);
-		FontRig.updateNodeCount();
-		FontRig.setParseStatus(true);
+		FontRig.buildXmlPanel();
 	}
 };

@@ -65,13 +65,12 @@ const FontRig = {
 };
 
 // Populate DOM refs after DOM is ready
+// Note: XML and Python panel elements are now created dynamically
+// per-instance by XmlPanel.mount() / PythonPanel.mount().
 FontRig.dom = {
 	canvas:         document.getElementById('glyph-canvas'),
 	ctx:            document.getElementById('glyph-canvas').getContext('2d'),
 	canvasWrap:     document.getElementById('canvas-wrap'),
-	xmlContent:     document.getElementById('xml-content'),
-	xmlNodeCount:   document.getElementById('xml-node-count'),
-	parseStatus:    document.getElementById('parse-status'),
 	main:           document.getElementById('main'),
 	emptyState:     document.getElementById('empty-state'),
 	fileInput:      document.getElementById('file-input'),
@@ -89,5 +88,4 @@ FontRig.dom = {
 	gwLsb:          document.getElementById('gw-lsb'),
 	gwAdvance:      document.getElementById('gw-advance'),
 	gwRsb:          document.getElementById('gw-rsb'),
-	pyInput:        document.getElementById('py-input'),
 };

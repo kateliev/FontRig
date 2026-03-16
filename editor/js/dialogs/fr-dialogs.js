@@ -169,7 +169,11 @@ FontRig.scope = {
 
 		if (mode === 'selection') {
 			// Glyphs selected in the font panel (checked/highlighted entries)
-			var list = FontRig.GlyphWidgetPanel ? FontRig.GlyphWidgetPanel.getListElement() : null;
+			var list = null;
+			if (FontRig.SidebarConfig) {
+				var glyphInstances = FontRig.SidebarConfig.getInstances('glyphs');
+				if (glyphInstances.length > 0) list = glyphInstances[0].getListElement();
+			}
 			if (!list) return FontRig.activeGlyph ? [FontRig.activeGlyph] : [];
 
 			var names = [];

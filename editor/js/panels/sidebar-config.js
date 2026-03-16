@@ -8,12 +8,13 @@
 //   id       — unique string identifier (matches tab id)
 //   label    — human-readable name
 //   icon     — TypeRig Icons ligature name
-//   mount    — function(containerEl) to initialize the widget
-//   update   — optional function() called on tab switch / refresh
+//   mount    — function(containerEl, ctx) → instance object
+//   update   — optional function(instance) called on tab switch
+//   unmount  — optional function(instance) for cleanup
 //
-// Sidebar configs are lists of widget ids with active flags.
-// The config tab (always present) lets the user toggle widgets
-// on/off per sidebar instance.
+// Widgets support "cloning": the same widget type can be mounted in
+// multiple sidebars simultaneously. Each mount returns a separate
+// instance object. Bridge functions iterate all instances.
 //
 // Designed for future multi-window workplanes: each workplane
 // can host N configurable sidebars, each driven by its own config.
@@ -25,12 +26,14 @@
 if (typeof FontRig === 'undefined') return;
 
 // -- Widget Registry ------------------------------------------------
-// Master list of all widgets that can appear in any sidebar.
-// Order here is the default display order in the config tab.
-// ===================================================================
 FontRig.SidebarConfig = {};
 
 FontRig.SidebarConfig._widgets = {};
+
+// -- Instance Registry ----------------------------------------------
+// Maps: widgetId → [{ sidebarId, instance }]
+// Each widget type keeps a list of all active mounted instances.
+FontRig.SidebarConfig._instances = {};
 
 // Register a sidebar widget
 FontRig.SidebarConfig.registerWidget = function(def) {
@@ -39,10 +42,14 @@ FontRig.SidebarConfig.registerWidget = function(def) {
 		id:      def.id,
 		label:   def.label || def.id,
 		icon:    def.icon || '',
-		mount:   def.mount || function() {},
+		mount:   def.mount || function() { return {}; },
 		update:  def.update || null,
 		unmount: def.unmount || null,
 	};
+	// Init instance list
+	if (!FontRig.SidebarConfig._instances[def.id]) {
+		FontRig.SidebarConfig._instances[def.id] = [];
+	}
 };
 
 // Get a registered widget definition
@@ -66,26 +73,71 @@ FontRig.SidebarConfig.getAllWidgets = function() {
 };
 
 // ===================================================================
-// Default Sidebar Configurations
-// ===================================================================
-// Each config is an object:
-//   id            — sidebar instance id
-//   position      — 'left' | 'right'
-//   tabPosition   — 'left' | 'right' (which side of the panel
-//                    the tab bar sits; internal only, not user-facing)
-//   defaultWidth  — number (px) or string
-//   minWidth      — number (px)
-//   maxWidth      — number (px)
-//   widgets       — ordered array of { id, active } entries
-//   defaultTab    — id of the default active tab
+// Instance management
 // ===================================================================
 
+// Register a mounted widget instance
+FontRig.SidebarConfig.addInstance = function(widgetId, sidebarId, instance) {
+	if (!FontRig.SidebarConfig._instances[widgetId]) {
+		FontRig.SidebarConfig._instances[widgetId] = [];
+	}
+	FontRig.SidebarConfig._instances[widgetId].push({
+		sidebarId: sidebarId,
+		instance: instance,
+	});
+};
+
+// Remove a mounted widget instance
+FontRig.SidebarConfig.removeInstance = function(widgetId, sidebarId) {
+	var list = FontRig.SidebarConfig._instances[widgetId];
+	if (!list) return null;
+	for (var i = list.length - 1; i >= 0; i--) {
+		if (list[i].sidebarId === sidebarId) {
+			var removed = list.splice(i, 1)[0];
+			return removed.instance;
+		}
+	}
+	return null;
+};
+
+// Get all instances of a widget type
+FontRig.SidebarConfig.getInstances = function(widgetId) {
+	var list = FontRig.SidebarConfig._instances[widgetId] || [];
+	var result = [];
+	for (var i = 0; i < list.length; i++) {
+		result.push(list[i].instance);
+	}
+	return result;
+};
+
+// Get a specific instance by sidebar id
+FontRig.SidebarConfig.getInstance = function(widgetId, sidebarId) {
+	var list = FontRig.SidebarConfig._instances[widgetId] || [];
+	for (var i = 0; i < list.length; i++) {
+		if (list[i].sidebarId === sidebarId) {
+			return list[i].instance;
+		}
+	}
+	return null;
+};
+
+// Call a method on all instances of a widget type
+FontRig.SidebarConfig.forEachInstance = function(widgetId, fn) {
+	var list = FontRig.SidebarConfig._instances[widgetId] || [];
+	for (var i = 0; i < list.length; i++) {
+		fn(list[i].instance, list[i].sidebarId);
+	}
+};
+
+// ===================================================================
+// Default Sidebar Configurations
+// ===================================================================
 FontRig.SidebarConfig.defaults = {
 	'left-sidebar': {
 		id:           'left-sidebar',
 		position:     'left',
-		tabPosition:  'right',   // tabs on inner edge (right side of left panel)
-		defaultWidth: null,      // computed at init time
+		tabPosition:  'right',
+		defaultWidth: null,
 		minWidth:     120,
 		maxWidth:     500,
 		widgets: [
@@ -98,8 +150,8 @@ FontRig.SidebarConfig.defaults = {
 	'right-sidebar': {
 		id:           'right-sidebar',
 		position:     'right',
-		tabPosition:  'left',    // tabs on inner edge (left side of right panel)
-		defaultWidth: null,      // computed at init time
+		tabPosition:  'left',
+		defaultWidth: null,
 		minWidth:     200,
 		maxWidth:     800,
 		widgets: [
@@ -117,7 +169,6 @@ FontRig.SidebarConfig.getConfig = function(sidebarId) {
 	var def = FontRig.SidebarConfig.defaults[sidebarId];
 	if (!def) return null;
 
-	// Try to load saved config
 	var saved = null;
 	try {
 		var raw = localStorage.getItem('fr-sidebar-config-' + sidebarId);
@@ -125,14 +176,11 @@ FontRig.SidebarConfig.getConfig = function(sidebarId) {
 	} catch (e) { /* silent */ }
 
 	if (saved && saved.widgets && saved.widgets.length > 0) {
-		// Merge: keep saved active states, but ensure all registered
-		// widgets are present (new ones added, removed ones dropped)
 		var savedMap = {};
 		for (var i = 0; i < saved.widgets.length; i++) {
 			savedMap[saved.widgets[i].id] = saved.widgets[i].active;
 		}
 
-		// Build merged list: use default order, apply saved active state
 		var merged = [];
 		for (var i = 0; i < def.widgets.length; i++) {
 			var w = def.widgets[i];
@@ -140,7 +188,6 @@ FontRig.SidebarConfig.getConfig = function(sidebarId) {
 			merged.push({ id: w.id, active: isActive });
 		}
 
-		// Also include any saved widgets not in defaults (future-proof)
 		for (var i = 0; i < saved.widgets.length; i++) {
 			var sw = saved.widgets[i];
 			var found = false;
@@ -164,7 +211,6 @@ FontRig.SidebarConfig.getConfig = function(sidebarId) {
 		};
 	}
 
-	// Return a copy of the default
 	return {
 		id:           def.id,
 		position:     def.position,
@@ -178,7 +224,7 @@ FontRig.SidebarConfig.getConfig = function(sidebarId) {
 };
 
 // ===================================================================
-// Save config for a sidebar
+// Save / Export / Import (unchanged)
 // ===================================================================
 FontRig.SidebarConfig.saveConfig = function(sidebarId, config) {
 	try {
@@ -190,9 +236,6 @@ FontRig.SidebarConfig.saveConfig = function(sidebarId, config) {
 	} catch (e) { /* silent */ }
 };
 
-// ===================================================================
-// Export config to a downloadable JSON file
-// ===================================================================
 FontRig.SidebarConfig.exportToFile = function(sidebarId) {
 	var config = FontRig.SidebarConfig.getConfig(sidebarId);
 	if (!config) return;
@@ -215,9 +258,6 @@ FontRig.SidebarConfig.exportToFile = function(sidebarId) {
 	URL.revokeObjectURL(url);
 };
 
-// ===================================================================
-// Import config from a JSON file
-// ===================================================================
 FontRig.SidebarConfig.importFromFile = function(sidebarId, callback) {
 	var input = document.createElement('input');
 	input.type = 'file';
@@ -239,7 +279,6 @@ FontRig.SidebarConfig.importFromFile = function(sidebarId, callback) {
 				var config = FontRig.SidebarConfig.getConfig(sidebarId);
 				if (!config) return;
 
-				// Apply imported widget states
 				if (data.widgets) {
 					var importMap = {};
 					for (var i = 0; i < data.widgets.length; i++) {

@@ -1,226 +1,378 @@
 // ===================================================================
-// FontRig — Python Panel
+// FontRig — Python Panel (Multi-Instance)
 // ===================================================================
 // REPL interface: code input, output history, tab switching.
 // Depends on pyodide-bridge.js for execution.
+//
+// Supports multiple instances: each mount() creates fresh DOM.
+// History and Pyodide runtime are shared (singleton), but UI state
+// (output scroll, input text) is per-instance. Output is broadcast
+// to all instances.
 // ===================================================================
 'use strict';
 
-// -- Panel tab switching ------------------------------------------------
-// Tab switching is handled by Sidebar.switchTab via sidebar-init.js.
+// -- Namespace ------------------------------------------------------
+FontRig.PythonPanel = {};
+
+// -- Shared state (one Pyodide runtime) -----------------------------
+FontRig.PythonPanel._history = [];
+FontRig.PythonPanel._historyIdx = -1;
+
+// ===================================================================
+// Mount: create a Python panel instance into a container
+// ===================================================================
+FontRig.PythonPanel.mount = function(containerEl, ctx) {
+	if (!containerEl) return null;
+
+	var inst = {
+		_containerEl: containerEl,
+		_outputEl: null,
+		_inputEl: null,
+		_initBtnEl: null,
+		_clearBtnEl: null,
+		_statusEl: null,
+	};
+
+	containerEl.innerHTML = '';
+
+	// -- Output area ------------------------------------------------
+	var output = document.createElement('div');
+	output.className = 'py-panel__output';
+	containerEl.appendChild(output);
+	inst._outputEl = output;
+
+	// -- Input area --------------------------------------------------
+	var inputWrap = document.createElement('div');
+	inputWrap.className = 'py-panel__input-wrap';
+
+	var input = document.createElement('textarea');
+	input.className = 'py-panel__input';
+	input.rows = 1;
+	input.spellcheck = false;
+	input.autocomplete = 'off';
+	input.autocorrect = 'off';
+	input.autocapitalize = 'off';
+	inputWrap.appendChild(input);
+	inst._inputEl = input;
+
+	var actionsRow = document.createElement('div');
+	actionsRow.className = 'py-panel__actions';
+
+	var initBtn = document.createElement('button');
+	initBtn.className = 'py-btn py-btn--primary';
+	initBtn.textContent = 'Init Python';
+	actionsRow.appendChild(initBtn);
+	inst._initBtnEl = initBtn;
+
+	var clearBtn = document.createElement('button');
+	clearBtn.className = 'py-btn';
+	clearBtn.textContent = 'Clear';
+	actionsRow.appendChild(clearBtn);
+	inst._clearBtnEl = clearBtn;
+
+	var hint = document.createElement('span');
+	hint.className = 'hint';
+	hint.textContent = 'Shift+Enter to run';
+	actionsRow.appendChild(hint);
+
+	inputWrap.appendChild(actionsRow);
+	containerEl.appendChild(inputWrap);
+
+	// -- Status bar --------------------------------------------------
+	var statusBar = document.createElement('span');
+	statusBar.className = 'fr-sidebar__statusbar';
+
+	var status = document.createElement('span');
+	status.className = 'py-status py-status--idle';
+	status.textContent = 'Not loaded';
+	statusBar.appendChild(status);
+	inst._statusEl = status;
+
+	containerEl.appendChild(statusBar);
+
+	// -- Adjust for current bridge state ----------------------------
+	if (FontRig.pyBridge && FontRig.pyBridge.ready) {
+		initBtn.style.display = 'none';
+		input.disabled = false;
+		input.placeholder = '>>> Python \u2014 Shift+Enter to run';
+		_updateStatus(inst, 'ready');
+	} else {
+		input.disabled = true;
+		input.placeholder = 'Click Init to load Python runtime';
+	}
+
+	// -- Wire events ------------------------------------------------
+	input.addEventListener('keydown', function(e) {
+		if (e.key === 'Enter' && e.shiftKey) {
+			e.preventDefault();
+			_execute(inst);
+		}
+
+		if (e.key === 'ArrowUp' && !e.shiftKey && input.value.indexOf('\n') === -1) {
+			if (input.selectionStart === 0) {
+				e.preventDefault();
+				_historyUp(inst);
+			}
+		}
+
+		if (e.key === 'ArrowDown' && !e.shiftKey && input.value.indexOf('\n') === -1) {
+			if (input.selectionStart === input.value.length) {
+				e.preventDefault();
+				_historyDown(inst);
+			}
+		}
+	});
+
+	input.addEventListener('input', function() {
+		_autoResize(input);
+	});
+
+	initBtn.addEventListener('click', function() {
+		_init(inst);
+	});
+
+	clearBtn.addEventListener('click', function() {
+		inst._outputEl.innerHTML = '';
+	});
+
+	// -- Attach public methods --------------------------------------
+	inst.appendOutput = function(text, type) { _appendOutput(inst, text, type); };
+	inst.updateStatus = function(status) { _updateStatus(inst, status); };
+	inst.focus = function() {
+		if (inst._inputEl) setTimeout(function() { inst._inputEl.focus(); }, 50);
+	};
+
+	return inst;
+};
+
+// ===================================================================
+// Internal methods
+// ===================================================================
+
+function _autoResize(textarea) {
+	textarea.style.height = 'auto';
+	var maxH = 160;
+	textarea.style.height = Math.min(textarea.scrollHeight, maxH) + 'px';
+}
+
+function _appendOutput(inst, text, type) {
+	var output = inst._outputEl;
+	if (!output) return;
+
+	var entry = document.createElement('div');
+	entry.className = 'py-entry py-' + (type || 'output');
+
+	if (type === 'input') {
+		var lines = text.split('\n');
+		var formatted = [];
+		for (var i = 0; i < lines.length; i++) {
+			formatted.push((i === 0 ? '>>> ' : '... ') + lines[i]);
+		}
+		entry.textContent = formatted.join('\n');
+	} else {
+		entry.textContent = text;
+	}
+
+	output.appendChild(entry);
+	output.scrollTop = output.scrollHeight;
+}
+
+function _updateStatus(inst, status) {
+	var el = inst._statusEl;
+	if (!el) return;
+
+	var labels = {
+		'idle': 'Not loaded',
+		'ready': 'Ready',
+		'error': 'Error',
+	};
+
+	el.textContent = labels[status] || status;
+	el.className = 'py-status py-status--' + status;
+}
+
+function _init(inst) {
+	if (!FontRig.pyBridge) return;
+	if (FontRig.pyBridge.ready) return;
+	if (FontRig.pyBridge.loading) return;
+
+	// Update all instances' init buttons
+	var SBC = FontRig.SidebarConfig;
+	if (SBC) {
+		SBC.forEachInstance('python', function(i) {
+			if (i._initBtnEl) {
+				i._initBtnEl.textContent = 'Loading\u2026';
+				i._initBtnEl.disabled = true;
+			}
+		});
+	}
+
+	FontRig.pyBridge.init(function(msg) {
+		// Broadcast init progress to all instances
+		if (SBC) {
+			SBC.forEachInstance('python', function(i) {
+				_appendOutput(i, msg, 'info');
+			});
+		}
+	}).then(function() {
+		if (FontRig.pyBridge.ready) {
+			// Update all instances
+			if (SBC) {
+				SBC.forEachInstance('python', function(i) {
+					if (i._initBtnEl) i._initBtnEl.style.display = 'none';
+					if (i._inputEl) {
+						i._inputEl.disabled = false;
+						i._inputEl.placeholder = '>>> Python \u2014 Shift+Enter to run';
+					}
+					_updateStatus(i, 'ready');
+				});
+			}
+
+			if (FontRig.state.glyphData) {
+				FontRig.pyBridge.syncToPython();
+				if (SBC) {
+					SBC.forEachInstance('python', function(i) {
+						_appendOutput(i, 'glyph synced from viewer.', 'info');
+					});
+				}
+			}
+		} else {
+			if (SBC) {
+				SBC.forEachInstance('python', function(i) {
+					if (i._initBtnEl) {
+						i._initBtnEl.textContent = 'Retry Init';
+						i._initBtnEl.disabled = false;
+					}
+					_updateStatus(i, 'error');
+				});
+			}
+		}
+	});
+}
+
+function _execute(inst) {
+	var code = inst._inputEl.value.trim();
+	if (!code) return;
+
+	// Show input in ALL instances
+	var SBC = FontRig.SidebarConfig;
+	if (SBC) {
+		SBC.forEachInstance('python', function(i) {
+			_appendOutput(i, code, 'input');
+		});
+	}
+
+	// Save to shared history
+	FontRig.PythonPanel._history.push(code);
+	FontRig.PythonPanel._historyIdx = FontRig.PythonPanel._history.length;
+
+	// Run
+	var result = FontRig.pyBridge.run(code);
+
+	// Broadcast output to ALL instances
+	if (SBC) {
+		SBC.forEachInstance('python', function(i) {
+			if (result.output) _appendOutput(i, result.output, 'output');
+			if (result.error) _appendOutput(i, result.error, 'error');
+			if (result.glyphChanged) _appendOutput(i, '\u21BB glyph updated in viewer', 'info');
+		});
+	}
+
+	// Clear input on the executing instance
+	inst._inputEl.value = '';
+	_autoResize(inst._inputEl);
+}
+
+function _historyUp(inst) {
+	var hist = FontRig.PythonPanel._history;
+	if (hist.length === 0) return;
+	if (FontRig.PythonPanel._historyIdx > 0) FontRig.PythonPanel._historyIdx--;
+	inst._inputEl.value = hist[FontRig.PythonPanel._historyIdx] || '';
+	_autoResize(inst._inputEl);
+}
+
+function _historyDown(inst) {
+	var hist = FontRig.PythonPanel._history;
+	if (hist.length === 0) return;
+	FontRig.PythonPanel._historyIdx++;
+	if (FontRig.PythonPanel._historyIdx >= hist.length) {
+		FontRig.PythonPanel._historyIdx = hist.length;
+		inst._inputEl.value = '';
+	} else {
+		inst._inputEl.value = hist[FontRig.PythonPanel._historyIdx] || '';
+	}
+	_autoResize(inst._inputEl);
+}
+
+// ===================================================================
+// Legacy global API
+// ===================================================================
+
+// Tab switching (still works via sidebar framework)
 FontRig.switchPanelTab = function(tabName) {
 	FontRig.state.activePanel = tabName;
 	if (FontRig._rightSidebar) {
 		FontRig.Sidebar.switchTab(FontRig._rightSidebar, tabName);
 	}
-
-	if (tabName === 'python') {
-		var input = document.getElementById('py-input');
-		if (input) setTimeout(function() { input.focus(); }, 50);
-	}
 };
 
-// -- Python REPL --------------------------------------------------------
+// Legacy pyPanel API — delegates to PythonPanel
 FontRig.pyPanel = {
-	history: [],
-	historyIdx: -1,
+	get history() { return FontRig.PythonPanel._history; },
+	get historyIdx() { return FontRig.PythonPanel._historyIdx; },
+	set historyIdx(v) { FontRig.PythonPanel._historyIdx = v; },
 
-	// -- Initialize Pyodide (triggered by user) -------------------------
-	init: async function() {
-		const btn = document.getElementById('py-init-btn');
-		const output = document.getElementById('py-output');
-		const input = document.getElementById('py-input');
-
-		if (FontRig.pyBridge.ready) return;
-		if (FontRig.pyBridge.loading) return;
-
-		btn.textContent = 'Loading…';
-		btn.disabled = true;
-
-		await FontRig.pyBridge.init(function(msg) {
-			FontRig.pyPanel.appendOutput(msg, 'info');
-		});
-
-		if (FontRig.pyBridge.ready) {
-			btn.style.display = 'none';
-			input.disabled = false;
-			input.placeholder = '>>> Python — Shift+Enter to run';
-			input.focus();
-
-			// Sync current glyph if loaded
-			if (FontRig.state.glyphData) {
-				FontRig.pyBridge.syncToPython();
-				FontRig.pyPanel.appendOutput('glyph synced from viewer.', 'info');
+	init: function() {
+		var SBC = FontRig.SidebarConfig;
+		if (SBC) {
+			var instances = SBC.getInstances('python');
+			if (instances.length > 0) {
+				_init(instances[0]);
 			}
-
-			FontRig.pyPanel.updateStatus('ready');
-		} else {
-			btn.textContent = 'Retry Init';
-			btn.disabled = false;
-			FontRig.pyPanel.updateStatus('error');
 		}
 	},
 
-	// -- Execute code from input ----------------------------------------
 	execute: function() {
-		const input = document.getElementById('py-input');
-		const code = input.value.trim();
-		if (!code) return;
-
-		// Show input in output area
-		FontRig.pyPanel.appendOutput(code, 'input');
-
-		// Save to history
-		this.history.push(code);
-		this.historyIdx = this.history.length;
-
-		// Run
-		const result = FontRig.pyBridge.run(code);
-
-		if (result.output) {
-			FontRig.pyPanel.appendOutput(result.output, 'output');
+		var SBC = FontRig.SidebarConfig;
+		if (SBC) {
+			var instances = SBC.getInstances('python');
+			if (instances.length > 0) {
+				_execute(instances[0]);
+			}
 		}
-
-		if (result.error) {
-			FontRig.pyPanel.appendOutput(result.error, 'error');
-		}
-
-		if (result.glyphChanged) {
-			FontRig.pyPanel.appendOutput('↻ glyph updated in viewer', 'info');
-		}
-
-		// Clear input
-		input.value = '';
-		FontRig.pyPanel.autoResize(input);
 	},
 
-	// -- Output helpers -------------------------------------------------
 	appendOutput: function(text, type) {
-		const output = document.getElementById('py-output');
-		if (!output) return;
-
-		const entry = document.createElement('div');
-		entry.className = 'py-entry py-' + (type || 'output');
-
-		if (type === 'input') {
-			// Format as prompt
-			const lines = text.split('\n');
-			const formatted = lines.map(function(line, i) {
-				return (i === 0 ? '>>> ' : '... ') + line;
-			}).join('\n');
-			entry.textContent = formatted;
-		} else {
-			entry.textContent = text;
+		var SBC = FontRig.SidebarConfig;
+		if (SBC) {
+			SBC.forEachInstance('python', function(inst) {
+				_appendOutput(inst, text, type);
+			});
 		}
-
-		output.appendChild(entry);
-
-		// Auto-scroll to bottom
-		output.scrollTop = output.scrollHeight;
 	},
 
 	clearOutput: function() {
-		const output = document.getElementById('py-output');
-		if (output) output.innerHTML = '';
-	},
-
-	// -- History navigation (up/down arrows) ----------------------------
-	historyUp: function() {
-		if (this.history.length === 0) return;
-		if (this.historyIdx > 0) this.historyIdx--;
-
-		const input = document.getElementById('py-input');
-		input.value = this.history[this.historyIdx] || '';
-		FontRig.pyPanel.autoResize(input);
-	},
-
-	historyDown: function() {
-		if (this.history.length === 0) return;
-		this.historyIdx++;
-
-		const input = document.getElementById('py-input');
-		if (this.historyIdx >= this.history.length) {
-			this.historyIdx = this.history.length;
-			input.value = '';
-		} else {
-			input.value = this.history[this.historyIdx] || '';
+		var SBC = FontRig.SidebarConfig;
+		if (SBC) {
+			SBC.forEachInstance('python', function(inst) {
+				if (inst._outputEl) inst._outputEl.innerHTML = '';
+			});
 		}
-		FontRig.pyPanel.autoResize(input);
 	},
 
-	// -- Status indicator -----------------------------------------------
 	updateStatus: function(status) {
-		const el = document.getElementById('py-status');
-		if (!el) return;
-
-		const labels = {
-			'idle': 'Not loaded',
-			'ready': 'Ready',
-			'error': 'Error',
-		};
-
-		el.textContent = labels[status] || status;
-		el.className = 'py-status py-status--' + status;
+		var SBC = FontRig.SidebarConfig;
+		if (SBC) {
+			SBC.forEachInstance('python', function(inst) {
+				_updateStatus(inst, status);
+			});
+		}
 	},
 
-	// -- Auto-resize input textarea -------------------------------------
 	autoResize: function(textarea) {
-		textarea.style.height = 'auto';
-		const maxH = 160; // max ~8 lines
-		textarea.style.height = Math.min(textarea.scrollHeight, maxH) + 'px';
+		_autoResize(textarea);
 	},
 };
 
-// -- Wire Python panel events -------------------------------------------
-FontRig.wirePythonPanel = function() {
-	const input = document.getElementById('py-input');
-	const initBtn = document.getElementById('py-init-btn');
-	const clearBtn = document.getElementById('py-clear-btn');
-
-	if (!input) return;
-
-	// Shift+Enter to execute, Enter for newline
-	input.addEventListener('keydown', function(e) {
-		if (e.key === 'Enter' && e.shiftKey) {
-			e.preventDefault();
-			FontRig.pyPanel.execute();
-		}
-
-		// Arrow up in empty single-line input → history
-		if (e.key === 'ArrowUp' && !e.shiftKey && input.value.indexOf('\n') === -1) {
-			const pos = input.selectionStart;
-			if (pos === 0) {
-				e.preventDefault();
-				FontRig.pyPanel.historyUp();
-			}
-		}
-
-		// Arrow down in empty single-line input → history
-		if (e.key === 'ArrowDown' && !e.shiftKey && input.value.indexOf('\n') === -1) {
-			const pos = input.selectionStart;
-			if (pos === input.value.length) {
-				e.preventDefault();
-				FontRig.pyPanel.historyDown();
-			}
-		}
-	});
-
-	// Auto-resize on input
-	input.addEventListener('input', function() {
-		FontRig.pyPanel.autoResize(this);
-	});
-
-	// Init button
-	if (initBtn) {
-		initBtn.addEventListener('click', function() {
-			FontRig.pyPanel.init();
-		});
-	}
-
-	// Clear button
-	if (clearBtn) {
-		clearBtn.addEventListener('click', function() {
-			FontRig.pyPanel.clearOutput();
-		});
-	}
-};
+// Legacy wirePythonPanel — no-op, wiring is done in mount()
+FontRig.wirePythonPanel = function() {};

@@ -372,12 +372,28 @@ document.addEventListener('drop', function(e) {
 });
 
 // ===================================================================
+// Helper: detect if user is typing in a panel textarea/input
+// ===================================================================
+FontRig._isTypingInPanel = function(el) {
+	if (!el) return false;
+	var tag = el.tagName;
+	if (tag === 'TEXTAREA' || tag === 'INPUT') {
+		// Check if the element is inside a sidebar panel
+		if (el.closest('.fr-sidebar')) return true;
+		// Also check for specific panel classes
+		if (el.classList.contains('xml-panel__content')) return true;
+		if (el.classList.contains('py-panel__input')) return true;
+	}
+	return false;
+};
+
+// ===================================================================
 // Keyboard — dispatch via bindings.js keyMap
 // ===================================================================
 document.addEventListener('keydown', function(e) {
 	// Backtick: preview mode (hold) - black on white, no decorations
 	// Backtick + Space: toggle persistent preview lock
-	if (e.code === 'Backquote' && e.target !== dom.xmlContent && e.target !== dom.pyInput) {
+	if (e.code === 'Backquote' && !FontRig._isTypingInPanel(e.target)) {
 		if (state.spaceDown) {
 			// Toggle persistent lock
 			state.previewLocked = !state.previewLocked;
@@ -395,7 +411,7 @@ document.addEventListener('keydown', function(e) {
 	}
 
 	// Spacebar: panning mode (hold)
-	if (e.code === 'Space' && e.target !== dom.xmlContent) {
+	if (e.code === 'Space' && !FontRig._isTypingInPanel(e.target)) {
 		if (!state.spaceDown) {
 			state.spaceDown = true;
 			e.preventDefault();
@@ -405,7 +421,7 @@ document.addEventListener('keydown', function(e) {
 	}
 
 	// S key: slide along curves (hold while dragging)
-	if (e.code === 'KeyS' && !e.ctrlKey && !e.metaKey && e.target !== dom.xmlContent) {
+	if (e.code === 'KeyS' && !e.ctrlKey && !e.metaKey && !FontRig._isTypingInPanel(e.target)) {
 		if (!state.sKeyDown) {
 			state.sKeyDown = true;
 			if (state.isDragging && state.selectedNodeIds.size === 1) {
@@ -420,7 +436,7 @@ document.addEventListener('keydown', function(e) {
 	}
 
 	// A key: slide along lines (hold while dragging)
-	if (e.code === 'KeyA' && !e.ctrlKey && !e.metaKey && e.target !== dom.xmlContent) {
+	if (e.code === 'KeyA' && !e.ctrlKey && !e.metaKey && !FontRig._isTypingInPanel(e.target)) {
 		if (!state.aKeyDown) {
 			state.aKeyDown = true;
 			if (state.isDragging && state.selectedNodeIds.size === 1) {
@@ -435,12 +451,11 @@ document.addEventListener('keydown', function(e) {
 	}
 
 	// XML textarea: Ctrl+Enter applies, other typing is free-form
-	if (e.target === dom.xmlContent) {
+	// (XML panel instances handle their own Ctrl+Enter via mount wiring;
+	//  this guard prevents keyboard shortcuts from firing while typing)
+	if (e.target && e.target.classList && e.target.classList.contains('xml-panel__content')) {
 		if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-			e.preventDefault();
-			FontRig.pushUndo();
-			FontRig.xmlApply();
-			return;
+			return; // handled by instance wiring
 		}
 		if (!(e.ctrlKey || e.metaKey)) return;
 	}
@@ -523,40 +538,8 @@ document.addEventListener('keyup', function(e) {
 	});
 })();
 
-// ===================================================================
-// XML panel: Refresh / Apply buttons (no live sync)
-// ===================================================================
-var xmlRefreshBtn = document.getElementById('xml-refresh-btn');
-var xmlApplyBtn = document.getElementById('xml-apply-btn');
-
-if (xmlRefreshBtn) {
-	xmlRefreshBtn.addEventListener('click', function() {
-		FontRig.xmlRefresh();
-	});
-}
-
-if (xmlApplyBtn) {
-	xmlApplyBtn.addEventListener('click', function() {
-		FontRig.pushUndo();
-		FontRig.xmlApply();
-	});
-}
-
-// XML textarea: click to highlight node on canvas (one-way)
-dom.xmlContent.addEventListener('click', function() {
-	var textarea = dom.xmlContent;
-	var pos = textarea.selectionStart;
-	var text = textarea.value.substring(0, pos);
-	var lineIdx = text.split('\n').length - 1;
-	var nodeId = FontRig.xmlLineNodeMap[lineIdx];
-
-	if (nodeId) {
-		state.selectedNodeIds.clear();
-		state.selectedNodeIds.add(nodeId);
-		FontRig.draw();
-		FontRig.updateStatusSelected();
-	}
-});
+// XML panel: Refresh / Apply buttons and textarea click are now
+// wired per-instance inside XmlPanel.mount(). No hardcoded IDs needed.
 
 // ===================================================================
 // Python REPL + Glyph widget

@@ -1,14 +1,11 @@
 // ===================================================================
-// FontRig — Sidebar Initialization
+// FontRig — Sidebar Initialization (Multi-Instance)
 // ===================================================================
 // Registers all sidebar-compatible widgets with SidebarConfig,
 // then creates left and right sidebars using config-driven approach.
-// Maintains bridge functions so the rest of the codebase can keep
-// calling the same API (buildXmlPanel, switchGlyph, etc.).
 //
-// The popup/detachable panel system has been removed in favour of
-// future multi-window workplanes. The BroadcastChannel bridge
-// infrastructure in detachable-panel.js is kept intact for reuse.
+// All widgets support cloning: the same widget type can appear in
+// multiple sidebars. Bridge functions fan out to all instances.
 // ===================================================================
 'use strict';
 
@@ -24,9 +21,8 @@ var SBC = FontRig.SidebarConfig;
 // ===================================================================
 // WIDGET REGISTRATION
 // ===================================================================
-// Register every sidebar-compatible widget. The mount function
-// receives a container element and must build the widget DOM inside
-// it. The update function is called when the tab is switched to.
+// Each widget's mount() returns an instance object. The instance
+// is tracked by SidebarConfig and used for all subsequent operations.
 // ===================================================================
 
 // -- Glyphs Widget --------------------------------------------------
@@ -34,15 +30,12 @@ SBC.registerWidget({
 	id:    'glyphs',
 	label: 'Glyphs',
 	icon:  'select_glyph',
-	mount: function(containerEl) {
-		if (FontRig.GlyphWidgetPanel) {
-			FontRig.GlyphWidgetPanel.mount(containerEl);
-		}
+	mount: function(containerEl, ctx) {
+		return FontRig.GlyphWidgetPanel.mount(containerEl, ctx);
 	},
-	update: function() {
-		// Rebuild if font is loaded but panel was lazily mounted
-		if (FontRig.font && FontRig.GlyphWidgetPanel) {
-			FontRig.GlyphWidgetPanel.updateActive();
+	update: function(inst) {
+		if (inst && FontRig.font) {
+			inst.updateActive();
 		}
 	}
 });
@@ -52,103 +45,39 @@ SBC.registerWidget({
 	id:    'font-info',
 	label: 'Info',
 	icon:  'file',
-	mount: function(containerEl) {
-		if (FontRig.FontInfoPanel) {
-			FontRig.FontInfoPanel.mount(containerEl);
-		}
+	mount: function(containerEl, ctx) {
+		return FontRig.FontInfoPanel.mount(containerEl, ctx);
 	},
-	update: function() {
-		if (FontRig.FontInfoPanel) {
-			FontRig.FontInfoPanel.update();
-		}
+	update: function(inst) {
+		if (inst) inst.update();
 	}
 });
 
 // -- XML Widget -----------------------------------------------------
-// The XML content lives in #xml-tab in index.html. On first mount,
-// child nodes are moved into the sidebar panel. On subsequent mounts
-// (after config toggle), we locate the nodes by ID and re-parent them.
 SBC.registerWidget({
 	id:    'xml',
 	label: 'XML',
 	icon:  'code_tag',
-	mount: function(containerEl) {
-		// Try to find the content by ID first (may already be mounted)
-		var xmlActions = document.getElementById('xml-actions');
-		var xmlContent = document.getElementById('xml-content');
-		var xmlTabInfo = document.getElementById('xml-tab-info');
-
-		if (xmlActions) containerEl.appendChild(xmlActions);
-		if (xmlContent) containerEl.appendChild(xmlContent);
-		if (xmlTabInfo) {
-			xmlTabInfo.className = 'fr-sidebar__statusbar';
-			xmlTabInfo.style.display = '';
-			containerEl.appendChild(xmlTabInfo);
-		}
-
-		// If the source container is now empty, hide it
-		var oldXmlTab = document.getElementById('xml-tab');
-		if (oldXmlTab && oldXmlTab.children.length === 0) {
-			oldXmlTab.style.display = 'none';
-		}
+	mount: function(containerEl, ctx) {
+		return FontRig.XmlPanel.mount(containerEl, ctx);
 	},
-	unmount: function() {
-		// Move content back to the hidden source container so it
-		// survives panel removal and can be re-mounted later
-		var oldXmlTab = document.getElementById('xml-tab');
-		if (!oldXmlTab) return;
-		var xmlActions = document.getElementById('xml-actions');
-		var xmlContent = document.getElementById('xml-content');
-		var xmlTabInfo = document.getElementById('xml-tab-info');
-		if (xmlActions) oldXmlTab.appendChild(xmlActions);
-		if (xmlContent) oldXmlTab.appendChild(xmlContent);
-		if (xmlTabInfo) oldXmlTab.appendChild(xmlTabInfo);
-	},
-	update: function() {
-		if (FontRig.state.showXml) {
-			FontRig.buildXmlPanel();
+	update: function(inst) {
+		if (inst && FontRig.state.showXml) {
+			inst.syncFromData();
 		}
 	}
 });
 
 // -- Python Widget --------------------------------------------------
-// Same pattern as XML: content lives in #python-tab and gets
-// moved into the sidebar panel on mount.
 SBC.registerWidget({
 	id:    'python',
 	label: 'Python',
 	icon:  'action_play',
-	mount: function(containerEl) {
-		var pyOutput = document.getElementById('py-output');
-		var pyInputWrap = document.getElementById('py-input-wrap');
-		var pyTabInfo = document.getElementById('py-tab-info');
-
-		if (pyOutput) containerEl.appendChild(pyOutput);
-		if (pyInputWrap) containerEl.appendChild(pyInputWrap);
-		if (pyTabInfo) {
-			pyTabInfo.className = 'fr-sidebar__statusbar';
-			pyTabInfo.style.display = '';
-			containerEl.appendChild(pyTabInfo);
-		}
-
-		var oldPyTab = document.getElementById('python-tab');
-		if (oldPyTab && oldPyTab.children.length === 0) {
-			oldPyTab.style.display = 'none';
-		}
+	mount: function(containerEl, ctx) {
+		return FontRig.PythonPanel.mount(containerEl, ctx);
 	},
-	unmount: function() {
-		var oldPyTab = document.getElementById('python-tab');
-		if (!oldPyTab) return;
-		var pyOutput = document.getElementById('py-output');
-		var pyInputWrap = document.getElementById('py-input-wrap');
-		var pyTabInfo = document.getElementById('py-tab-info');
-		if (pyOutput) oldPyTab.appendChild(pyOutput);
-		if (pyInputWrap) oldPyTab.appendChild(pyInputWrap);
-		if (pyTabInfo) oldPyTab.appendChild(pyTabInfo);
-	},
-	update: function() {
-		var input = document.getElementById('py-input');
-		if (input) setTimeout(function() { input.focus(); }, 50);
+	update: function(inst) {
+		if (inst) inst.focus();
 	}
 });
 
@@ -156,19 +85,14 @@ SBC.registerWidget({
 // SIDEBAR CREATION
 // ===================================================================
 
-// -- Compute balanced default width (1/4 of main area) ---------------
 var _quarterWidth = Math.round(dom.main.clientWidth * 0.25) || 280;
 
-// -- LEFT SIDEBAR — config-driven -----------------------------------
+// -- LEFT SIDEBAR ---------------------------------------------------
 FontRig._leftSidebar = FontRig.Sidebar.createFromConfig('left-sidebar', {
 	defaultWidth: _quarterWidth,
-	onTabSwitch: function(tabId, prevTabId) {
-		// Widget-specific updates are handled by the framework
-		// via widget.update(), but we can add extra logic here
-	},
 });
 
-// -- RIGHT SIDEBAR — config-driven ----------------------------------
+// -- RIGHT SIDEBAR --------------------------------------------------
 FontRig._rightSidebar = FontRig.Sidebar.createFromConfig('right-sidebar', {
 	defaultWidth: _quarterWidth,
 	onTabSwitch: function(tabId, prevTabId) {
@@ -180,81 +104,77 @@ FontRig._rightSidebar = FontRig.Sidebar.createFromConfig('right-sidebar', {
 });
 
 // ===================================================================
-// BRIDGE FUNCTIONS
-// ===================================================================
-// These functions replace the old ones so that the rest of the
-// codebase can keep calling the same API.
+// BRIDGE FUNCTIONS — fan out to all instances
 // ===================================================================
 
-// -- Override buildXmlPanel ------------------------------------------
-var origBuildXmlPanel = FontRig.buildXmlPanel;
-FontRig.buildXmlPanel = function() {
-	origBuildXmlPanel.apply(this, arguments);
-};
-
-// -- Override buildGlyphPanel to use the unified widget ---------------
+// -- buildGlyphPanel: show left sidebar, rebuild all glyph instances
 var origBuildGlyphPanel = FontRig.buildGlyphPanel;
 FontRig.buildGlyphPanel = function() {
 	FontRig.Sidebar.show(FontRig._leftSidebar);
 	FontRig.Sidebar.switchTab(FontRig._leftSidebar, 'glyphs');
-	if (FontRig.GlyphWidgetPanel) {
-		FontRig.GlyphWidgetPanel.rebuild();
-	}
-	if (FontRig.FontInfoPanel) {
-		FontRig.FontInfoPanel.update();
-	}
+
+	SBC.forEachInstance('glyphs', function(inst) {
+		inst.rebuild();
+	});
+	SBC.forEachInstance('font-info', function(inst) {
+		inst.update();
+	});
 };
 
-// -- Override updateGlyphPanelActive ----------------------------------
+// -- updateGlyphPanelActive: update all glyph instances
 FontRig.updateGlyphPanelActive = function() {
-	if (FontRig.GlyphWidgetPanel) {
-		FontRig.GlyphWidgetPanel.updateActive();
-	}
+	SBC.forEachInstance('glyphs', function(inst) {
+		inst.updateActive();
+	});
 };
 
-// -- Override updateGlyphPanelDirty -----------------------------------
+// -- updateGlyphPanelDirty: update all glyph instances
 FontRig.updateGlyphPanelDirty = function() {
-	if (FontRig.GlyphWidgetPanel) {
-		FontRig.GlyphWidgetPanel.updateDirty();
-	}
+	SBC.forEachInstance('glyphs', function(inst) {
+		inst.updateDirty();
+	});
 };
 
-// -- Override filterGlyphPanel ----------------------------------------
+// -- filterGlyphPanel: filter all glyph instances
 FontRig.filterGlyphPanel = function(query) {
-	if (FontRig.GlyphWidgetPanel) {
-		FontRig.GlyphWidgetPanel.filter(query);
-	}
+	SBC.forEachInstance('glyphs', function(inst) {
+		inst.filter(query);
+	});
 };
 
-// -- Override refreshThumbnail ----------------------------------------
-var origRefreshThumbnail = FontRig.refreshThumbnail;
+// -- refreshThumbnail: refresh across all glyph instances
 FontRig.refreshThumbnail = function(name) {
-	if (FontRig.GlyphWidgetPanel) {
-		FontRig.GlyphWidgetPanel.refreshThumbnail(name);
-	}
+	// Invalidate once globally (shared cache)
+	FontRig.GlyphRenderer.invalidate(name);
+
+	SBC.forEachInstance('glyphs', function(inst) {
+		inst.refreshThumbnail(name);
+	});
 };
 
-// -- Hook switchGlyph ------------------------------------------------
+// -- Hook switchGlyph
 var origSwitchGlyph = FontRig.switchGlyph;
 FontRig.switchGlyph = async function(name) {
 	var result = await origSwitchGlyph.apply(this, arguments);
 	return result;
 };
 
-// -- Hook openFont ---------------------------------------------------
+// -- Hook openFont: rebuild all glyph instances after font load
 var origOpenFont = FontRig.openFont;
 FontRig.openFont = async function() {
 	var result = await origOpenFont.apply(this, arguments);
 
-	// Rebuild glyph panel after font load
-	if (FontRig.GlyphWidgetPanel) {
-		FontRig.GlyphWidgetPanel.rebuild();
-	}
+	SBC.forEachInstance('glyphs', function(inst) {
+		inst.rebuild();
+	});
+	SBC.forEachInstance('font-info', function(inst) {
+		inst.update();
+	});
 
 	return result;
 };
 
-// -- Helper to get font info state -----------------------------------
+// -- Helper to get font info state
 FontRig._getFontInfoState = function() {
 	var fontInfo = null;
 	if (FontRig.font && FontRig.font.info) {
@@ -284,7 +204,7 @@ FontRig._getFontInfoState = function() {
 };
 
 // ===================================================================
-// Update right sidebar toggle to use new framework
+// Toggle helpers
 // ===================================================================
 FontRig._toggleRightSidebar = function() {
 	FontRig.Sidebar.toggle(FontRig._rightSidebar);
@@ -293,19 +213,8 @@ FontRig._toggleRightSidebar = function() {
 	}
 };
 
-// ===================================================================
-// Handle loose .trglyph file loading (hide left sidebar)
-// ===================================================================
 FontRig._hideLeftSidebar = function() {
 	FontRig.Sidebar.hide(FontRig._leftSidebar);
-};
-
-// ===================================================================
-// Hook xmlApply for consistency
-// ===================================================================
-var origXmlApply = FontRig.xmlApply;
-FontRig.xmlApply = function() {
-	origXmlApply.apply(this, arguments);
 };
 
 })();

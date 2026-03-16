@@ -1,18 +1,11 @@
 // ===================================================================
-// FontRig — Unified Glyph Widget Panel
+// FontRig — Unified Glyph Widget Panel (Multi-Instance)
 // ===================================================================
-// Dual-mode (list + grid) glyph browser. Designed to be mounted
-// into any container — sidebar panel, popup, or standalone window.
+// Dual-mode (list + grid) glyph browser. Supports multiple
+// simultaneous instances — each mount() returns an independent
+// instance object with its own DOM, observer, and state.
 //
-// Uses GlyphRenderer for thumbnail rendering and supports:
-//   - List mode (compact rows with thumbnails)
-//   - Grid mode (thumbnail grid)
-//   - Search/filter
-//   - Active glyph highlighting
-//   - Dirty state indicators
-//   - IntersectionObserver lazy loading (both modes)
-//   - Click → switchGlyph, dblclick → addToStrip
-//   - View mode persistence via localStorage
+// Uses GlyphRenderer for thumbnail rendering (shared Path2D cache).
 //
 // Depends on: glyph-renderer.js, sidebar.js (optional)
 // ===================================================================
@@ -22,33 +15,34 @@
 
 if (typeof FontRig === 'undefined') return;
 
-// -- Namespace ------------------------------------------------------
+// -- Namespace (factory, not singleton) -----------------------------
 FontRig.GlyphWidgetPanel = {};
 
-// -- State ----------------------------------------------------------
-FontRig.GlyphWidgetPanel._observer = null;
-FontRig.GlyphWidgetPanel._listEl = null;
-FontRig.GlyphWidgetPanel._searchEl = null;
-FontRig.GlyphWidgetPanel._countEl = null;
-FontRig.GlyphWidgetPanel._containerEl = null;
-FontRig.GlyphWidgetPanel._viewMode = 'list'; // 'list' | 'grid'
-FontRig.GlyphWidgetPanel._listBtnEl = null;
-FontRig.GlyphWidgetPanel._gridBtnEl = null;
-
 // ===================================================================
-// Build the widget DOM and mount into a container
+// Mount: create a new instance into a container
 // ===================================================================
-FontRig.GlyphWidgetPanel.mount = function(containerEl) {
-	if (!containerEl) return;
+// Returns an instance object with all per-instance state and methods.
+// ===================================================================
+FontRig.GlyphWidgetPanel.mount = function(containerEl, ctx) {
+	if (!containerEl) return null;
 
-	var gw = FontRig.GlyphWidgetPanel;
-	gw._containerEl = containerEl;
+	var inst = {
+		_containerEl: containerEl,
+		_listEl: null,
+		_searchEl: null,
+		_countEl: null,
+		_observer: null,
+		_viewMode: 'list',
+		_listBtnEl: null,
+		_gridBtnEl: null,
+	};
+
 	containerEl.innerHTML = '';
 
-	// Restore persisted view mode
+	// Restore persisted view mode (shared preference)
 	try {
 		var saved = localStorage.getItem('fr-glyph-view-mode');
-		if (saved === 'list' || saved === 'grid') gw._viewMode = saved;
+		if (saved === 'list' || saved === 'grid') inst._viewMode = saved;
 	} catch (e) { /* silent */ }
 
 	// -- Header: [search] [count] [list|grid toggle] ----------------
@@ -61,12 +55,12 @@ FontRig.GlyphWidgetPanel.mount = function(containerEl) {
 	search.spellcheck = false;
 	search.autocomplete = 'off';
 	header.appendChild(search);
-	gw._searchEl = search;
+	inst._searchEl = search;
 
 	var count = document.createElement('span');
 	count.className = 'glyph-widget-count';
 	header.appendChild(count);
-	gw._countEl = count;
+	inst._countEl = count;
 
 	var modeGroup = document.createElement('div');
 	modeGroup.className = 'glyph-widget-mode';
@@ -75,40 +69,39 @@ FontRig.GlyphWidgetPanel.mount = function(containerEl) {
 	listBtn.title = 'List view';
 	listBtn.innerHTML = '<span class="tri">align_group_to_group</span>';
 	modeGroup.appendChild(listBtn);
-	gw._listBtnEl = listBtn;
+	inst._listBtnEl = listBtn;
 
 	var gridBtn = document.createElement('button');
 	gridBtn.title = 'Grid view';
 	gridBtn.innerHTML = '<span class="tri">viewport_quad</span>';
 	modeGroup.appendChild(gridBtn);
-	gw._gridBtnEl = gridBtn;
+	inst._gridBtnEl = gridBtn;
 
 	header.appendChild(modeGroup);
 	containerEl.appendChild(header);
 
 	// -- List container ----------------------------------------------
 	var list = document.createElement('div');
-	list.className = 'glyph-widget-list glyph-widget-list--' + gw._viewMode;
+	list.className = 'glyph-widget-list glyph-widget-list--' + inst._viewMode;
 	containerEl.appendChild(list);
-	gw._listEl = list;
+	inst._listEl = list;
 
 	// -- Update mode button states -----------------------------------
-	gw._updateModeButtons();
+	_updateModeButtons(inst);
 
 	// -- Wire events -------------------------------------------------
 	listBtn.addEventListener('click', function() {
-		gw.setViewMode('list');
+		_setViewMode(inst, 'list');
 	});
 
 	gridBtn.addEventListener('click', function() {
-		gw.setViewMode('grid');
+		_setViewMode(inst, 'grid');
 	});
 
 	search.addEventListener('input', function() {
-		gw.filter(this.value);
+		_filter(inst, this.value);
 	});
 
-	// Click on glyph entry → switch glyph
 	list.addEventListener('click', function(e) {
 		var entry = e.target.closest('.gw-entry');
 		if (!entry) return;
@@ -116,7 +109,6 @@ FontRig.GlyphWidgetPanel.mount = function(containerEl) {
 		if (name) FontRig.switchGlyph(name);
 	});
 
-	// Double click → add to strip
 	list.addEventListener('dblclick', function(e) {
 		var entry = e.target.closest('.gw-entry');
 		if (!entry) return;
@@ -125,34 +117,46 @@ FontRig.GlyphWidgetPanel.mount = function(containerEl) {
 		if (typeof FontRig.addGlyphToStrip === 'function') {
 			FontRig.addGlyphToStrip(name);
 		}
-		gw.updateActive();
+		_updateActive(inst);
 	});
+
+	// -- Attach public methods to the instance ----------------------
+	inst.rebuild = function() { _rebuild(inst); };
+	inst.updateActive = function() { _updateActive(inst); };
+	inst.updateDirty = function() { _updateDirty(inst); };
+	inst.filter = function(q) { _filter(inst, q); };
+	inst.refreshThumbnail = function(name) { _refreshThumbnail(inst, name); };
+	inst.setViewMode = function(mode) { _setViewMode(inst, mode); };
+	inst.getListElement = function() { return inst._listEl; };
+
+	return inst;
 };
 
 // ===================================================================
-// Set view mode (list or grid)
+// Internal methods (operate on instance)
 // ===================================================================
-FontRig.GlyphWidgetPanel.setViewMode = function(mode) {
-	var gw = FontRig.GlyphWidgetPanel;
-	if (mode === gw._viewMode) return;
-	gw._viewMode = mode;
 
-	// Persist
+function _updateModeButtons(inst) {
+	if (inst._listBtnEl) inst._listBtnEl.classList.toggle('active', inst._viewMode === 'list');
+	if (inst._gridBtnEl) inst._gridBtnEl.classList.toggle('active', inst._viewMode === 'grid');
+}
+
+function _setViewMode(inst, mode) {
+	if (mode === inst._viewMode) return;
+	inst._viewMode = mode;
+
 	try {
 		localStorage.setItem('fr-glyph-view-mode', mode);
 	} catch (e) { /* silent */ }
 
-	gw._updateModeButtons();
+	_updateModeButtons(inst);
 
-	var list = gw._listEl;
+	var list = inst._listEl;
 	if (!list || !FontRig.font) {
-		// No entries yet — fall back to full rebuild
-		gw.rebuild();
+		_rebuild(inst);
 		return;
 	}
 
-	// Fast path: swap CSS class + resize canvases + sync re-render.
-	// Avoids destroying/recreating DOM and restarting IntersectionObserver.
 	list.className = 'glyph-widget-list glyph-widget-list--' + mode;
 
 	var isGrid = mode === 'grid';
@@ -167,71 +171,45 @@ FontRig.GlyphWidgetPanel.setViewMode = function(mode) {
 		canvases[i].dataset.cssH = thumbH;
 	}
 
-	// Sync re-render all loaded thumbnails from Path2D cache
-	gw._rerenderAll();
-};
+	_rerenderAll(inst);
+}
 
-// ===================================================================
-// Synchronously re-render all loaded thumbnails from the Path2D cache.
-// Called after canvas resize (mode switch). Since it's just
-// ctx.fill(cachedPath2d) per glyph with no disk I/O, even hundreds
-// of entries complete in a few milliseconds.  Entries that were never
-// loaded (no thumbLoaded) are left for IntersectionObserver to handle.
-// ===================================================================
-FontRig.GlyphWidgetPanel._rerenderAll = function() {
-	var gw = FontRig.GlyphWidgetPanel;
-	var list = gw._listEl;
+function _rerenderAll(inst) {
+	var list = inst._listEl;
 	if (!list) return;
 
 	var entries = list.querySelectorAll('.gw-entry');
-
 	for (var i = 0; i < entries.length; i++) {
 		var el = entries[i];
-		// Only re-render entries that were previously loaded
 		if (el.dataset.thumbLoaded !== 'true') continue;
 
 		var name = el.dataset.name;
 		var canvas = el.querySelector('.gw-thumb');
 		if (!name || !canvas) continue;
 
-		// Render from Path2D cache (synchronous, no disk I/O)
 		FontRig.GlyphRenderer.render(canvas, null, { glyphName: name, cacheOnly: true });
 	}
-};
+}
 
-// ===================================================================
-// Update mode toggle button states
-// ===================================================================
-FontRig.GlyphWidgetPanel._updateModeButtons = function() {
-	var gw = FontRig.GlyphWidgetPanel;
-	if (gw._listBtnEl) gw._listBtnEl.classList.toggle('active', gw._viewMode === 'list');
-	if (gw._gridBtnEl) gw._gridBtnEl.classList.toggle('active', gw._viewMode === 'grid');
-};
-
-// ===================================================================
-// Build / rebuild glyph entries from font manifest
-// ===================================================================
-FontRig.GlyphWidgetPanel.rebuild = function() {
-	var gw = FontRig.GlyphWidgetPanel;
-	var list = gw._listEl;
+function _rebuild(inst) {
+	var list = inst._listEl;
 	if (!list) return;
 
-	// Disconnect previous observer
-	if (gw._observer) gw._observer.disconnect();
+	if (inst._observer) inst._observer.disconnect();
 
 	list.innerHTML = '';
-	list.className = 'glyph-widget-list glyph-widget-list--' + gw._viewMode;
+	list.className = 'glyph-widget-list glyph-widget-list--' + inst._viewMode;
 
 	if (!FontRig.font || !FontRig.font.manifest) {
-		if (gw._countEl) gw._countEl.textContent = '';
+		if (inst._countEl) inst._countEl.textContent = '';
 		return;
 	}
 
-	// Clear renderer queue for fresh start (drain in-place to avoid
-	// race with a running _processQueue that references the same array)
-	FontRig.GlyphRenderer._queue.length = 0;
+	// NOTE: We do NOT drain the global render queue here.
+	// Other instances may have pending items. Items for removed
+	// entries will fail gracefully (element gone from DOM).
 
-	var isGrid = gw._viewMode === 'grid';
+	var isGrid = inst._viewMode === 'grid';
 	var thumbW = isGrid ? 48 : 28;
 	var thumbH = isGrid ? 48 : 36;
 
@@ -242,7 +220,6 @@ FontRig.GlyphWidgetPanel.rebuild = function() {
 		div.className = 'gw-entry';
 		div.dataset.name = name;
 
-		// Thumbnail canvas — set CSS size; render() handles DPR scaling
 		var cvs = document.createElement('canvas');
 		cvs.className = 'gw-thumb';
 		cvs.style.width = thumbW + 'px';
@@ -251,13 +228,11 @@ FontRig.GlyphWidgetPanel.rebuild = function() {
 		cvs.dataset.cssH = thumbH;
 		div.appendChild(cvs);
 
-		// Name label
 		var nameSpan = document.createElement('span');
 		nameSpan.className = 'gw-name';
 		nameSpan.textContent = name;
 		div.appendChild(nameSpan);
 
-		// Unicode (list mode only, hidden in grid via CSS)
 		if (entry.unicodes) {
 			var uniSpan = document.createElement('span');
 			uniSpan.className = 'gw-uni';
@@ -265,7 +240,6 @@ FontRig.GlyphWidgetPanel.rebuild = function() {
 			div.appendChild(uniSpan);
 		}
 
-		// Dirty dot
 		var dot = document.createElement('span');
 		dot.className = 'gw-dirty';
 		div.appendChild(dot);
@@ -273,14 +247,11 @@ FontRig.GlyphWidgetPanel.rebuild = function() {
 		list.appendChild(div);
 	}
 
-	// Clear search
-	if (gw._searchEl) gw._searchEl.value = '';
-
-	// Show count
-	if (gw._countEl) gw._countEl.textContent = FontRig.font.manifest.length;
+	if (inst._searchEl) inst._searchEl.value = '';
+	if (inst._countEl) inst._countEl.textContent = FontRig.font.manifest.length;
 
 	// Setup IntersectionObserver for lazy thumbnail loading
-	gw._observer = new IntersectionObserver(function(entries) {
+	inst._observer = new IntersectionObserver(function(entries) {
 		for (var i = 0; i < entries.length; i++) {
 			if (!entries[i].isIntersecting) continue;
 			var el = entries[i].target;
@@ -300,20 +271,15 @@ FontRig.GlyphWidgetPanel.rebuild = function() {
 
 	var allEntries = list.querySelectorAll('.gw-entry');
 	for (var i = 0; i < allEntries.length; i++) {
-		gw._observer.observe(allEntries[i]);
+		inst._observer.observe(allEntries[i]);
 	}
 
-	// Update active/dirty state
-	gw.updateActive();
-	gw.updateDirty();
-};
+	_updateActive(inst);
+	_updateDirty(inst);
+}
 
-// ===================================================================
-// Update active glyph highlighting
-// ===================================================================
-FontRig.GlyphWidgetPanel.updateActive = function() {
-	var gw = FontRig.GlyphWidgetPanel;
-	var list = gw._listEl;
+function _updateActive(inst) {
+	var list = inst._listEl;
 	if (!list) return;
 
 	var stripSet = FontRig.workspace ? new Set(FontRig.workspace.glyphs) : new Set();
@@ -326,17 +292,12 @@ FontRig.GlyphWidgetPanel.updateActive = function() {
 			FontRig.state.glyphViewMode && stripSet.has(name));
 	}
 
-	// Scroll active entry into view
 	var active = list.querySelector('.gw-entry.active');
 	if (active) active.scrollIntoView({ block: 'nearest' });
-};
+}
 
-// ===================================================================
-// Update dirty dots
-// ===================================================================
-FontRig.GlyphWidgetPanel.updateDirty = function() {
-	var gw = FontRig.GlyphWidgetPanel;
-	var list = gw._listEl;
+function _updateDirty(inst) {
+	var list = inst._listEl;
 	if (!list) return;
 
 	var entries = list.querySelectorAll('.gw-entry');
@@ -344,14 +305,10 @@ FontRig.GlyphWidgetPanel.updateDirty = function() {
 		entries[i].classList.toggle('dirty',
 			FontRig.dirtyGlyphs.has(entries[i].dataset.name));
 	}
-};
+}
 
-// ===================================================================
-// Filter by search query
-// ===================================================================
-FontRig.GlyphWidgetPanel.filter = function(query) {
-	var gw = FontRig.GlyphWidgetPanel;
-	var list = gw._listEl;
+function _filter(inst, query) {
+	var list = inst._listEl;
 	if (!list) return;
 
 	var q = query.toLowerCase();
@@ -365,18 +322,14 @@ FontRig.GlyphWidgetPanel.filter = function(query) {
 		if (visible) visibleCount++;
 	}
 
-	if (gw._countEl) {
+	if (inst._countEl) {
 		var total = FontRig.font ? FontRig.font.manifest.length : 0;
-		gw._countEl.textContent = q ? visibleCount + '/' + total : total;
+		inst._countEl.textContent = q ? visibleCount + '/' + total : total;
 	}
-};
+}
 
-// ===================================================================
-// Refresh a single thumbnail after editing
-// ===================================================================
-FontRig.GlyphWidgetPanel.refreshThumbnail = function(name) {
-	var gw = FontRig.GlyphWidgetPanel;
-	var list = gw._listEl;
+function _refreshThumbnail(inst, name) {
+	var list = inst._listEl;
 	if (!list) return;
 
 	var entry = list.querySelector('.gw-entry[data-name="' + name + '"]');
@@ -385,21 +338,14 @@ FontRig.GlyphWidgetPanel.refreshThumbnail = function(name) {
 	var canvas = entry.querySelector('.gw-thumb');
 	if (!canvas) return;
 
-	var cacheEntry = FontRig.glyphCache.get(name);
+	var cacheEntry = FontRig.glyphCache ? FontRig.glyphCache.get(name) : null;
 	if (!cacheEntry) return;
 
-	// Invalidate path cache and re-render
-	FontRig.GlyphRenderer.invalidate(name);
+	// Path cache invalidation is done by the bridge function
+	// (FontRig.refreshThumbnail) before calling each instance.
 	entry.dataset.thumbLoaded = '';
 	FontRig.GlyphRenderer.render(canvas, cacheEntry.glyphData, { glyphName: name });
 	entry.dataset.thumbLoaded = 'true';
-};
-
-// ===================================================================
-// Get the list element (for external queries like dialog scope)
-// ===================================================================
-FontRig.GlyphWidgetPanel.getListElement = function() {
-	return FontRig.GlyphWidgetPanel._listEl;
-};
+}
 
 })();

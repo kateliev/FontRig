@@ -1,9 +1,9 @@
 // ===================================================================
-// FontRig — Font Info Panel
+// FontRig — Font Info Panel (Multi-Instance)
 // ===================================================================
-// Builds and updates the Font Info tab content for the left sidebar.
-// Displays font metadata: family, style, version, metrics, masters.
-// Read-only for now; structured for future editability.
+// Builds and updates the Font Info tab content. Supports multiple
+// simultaneous instances — each mount() returns an independent
+// instance object. Read-only display of font metadata.
 // ===================================================================
 'use strict';
 
@@ -13,27 +13,33 @@ if (typeof FontRig === 'undefined') return;
 
 FontRig.FontInfoPanel = {};
 
-// -- Container reference --------------------------------------------
-FontRig.FontInfoPanel._containerEl = null;
+// ===================================================================
+// Mount into a container element — returns instance
+// ===================================================================
+FontRig.FontInfoPanel.mount = function(containerEl, ctx) {
+	if (!containerEl) return null;
 
-// ===================================================================
-// Mount into a container element
-// ===================================================================
-FontRig.FontInfoPanel.mount = function(containerEl) {
-	if (!containerEl) return;
-	FontRig.FontInfoPanel._containerEl = containerEl;
+	var inst = {
+		_containerEl: containerEl,
+	};
+
 	containerEl.innerHTML = '';
 
 	var wrapper = document.createElement('div');
 	wrapper.className = 'font-info-panel';
 	containerEl.appendChild(wrapper);
+
+	// Attach public methods
+	inst.update = function() { _update(inst); };
+
+	return inst;
 };
 
 // ===================================================================
-// Rebuild / update content from current font data
+// Internal: rebuild / update content from current font data
 // ===================================================================
-FontRig.FontInfoPanel.update = function() {
-	var container = FontRig.FontInfoPanel._containerEl;
+function _update(inst) {
+	var container = inst._containerEl;
 	if (!container) return;
 
 	var wrapper = container.querySelector('.font-info-panel');
@@ -54,80 +60,73 @@ FontRig.FontInfoPanel.update = function() {
 	var metrics = FontRig.font.metrics || {};
 	var masters = FontRig.font.masters || [];
 
-	// -- Title -------------------------------------------------------
+	// -- Title
 	var title = document.createElement('div');
 	title.className = 'font-info-title';
 	title.textContent = info.family || info.familyName || 'Untitled';
 	wrapper.appendChild(title);
 
-	// -- Basic info section ------------------------------------------
-	var basicSection = FontRig.FontInfoPanel._createSection('Identification');
-	FontRig.FontInfoPanel._addRow(basicSection, 'Family', info.family || info.familyName || '—');
-	FontRig.FontInfoPanel._addRow(basicSection, 'Style', info.style || info.styleName || '—');
-	FontRig.FontInfoPanel._addRow(basicSection, 'Version', info.version || '—');
+	// -- Basic info section
+	var basicSection = _createSection('Identification');
+	_addRow(basicSection, 'Family', info.family || info.familyName || '\u2014');
+	_addRow(basicSection, 'Style', info.style || info.styleName || '\u2014');
+	_addRow(basicSection, 'Version', info.version || '\u2014');
 	wrapper.appendChild(basicSection);
 
-	// -- Metrics section ---------------------------------------------
-	var metricsSection = FontRig.FontInfoPanel._createSection('Metrics');
-	FontRig.FontInfoPanel._addRow(metricsSection, 'UPM', metrics.upm || '—');
-	FontRig.FontInfoPanel._addRow(metricsSection, 'Ascender', metrics.ascender || '—');
-	FontRig.FontInfoPanel._addRow(metricsSection, 'Descender', metrics.descender || '—');
-	FontRig.FontInfoPanel._addRow(metricsSection, 'x-Height', metrics.xHeight || '—');
-	FontRig.FontInfoPanel._addRow(metricsSection, 'Cap Height', metrics.capHeight || '—');
+	// -- Metrics section
+	var metricsSection = _createSection('Metrics');
+	_addRow(metricsSection, 'UPM', metrics.upm || '\u2014');
+	_addRow(metricsSection, 'Ascender', metrics.ascender || '\u2014');
+	_addRow(metricsSection, 'Descender', metrics.descender || '\u2014');
+	_addRow(metricsSection, 'x-Height', metrics.xHeight || '\u2014');
+	_addRow(metricsSection, 'Cap Height', metrics.capHeight || '\u2014');
 	wrapper.appendChild(metricsSection);
 
-	// -- Masters section (if any) ------------------------------------
+	// -- Masters section
 	if (masters.length > 0) {
-		var mastersSection = FontRig.FontInfoPanel._createSection('Masters');
-
+		var mastersSection = _createSection('Masters');
 		for (var i = 0; i < masters.length; i++) {
 			var m = masters[i];
 			var label = m.name || m.layerName || 'Master ' + (i + 1);
 			var value = m.layerName || '';
 			if (m.isDefault) value += ' (default)';
-			FontRig.FontInfoPanel._addRow(mastersSection, label, value);
+			_addRow(mastersSection, label, value);
 		}
-
 		wrapper.appendChild(mastersSection);
 	}
 
-	// -- Glyph count -------------------------------------------------
-	var glyphSection = FontRig.FontInfoPanel._createSection('Content');
-	FontRig.FontInfoPanel._addRow(glyphSection, 'Glyphs',
+	// -- Glyph count
+	var glyphSection = _createSection('Content');
+	_addRow(glyphSection, 'Glyphs',
 		FontRig.font.manifest ? FontRig.font.manifest.length : 0);
 	wrapper.appendChild(glyphSection);
-};
+}
 
 // ===================================================================
-// Helpers
+// Helpers (stateless)
 // ===================================================================
-FontRig.FontInfoPanel._createSection = function(label) {
+function _createSection(label) {
 	var section = document.createElement('div');
 	section.className = 'font-info-section';
-
 	var lbl = document.createElement('div');
 	lbl.className = 'font-info-section-label';
 	lbl.textContent = label;
 	section.appendChild(lbl);
-
 	return section;
-};
+}
 
-FontRig.FontInfoPanel._addRow = function(section, label, value) {
+function _addRow(section, label, value) {
 	var row = document.createElement('div');
 	row.className = 'font-info-row';
-
 	var lblSpan = document.createElement('span');
 	lblSpan.className = 'label';
 	lblSpan.textContent = label;
 	row.appendChild(lblSpan);
-
 	var valSpan = document.createElement('span');
 	valSpan.className = 'value';
 	valSpan.textContent = value;
 	row.appendChild(valSpan);
-
 	section.appendChild(row);
-};
+}
 
 })();

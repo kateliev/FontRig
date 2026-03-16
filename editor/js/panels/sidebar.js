@@ -90,14 +90,17 @@ FontRig.Sidebar.createFromConfig = function(sidebarId, options) {
 	// Store config reference
 	sidebar._config = config;
 
-	// Mount widgets into their panels
+	// Mount widgets into their panels and register instances
+	sidebar._widgetInstances = {};
 	for (var i = 0; i < widgetTabs.length; i++) {
 		var tabDef = widgetTabs[i];
 		var widget = SBC.getWidget(tabDef.id);
 		if (widget && widget.mount) {
 			var panel = FontRig.Sidebar.getPanel(sidebar, tabDef.id);
 			if (panel) {
-				widget.mount(panel);
+				var instance = widget.mount(panel, { sidebarId: sidebar.id }) || {};
+				sidebar._widgetInstances[tabDef.id] = instance;
+				SBC.addInstance(tabDef.id, sidebar.id, instance);
 			}
 		}
 	}
@@ -410,11 +413,12 @@ FontRig.Sidebar.switchTab = function(sidebar, tabId) {
 	// Persist
 	FontRig.Sidebar._savePref(sidebar.id + '-tab', tabId);
 
-	// Widget-specific update callback
+	// Widget-specific update callback (with instance context)
 	if (tabId !== '_config' && FontRig.SidebarConfig) {
 		var widget = FontRig.SidebarConfig.getWidget(tabId);
 		if (widget && widget.update) {
-			widget.update();
+			var inst = sidebar._widgetInstances ? sidebar._widgetInstances[tabId] : null;
+			widget.update(inst);
 		}
 	}
 
@@ -507,13 +511,18 @@ FontRig.Sidebar.applyConfig = function(sidebar, config) {
 		neededTabIds[widgetTabs[i].id] = true;
 	}
 
+	// Ensure instance map exists
+	if (!sidebar._widgetInstances) sidebar._widgetInstances = {};
+
 	// Remove tabs that are no longer active
 	for (var i = sidebar.tabs.length - 1; i >= 0; i--) {
 		var tid = sidebar.tabs[i].id;
 		if (!neededTabIds[tid]) {
-			// Unmount widget
+			// Unmount widget and remove instance
 			var widget = SBC.getWidget(tid);
-			if (widget && widget.unmount) widget.unmount();
+			var oldInst = SBC.removeInstance(tid, sidebar.id);
+			if (widget && widget.unmount && oldInst) widget.unmount(oldInst);
+			delete sidebar._widgetInstances[tid];
 
 			// Remove tab button
 			var btn = sidebar.tabBarEl.querySelector('[data-tab="' + tid + '"]');
@@ -577,10 +586,12 @@ FontRig.Sidebar.applyConfig = function(sidebar, config) {
 		sidebar.contentEl.appendChild(panel);
 		sidebar.panelEls[tabDef.id] = panel;
 
-		// Mount widget
+		// Mount widget and register instance
 		var widget = SBC.getWidget(tabDef.id);
 		if (widget && widget.mount) {
-			widget.mount(content);
+			var instance = widget.mount(content, { sidebarId: sidebar.id }) || {};
+			sidebar._widgetInstances[tabDef.id] = instance;
+			SBC.addInstance(tabDef.id, sidebar.id, instance);
 		}
 	}
 
