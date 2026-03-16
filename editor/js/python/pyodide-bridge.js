@@ -328,28 +328,37 @@ FontRig.pyBridge = {
 				FontRig.state.selectedNodeIds = new Set(pySel);
 			}
 
-			// Update layer selector
+			// Update layer selector (only if DOM element exists — not in workplane popup)
 			var currentLayer = FontRig.state.activeLayer;
-			FontRig.dom.layerSelect.innerHTML = '';
-			for (var i = 0; i < newGlyph.layers.length; i++) {
-				var layer = newGlyph.layers[i];
-				var opt = document.createElement('option');
-				opt.value = layer.name;
-				opt.textContent = layer.name || '(unnamed)';
-				FontRig.dom.layerSelect.appendChild(opt);
+			if (FontRig.dom.layerSelect) {
+				FontRig.dom.layerSelect.innerHTML = '';
+				for (var i = 0; i < newGlyph.layers.length; i++) {
+					var layer = newGlyph.layers[i];
+					var opt = document.createElement('option');
+					opt.value = layer.name;
+					opt.textContent = layer.name || '(unnamed)';
+					FontRig.dom.layerSelect.appendChild(opt);
+				}
+
+				if (newGlyph.layers.find(function(l) { return l.name === currentLayer; })) {
+					FontRig.dom.layerSelect.value = currentLayer;
+				} else if (newGlyph.layers.length > 0) {
+					FontRig.state.activeLayer = newGlyph.layers[0].name;
+					FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
+				}
+			} else {
+				// Still update activeLayer even without the DOM selector
+				if (!newGlyph.layers.find(function(l) { return l.name === currentLayer; })) {
+					if (newGlyph.layers.length > 0) {
+						FontRig.state.activeLayer = newGlyph.layers[0].name;
+					}
+				}
 			}
 
-			if (newGlyph.layers.find(function(l) { return l.name === currentLayer; })) {
-				FontRig.dom.layerSelect.value = currentLayer;
-			} else if (newGlyph.layers.length > 0) {
-				FontRig.state.activeLayer = newGlyph.layers[0].name;
-				FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
-			}
-
-			// Update glyph info
+			// Update glyph info (only if DOM element exists)
 			var infoHtml = '<span>' + (newGlyph.name || '?') + '</span>';
 			if (newGlyph.unicodes) infoHtml += ' U+' + newGlyph.unicodes;
-			FontRig.dom.glyphInfo.innerHTML = infoHtml;
+			if (FontRig.dom.glyphInfo) FontRig.dom.glyphInfo.innerHTML = infoHtml;
 
 			// Refresh XML panel if visible
 			if (FontRig.state.showXml && FontRig.state.activePanel === 'xml') {

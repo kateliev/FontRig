@@ -236,9 +236,99 @@ body {
 	</div>
 </div>
 
-<!-- Load all required scripts (same as index.html) -->
+<!-- ================================================================
+     Workplane Bootstrap: Share main window's FontRig data
+     ================================================================
+     Strategy: The main window passes its FontRig reference via
+     BroadcastChannel using a "bridge" message containing nothing
+     (the popup then accesses the main window via a stored ref).
+
+     Since window.opener may be null in some browsers/configs for
+     popup windows, we use a dual approach:
+       1. Try window.opener.FontRig (works in most cases)
+       2. Fall back to receiving the ref via the main window's
+          popup handle (window.open returns the popup ref, and the
+          main window sets popup._mainFontRig = FontRig)
+       3. If still not available, wait and retry
+
+     The popup loads state.js to create a local FontRig const, then
+     bridges data from the main FontRig before other scripts load.
+     ================================================================ -->
 <script src="../js/geometry/bezier.js"></script>
 <script src="../js/core/state.js"></script>
+<script>
+// -- Bridge: share main window's live data with this window's FontRig --
+// This runs synchronously before any other script loads.
+(function() {
+	'use strict';
+
+	// Locate the main window's FontRig. Try every available path.
+	function findMainFontRig() {
+		// 1. Injected by main window via popup ref
+		if (window._mainFontRig) return window._mainFontRig;
+		// 2. Standard opener access
+		if (window.opener) {
+			try {
+				if (window.opener.FontRig) return window.opener.FontRig;
+			} catch (e) { /* cross-origin block */ }
+		}
+		return null;
+	}
+
+	var main = findMainFontRig();
+
+	if (!main) {
+		// The popup may have loaded before the main window set _mainFontRig.
+		// Flag that we need deferred bridging (the inline script will handle it).
+		console.warn('[Workplane] Main FontRig not available yet — will retry');
+		window._workplaneBridgePending = true;
+		return;
+	}
+
+	window._workplaneBridgeMain(main);
+})();
+
+// Shared bridge function — called either immediately above or deferred
+window._workplaneBridgeMain = function(main) {
+	'use strict';
+	if (FontRig._isWorkplane) return;  // already bridged
+
+	window._mainFontRig = main;
+	FontRig._isWorkplane = true;
+
+	// Share live data references — widgets read these directly
+	FontRig.state       = main.state;
+	FontRig.glyphCache  = main.glyphCache;
+	FontRig.dirtyGlyphs = main.dirtyGlyphs;
+	FontRig.workspace   = main.workspace;
+
+	// font and activeGlyph get reassigned on the main FontRig
+	// (e.g. FontRig.font = {...}). Use getters so the popup
+	// always reads the latest value.
+	Object.defineProperty(FontRig, 'font', {
+		get: function() { return main.font; },
+		set: function(v) { main.font = v; },
+		configurable: true,
+	});
+
+	Object.defineProperty(FontRig, 'activeGlyph', {
+		get: function() { return main.activeGlyph; },
+		set: function(v) { main.activeGlyph = v; },
+		configurable: true,
+	});
+
+	// Share XML line maps
+	FontRig.xmlLineNodeMap = main.xmlLineNodeMap;
+	FontRig.xmlNodeLineMap = main.xmlNodeLineMap;
+
+	// Share scope and layer selection (created by fr-dialogs.js)
+	if (main.layerSelection) FontRig.layerSelection = main.layerSelection;
+	if (main.scope) FontRig.scope = main.scope;
+
+	console.log('[Workplane] Bridged! font:', FontRig.font,
+		'activeGlyph:', FontRig.activeGlyph);
+};
+</script>
 <script src="../js/core/theme.js"></script>
 <script src="../js/data/parser.js"></script>
 <script src="../js/data/serializer.js"></script>
@@ -269,160 +359,138 @@ body {
 <script>
 'use strict';
 
+// ===================================================================
+// Workplane — Client-side logic
+// ===================================================================
+// Runs inside the popup workplane window. Data is shared with the
+// main window via window.opener (the bootstrap script above bridges
+// FontRig.state, FontRig.font, etc. as live references).
+//
+// BroadcastChannel is used only for lightweight refresh notifications
+// from the main window ("font changed", "glyph changed" — go refresh
+// your widgets"). No data payloads are sent — widgets read directly
+// from the shared FontRig object.
+// ===================================================================
+
 console.log('[Workplane] Starting...');
 
-// -- Check for file:// protocol ---------------------------------------
+// -- Check prerequisites -----------------------------------------------
 if (window.location.protocol === 'file:') {
-	console.error('[Workplane] ERROR: Running on file:// protocol');
-	console.error('[Workplane] BroadcastChannel does not work across file:// origins');
-	console.error('[Workplane] Please serve FontRig via HTTP: python -m http.server');
 	document.body.innerHTML = '<div style="padding:40px;font-family:monospace;background:#220;color:#f88;">' +
 		'<h2>Cannot run Workplane from file://</h2>' +
-		'<p>BroadcastChannel does not work across file:// origins.</p>' +
 		'<p>Please serve FontRig via HTTP:</p>' +
-		'<pre>cd /Users/kateliev/Remote/FontRig/editor\npython -m http.server 8000</pre>' +
+		'<pre>python -m http.server 8000</pre>' +
 		'<p>Then open: <a href="http://localhost:8000">http://localhost:8000</a></p>' +
 		'</div>';
 	throw new Error('Workplane requires HTTP server');
 }
 
-// -- Check FontRig loaded ---------------------------------------------
-console.log('[Workplane] FontRig:', typeof FontRig);
-console.log('[Workplane] FontRig.Sidebar:', typeof FontRig?.Sidebar);
-console.log('[Workplane] FontRig.SidebarConfig:', typeof FontRig?.SidebarConfig);
+// -- Deferred bridge retry --------------------------------------------
+// If the bootstrap couldn't bridge (window.opener was null and
+// _mainFontRig wasn't injected yet), the main window is actively
+// retrying injection via its popup reference. Try again here in case
+// it arrived between the bootstrap <script> and this one.
+if (!FontRig._isWorkplane) {
+	var main = window._mainFontRig || null;
+	if (!main && window.opener) {
+		try { main = window.opener.FontRig; } catch (e) {}
+	}
 
-// ===================================================================
-// Workplane — Client-side logic
-// ===================================================================
-// Runs inside the popup workplane window. Communicates with the
-// main FontRig window via BroadcastChannel. Each panel is a
-// configurable sidebar created using the sidebar framework loaded
-// from the main app scripts.
-// ===================================================================
+	if (main) {
+		window._workplaneBridgeMain(main);
+		console.log('[Workplane] Deferred bridge succeeded');
+	} else {
+		// Still not available — the main window's injection timer will
+		// call _workplaneBridgeMain() when it succeeds. For now, show
+		// a "connecting" message and disable panel creation.
+		console.warn('[Workplane] Bridge still pending — main window will inject');
+	}
+}
+
+console.log('[Workplane] FontRig bridged:', !!FontRig._isWorkplane);
+if (FontRig._isWorkplane) {
+	console.log('[Workplane] FontRig.font:', FontRig.font);
+	console.log('[Workplane] FontRig.Sidebar:', typeof FontRig.Sidebar);
+	console.log('[Workplane] FontRig.SidebarConfig:', typeof FontRig.SidebarConfig);
+}
 
 // -- Parse URL params -----------------------------------------------
 var params = new URLSearchParams(window.location.search);
 var workplaneId = params.get('id') || ('wp-' + Date.now());
 var channelName = 'trv-workplane-' + workplaneId;
 
-// -- State ----------------------------------------------------------
-var state = {
-	panels: [],         // array of panel configs
-	nextPanelIdx: 0,    // auto-increment panel id counter
-	fontData: null,     // cached font state from main window
-	isConnected: false,
-};
-
-// -- BroadcastChannel to main window --------------------------------
+// -- BroadcastChannel for refresh notifications ---------------------
 var channel = null;
-console.log('[Workplane] Creating BroadcastChannel:', channelName);
 try {
 	channel = new BroadcastChannel(channelName);
 } catch (e) {
-	console.warn('BroadcastChannel not available:', e);
+	console.warn('[Workplane] BroadcastChannel not available:', e);
 }
 
 function send(msg) {
 	if (channel) {
-		try { channel.postMessage(msg); } catch (e) { console.error('[Workplane] Send error:', e); }
+		try { channel.postMessage(msg); }
+		catch (e) { console.error('[Workplane] Send error:', e); }
 	}
 }
 
-// -- Wait for main window to connect ---------------------------------
-// We don't rely on window.opener. Instead, we wait for the main
-// window to send us initialization data via BroadcastChannel.
-var connectionTimeout = null;
-var isReady = false;
+// ===================================================================
+// Handle refresh notifications from main window
+// ===================================================================
+// Data is already shared via window.opener — these messages just
+// tell us "something changed, refresh your widgets".
+// ===================================================================
+function onRefresh(msg) {
+	if (!msg || !msg.type) return;
+	console.log('[Workplane] Refresh:', msg.type);
 
-function showConnecting() {
-	var el = document.getElementById('disconnected');
-	el.querySelector('.msg').innerHTML = 'Connecting to main window...<br>Please wait.';
-	el.classList.add('visible');
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+
+	if (msg.type === 'fontChanged') {
+		// Font opened/changed — rebuild glyph list and font info
+		SBC.forEachInstance('glyphs', function(inst) {
+			if (inst.rebuild) inst.rebuild();
+		});
+		SBC.forEachInstance('font-info', function(inst) {
+			if (inst.update) inst.update();
+		});
+	}
+
+	if (msg.type === 'glyphChanged') {
+		// Active glyph changed — update highlights and XML
+		SBC.forEachInstance('glyphs', function(inst) {
+			if (inst.updateActive) inst.updateActive();
+		});
+		SBC.forEachInstance('xml', function(inst) {
+			if (inst.syncFromData) inst.syncFromData();
+		});
+	}
+
+	if (msg.type === 'applyLayout') {
+		if (msg.layout) applyLayout(msg.layout);
+	}
 }
 
-function showConnected() {
-	var el = document.getElementById('disconnected');
-	el.classList.remove('visible');
+if (channel) {
+	channel.onmessage = function(e) { onRefresh(e.data); };
+
+	// Tell main window we're alive (for handshake)
+	setTimeout(function() {
+		send({ type: 'workplaneReady', workplaneId: workplaneId });
+	}, 100);
 }
 
+// -- Overlay helpers -------------------------------------------------
 function showDisconnected() {
 	var el = document.getElementById('disconnected');
 	el.querySelector('.msg').innerHTML = 'Main window closed.<br>This workplane will close automatically.';
 	el.classList.add('visible');
 }
 
-// Show connecting initially
-showConnecting();
-
-if (!channel) {
-	showDisconnected();
-	console.error('[Workplane] BroadcastChannel not available');
-} else {
-	// Listen for messages from main window
-	channel.onmessage = function(e) {
-		console.log('[Workplane] onmessage fired:', e.data);
-		var msg = e.data;
-		console.log('[Workplane] Received:', msg.type);
-		
-		if (msg.type === 'init') {
-			// Received initialization data from main window
-			isReady = true;
-			state.fontData = msg.fontData;
-			state.isConnected = true;
-			showConnected();
-			
-			// Notify main window we're ready
-			send({ type: 'workplaneReady', workplaneId: workplaneId });
-		}
-		
-		if (msg.type === 'fontChanged') {
-			// Font was changed in main window
-			state.fontData = msg.fontData;
-			notifyWidgets('fontChanged');
-		}
-		
-		if (msg.type === 'glyphChanged') {
-			// Glyph was changed in main window
-			notifyWidgets('glyphChanged');
-		}
-	};
-	
-	// Tell main window we're here - with a small delay to ensure main window is ready
-	setTimeout(function() {
-		console.log('[Workplane] Sending workplaneConnect after delay');
-		send({ type: 'workplaneConnect', workplaneId: workplaneId });
-	}, 500);
-	
-	// Set timeout - if no init within 5 seconds, show warning
-	connectionTimeout = setTimeout(function() {
-		if (!isReady) {
-			console.warn('[Workplane] No init received from main window within 5s');
-			// Still allow manual panel creation - widgets will work with default state
-			isReady = true;
-			showConnected();
-		}
-	}, 5000);
-}
-
-// -- Notify all widget instances of changes --------------------------
-function notifyWidgets(eventType) {
-	if (!FontRig || !FontRig.SidebarConfig) return;
-	
-	var instances = FontRig.SidebarConfig.instances;
-	for (var sidebarId in instances) {
-		var sidebarInstances = instances[sidebarId];
-		for (var widgetId in sidebarInstances) {
-			var inst = sidebarInstances[widgetId];
-			if (inst && inst.onMainWindowEvent) {
-				inst.onMainWindowEvent(eventType);
-			}
-		}
-	}
-}
-
 // -- Panel management -----------------------------------------------
 var panelCounter = 0;
-var panelHosts = [];   // { id, hostEl, sidebar, config }
+var panelHosts = [];   // { id, hostEl, sidebar, dividerEl }
 
 function addPanel() {
 	panelCounter++;
@@ -445,16 +513,13 @@ function addPanel() {
 	body.insertBefore(divider, addBtn);
 	wireResize(divider, host);
 
-	// We need a mini container inside for the sidebar framework.
-	// The sidebar framework inserts relative to a '#canvas-wrap' child.
-	// We create a dummy one so the sidebar prepends correctly.
+	// Dummy canvas-wrap for sidebar framework's DOM insertion logic
 	var dummyWrap = document.createElement('div');
 	dummyWrap.id = 'canvas-wrap';
 	dummyWrap.style.display = 'none';
 	host.appendChild(dummyWrap);
 
-	// Create a unique sidebar config for this panel.
-	// Start with all widgets available but none active (config tab shows).
+	// Build sidebar config: all widgets available, none active initially
 	var SBC = FontRig.SidebarConfig;
 	var allWidgets = SBC.getAllWidgets();
 	var widgetList = [];
@@ -462,11 +527,8 @@ function addPanel() {
 		widgetList.push({ id: allWidgets[i].id, active: false });
 	}
 
-	var configKey = panelId;
-
-	// Register a temporary default config so getConfig works
-	SBC.defaults[configKey] = {
-		id:           configKey,
+	SBC.defaults[panelId] = {
+		id:           panelId,
 		position:     'left',
 		tabPosition:  'right',
 		defaultWidth: null,
@@ -476,21 +538,16 @@ function addPanel() {
 		defaultTab:   '_config',
 	};
 
-	// Create sidebar using the framework (from main window)
-	var sidebar = FontRig.Sidebar.createFromConfig(configKey, {
+	// Create sidebar (DOM created in this popup's document)
+	var sidebar = FontRig.Sidebar.createFromConfig(panelId, {
 		defaultWidth: '100%',
 		container: host,
 	});
 
 	if (sidebar) {
-		// Force visible (workplane panels are always shown)
 		FontRig.Sidebar.show(sidebar);
-
-		// Make the sidebar fill its host
 		sidebar.el.style.width = '100%';
 		sidebar.el.style.flex = '1';
-
-		// Hide the resize handle (we use panel dividers instead)
 		if (sidebar.handleEl) sidebar.handleEl.style.display = 'none';
 	}
 
@@ -502,10 +559,7 @@ function addPanel() {
 	};
 
 	panelHosts.push(entry);
-
-	// Notify main window
 	send({ type: 'panelAdded', panelId: panelId });
-
 	return entry;
 }
 
@@ -514,7 +568,6 @@ function removePanel(panelId) {
 		if (panelHosts[i].id === panelId) {
 			var entry = panelHosts[i];
 
-			// Unmount widgets and clean up sidebar instances
 			if (entry.sidebar && entry.sidebar._widgetInstances) {
 				var SBC = FontRig.SidebarConfig;
 				for (var wid in entry.sidebar._widgetInstances) {
@@ -522,9 +575,7 @@ function removePanel(panelId) {
 					var inst = SBC.removeInstance(wid, entry.sidebar.id);
 					if (widget && widget.unmount && inst) widget.unmount(inst);
 				}
-				// Remove sidebar from framework registry
 				delete FontRig.Sidebar._instances[entry.sidebar.id];
-				// Remove config default
 				delete SBC.defaults[entry.sidebar.id];
 			}
 
@@ -597,29 +648,24 @@ function getLayout() {
 }
 
 function applyLayout(layout) {
-	// Remove existing panels
 	while (panelHosts.length > 0) {
 		removePanel(panelHosts[0].id);
 	}
 
-	// Create panels from layout
 	for (var i = 0; i < layout.panels.length; i++) {
 		var panelData = layout.panels[i];
 		var entry = addPanel();
 
-		// Apply width
 		if (panelData.width) {
 			entry.hostEl.style.width = panelData.width;
 		}
 
-		// Apply widget config
 		if (panelData.widgets && panelData.widgets.length > 0 && entry.sidebar) {
 			var config = entry.sidebar._config;
 			if (config) {
 				config.widgets = panelData.widgets;
 				FontRig.Sidebar.applyConfig(entry.sidebar, config);
 
-				// Switch to first active widget tab
 				var SBC = FontRig.SidebarConfig;
 				var activeTabs = SBC.buildTabs(config);
 				if (activeTabs.length > 0) {
@@ -672,83 +718,43 @@ function loadLayout() {
 }
 
 // ===================================================================
-// Message handling from main window
-// ===================================================================
-function onMessage(msg) {
-	if (!msg || !msg.type) return;
-
-	// State broadcasts from main window trigger widget updates
-	// Since widgets are mounted via the shared FontRig framework,
-	// forEachInstance already covers workplane instances.
-	// We mainly need to handle explicit commands here.
-
-	if (msg.type === 'fontChanged') {
-		// Font data changed — rebuild all glyph panels
-		var SBC = FontRig.SidebarConfig;
-		if (SBC) {
-			SBC.forEachInstance('glyphs', function(inst) {
-				inst.rebuild();
-			});
-			SBC.forEachInstance('font-info', function(inst) {
-				inst.update();
-			});
-		}
-	}
-
-	if (msg.type === 'glyphChanged') {
-		var SBC = FontRig.SidebarConfig;
-		if (SBC) {
-			SBC.forEachInstance('glyphs', function(inst) {
-				inst.updateActive();
-			});
-			SBC.forEachInstance('xml', function(inst) {
-				inst.syncFromData();
-			});
-		}
-	}
-
-	if (msg.type === 'applyLayout') {
-		if (msg.layout) applyLayout(msg.layout);
-	}
-}
-
-if (channel) {
-	channel.onmessage = function(e) { onMessage(e.data); };
-}
-
-// Also accept postMessage fallback
-window.addEventListener('message', function(e) {
-	if (e.data && e.data.type) onMessage(e.data);
-});
-
-// ===================================================================
 // Wire UI events
 // ===================================================================
-document.getElementById('wp-add-btn').addEventListener('click', function() {
-	addPanel();
-});
-
-document.getElementById('btn-save-layout').addEventListener('click', function() {
-	saveLayout();
-});
-
-document.getElementById('btn-load-layout').addEventListener('click', function() {
-	loadLayout();
-});
+document.getElementById('wp-add-btn').addEventListener('click', addPanel);
+document.getElementById('btn-save-layout').addEventListener('click', saveLayout);
+document.getElementById('btn-load-layout').addEventListener('click', loadLayout);
 
 // ===================================================================
 // Connection monitoring
 // ===================================================================
+// Monitor main window — check both opener and _mainFontRig source
 var checkInterval = setInterval(function() {
-	if (window.opener && window.opener.closed) {
-		document.getElementById('disconnected').classList.add('visible');
+	var mainClosed = false;
+
+	// Check via window.opener if available
+	if (window.opener) {
+		mainClosed = window.opener.closed;
+	}
+
+	// Check if the bridged FontRig's font property throws (window gone)
+	if (!mainClosed && window._mainFontRig) {
+		try {
+			// Access a property — if main window is closed, this throws
+			var _test = window._mainFontRig.state;
+			if (_test === undefined) mainClosed = true;
+		} catch (e) {
+			mainClosed = true;
+		}
+	}
+
+	if (mainClosed) {
+		showDisconnected();
 		clearInterval(checkInterval);
 		setTimeout(function() { window.close(); }, 3000);
 	}
-}, 1000);
+}, 2000);
 
 window.addEventListener('beforeunload', function() {
-	// Clean up all panel sidebar instances from the shared registry
 	for (var i = 0; i < panelHosts.length; i++) {
 		var entry = panelHosts[i];
 		if (entry.sidebar && entry.sidebar._widgetInstances) {
@@ -763,14 +769,11 @@ window.addEventListener('beforeunload', function() {
 	send({ type: 'workplaneClosed', id: workplaneId });
 });
 
-// ===================================================================
-// Ready — notify main window
-// ===================================================================
-send({ type: 'workplaneReady', id: workplaneId });
-
 // Set title
 document.getElementById('wp-title').textContent = 'Workplane ' + workplaneId.replace('wp-', '#');
 document.title = 'FontRig | Workplane ' + workplaneId.replace('wp-', '#');
+
+console.log('[Workplane] Ready. ID:', workplaneId, 'Font:', FontRig.font ? 'loaded' : 'none');
 </script>
 </body>
 </html>

@@ -146,6 +146,7 @@ FontRig.renderLayer = function(layer, opts) {
 // ===================================================================
 FontRig.draw = function() {
 	const { canvas, ctx, canvasWrap } = FontRig.dom;
+	if (!canvas || !ctx || !canvasWrap) return;  // no canvas (workplane popup)
 	const state = FontRig.state;
 	const dpr = window.devicePixelRatio || 1;
 	const w = canvasWrap.clientWidth;

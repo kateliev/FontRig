@@ -2,17 +2,21 @@
 // FontRig — Workplane Manager (Main Window Side)
 // ===================================================================
 // Manages workplane popup windows. Each workplane is an independent
-// window that hosts configurable sidebar panels. Communication
-// happens via BroadcastChannel.
+// window that hosts configurable sidebar panels.
 //
-// The workplane window (panels/workplane.html) accesses the main
-// window's FontRig object via window.opener, so widgets mounted
-// in workplane sidebars use the same shared state (font data,
-// glyph cache, renderer cache) and instance registry.
+// Data sharing: The main window injects its FontRig reference into the
+// popup via the popup window handle. The popup bridges key data
+// properties (state, font, glyphCache, etc.) as live references so
+// widgets see the same data. No serialization needed.
+//
+// BroadcastChannel: Used only for lightweight refresh notifications
+// ("font changed", "glyph changed") so workplane widgets know when
+// to re-read the shared data and update their display.
 //
 // Usage:
-//   FontRig.Workplane.open();       // open a new workplane
-//   FontRig.Workplane.broadcast();  // notify all workplanes
+//   FontRig.Workplane.open();                  // open a new workplane
+//   FontRig.Workplane.notifyFontChanged();     // tell workplanes to refresh
+//   FontRig.Workplane.notifyGlyphChanged();    // tell workplanes to refresh
 // ===================================================================
 'use strict';
 
@@ -30,11 +34,9 @@ var _counter = 0;
 // Open a new workplane window
 // ===================================================================
 FontRig.Workplane.open = function() {
-	// Check for file:// protocol
 	if (window.location.protocol === 'file:') {
 		alert('Cannot open Workplane from file:// protocol.\n\n' +
 			'Please serve FontRig via HTTP:\n' +
-			'cd /Users/kateliev/Remote/FontRig/editor\n' +
 			'python -m http.server 8000\n\n' +
 			'Then open: http://localhost:8000');
 		return null;
@@ -56,22 +58,74 @@ FontRig.Workplane.open = function() {
 	);
 
 	if (!popup) {
-		console.warn('Popup blocked. Allow popups for this site.');
+		console.warn('[WorkplaneManager] Popup blocked. Allow popups for this site.');
 		return null;
 	}
 
-	// Set up BroadcastChannel
+	// Inject the main FontRig reference into the popup.
+	// Since window.opener may be null in some browser/popup configs,
+	// we inject directly via the popup window reference.
+	//
+	// Strategy: try immediately, then retry on an interval until the
+	// popup's document has loaded and accepted the bridge.
+	var bridgeAttempts = 0;
+	var bridgeTimer = setInterval(function() {
+		bridgeAttempts++;
+		try {
+			if (popup.closed) {
+				clearInterval(bridgeTimer);
+				return;
+			}
+
+			// Inject the reference
+			popup._mainFontRig = FontRig;
+
+			// Check if the popup has picked it up (its bootstrap sets _isWorkplane)
+			if (popup.FontRig && popup.FontRig._isWorkplane) {
+				clearInterval(bridgeTimer);
+				console.log('[WorkplaneManager] Bridge confirmed after', bridgeAttempts, 'attempts');
+				return;
+			}
+
+			// If the popup has the bridge function ready, call it
+			if (popup._workplaneBridgeMain && popup.FontRig && !popup.FontRig._isWorkplane) {
+				popup._workplaneBridgeMain(FontRig);
+				clearInterval(bridgeTimer);
+				console.log('[WorkplaneManager] Called popup._workplaneBridgeMain directly');
+				return;
+			}
+		} catch (e) {
+			// Cross-origin or popup not ready yet — keep trying
+		}
+
+		if (bridgeAttempts > 100) {  // 10 seconds
+			clearInterval(bridgeTimer);
+			console.warn('[WorkplaneManager] Gave up bridging after 10s');
+		}
+	}, 100);
+
+	// BroadcastChannel for refresh notifications (no data payloads)
 	var channelName = 'trv-workplane-' + id;
 	var channel = null;
 
-	console.log('[WorkplaneManager] Creating channel:', channelName);
-
 	try {
 		channel = new BroadcastChannel(channelName);
+
 		channel.onmessage = function(e) {
-			console.log('[WorkplaneManager] onmessage received:', e.data);
-			console.log('[WorkplaneManager] Received:', e.data);
-			FontRig.Workplane._onMessage(id, e.data);
+			var msg = e.data;
+			if (!msg || !msg.type) return;
+
+			if (msg.type === 'workplaneReady') {
+				console.log('[WorkplaneManager] Workplane ready:', id);
+			}
+
+			if (msg.type === 'workplaneClosed') {
+				FontRig.Workplane._cleanup(id);
+			}
+
+			if (msg.type === 'panelAdded') {
+				console.log('[WorkplaneManager] Panel added in', id);
+			}
 		};
 	} catch (e) {
 		console.error('[WorkplaneManager] BroadcastChannel error:', e);
@@ -84,12 +138,13 @@ FontRig.Workplane.open = function() {
 	};
 
 	_workplanes[id] = entry;
+	console.log('[WorkplaneManager] Opened workplane:', id);
 
 	return entry;
 };
 
 // ===================================================================
-// Close a workplane
+// Close / cleanup
 // ===================================================================
 FontRig.Workplane.close = function(id) {
 	var entry = _workplanes[id];
@@ -99,16 +154,21 @@ FontRig.Workplane.close = function(id) {
 		entry.window.close();
 	}
 
+	FontRig.Workplane._cleanup(id);
+};
+
+FontRig.Workplane._cleanup = function(id) {
+	var entry = _workplanes[id];
+	if (!entry) return;
+
 	if (entry.channel) {
-		entry.channel.close();
+		try { entry.channel.close(); } catch (e) { /* silent */ }
 	}
 
 	delete _workplanes[id];
+	console.log('[WorkplaneManager] Cleaned up:', id);
 };
 
-// ===================================================================
-// Close all workplanes
-// ===================================================================
 FontRig.Workplane.closeAll = function() {
 	for (var id in _workplanes) {
 		FontRig.Workplane.close(id);
@@ -116,117 +176,43 @@ FontRig.Workplane.closeAll = function() {
 };
 
 // ===================================================================
-// Get all open workplane entries
+// Broadcast a refresh notification to all workplanes
+// ===================================================================
+// These are lightweight signals — no data payload. The workplane
+// reads the shared FontRig object for actual data.
+// ===================================================================
+FontRig.Workplane.broadcast = function(type) {
+	for (var id in _workplanes) {
+		var entry = _workplanes[id];
+		if (entry && entry.channel) {
+			try {
+				entry.channel.postMessage({ type: type });
+			} catch (e) { /* silent — channel may be closed */ }
+		}
+	}
+};
+
+FontRig.Workplane.notifyFontChanged = function() {
+	FontRig.Workplane.broadcast('fontChanged');
+};
+
+FontRig.Workplane.notifyGlyphChanged = function() {
+	FontRig.Workplane.broadcast('glyphChanged');
+};
+
+// ===================================================================
+// Utility
 // ===================================================================
 FontRig.Workplane.getAll = function() {
 	return _workplanes;
 };
 
-// ===================================================================
-// Get count of open workplanes
-// ===================================================================
 FontRig.Workplane.count = function() {
 	var n = 0;
 	for (var id in _workplanes) {
 		if (_workplanes[id].window && !_workplanes[id].window.closed) n++;
 	}
 	return n;
-};
-
-// ===================================================================
-// Send message to a specific workplane
-// ===================================================================
-FontRig.Workplane.send = function(id, type, data) {
-	var entry = _workplanes[id];
-	if (!entry || !entry.channel) return;
-
-	try {
-		entry.channel.postMessage({ type: type, data: data });
-	} catch (e) { /* silent */ }
-};
-
-// ===================================================================
-// Broadcast a message to all open workplanes
-// ===================================================================
-FontRig.Workplane.broadcast = function(type, data) {
-	for (var id in _workplanes) {
-		FontRig.Workplane.send(id, type, data);
-	}
-};
-
-// ===================================================================
-// Notify workplanes of font change
-// ===================================================================
-FontRig.Workplane.notifyFontChanged = function() {
-	var fontData = null;
-	if (FontRig.font && FontRig.font.current) {
-		fontData = {
-			name: FontRig.font.current.name || 'Untitled',
-			unitsPerEm: FontRig.font.current.unitsPerEm || 1000,
-			ascender: FontRig.font.current.ascender || 800,
-			descender: FontRig.font.current.descender || -200,
-		};
-	}
-	FontRig.Workplane.broadcast('fontChanged', fontData);
-};
-
-// ===================================================================
-// Notify workplanes of glyph change
-// ===================================================================
-FontRig.Workplane.notifyGlyphChanged = function() {
-	FontRig.Workplane.broadcast('glyphChanged', null);
-};
-
-// ===================================================================
-// Handle messages from workplanes
-// ===================================================================
-FontRig.Workplane._onMessage = function(workplaneId, msg) {
-	console.log('[WorkplaneManager] _onMessage called:', workplaneId, msg);
-	if (!msg || !msg.type) return;
-
-	if (msg.type === 'workplaneConnect') {
-		// Workplane just opened - send init data
-		console.log('[WorkplaneManager] Received workplaneConnect, looking for:', workplaneId);
-		console.log('[WorkplaneManager] Available workplanes:', Object.keys(_workplanes));
-		var entry = _workplanes[workplaneId];
-		if (entry && entry.channel) {
-			// Gather current font state
-			var fontData = null;
-			if (FontRig.font && FontRig.font.current) {
-				fontData = {
-					name: FontRig.font.current.name || 'Untitled',
-					unitsPerEm: FontRig.font.current.unitsPerEm || 1000,
-					ascender: FontRig.font.current.ascender || 800,
-					descender: FontRig.font.current.descender || -200,
-				};
-			}
-			
-			entry.channel.postMessage({
-				type: 'init',
-				fontData: fontData,
-			});
-			console.log('[Workplane] Sent init to:', workplaneId);
-		}
-	}
-
-	if (msg.type === 'workplaneReady') {
-		// Workplane confirmed it's ready
-		console.log('[Workplane] Ready:', workplaneId);
-	}
-
-	if (msg.type === 'workplaneClosed') {
-		// Clean up
-		var entry = _workplanes[workplaneId];
-		if (entry && entry.channel) {
-			entry.channel.close();
-		}
-		delete _workplanes[workplaneId];
-	}
-
-	if (msg.type === 'panelAdded') {
-		// A panel was added in the workplane — widgets are auto-registered
-		// in the shared SidebarConfig instance registry via window.opener
-	}
 };
 
 // ===================================================================

@@ -160,15 +160,17 @@ function _applyFromInstance(inst) {
 		FontRig.state.glyphData = newGlyph;
 		FontRig.state.rawXml = xmlString;
 
-		// Update layer selector
+		// Update layer selector (only if DOM element exists — not in workplane popup)
 		var currentLayer = FontRig.state.activeLayer;
-		FontRig.dom.layerSelect.innerHTML = '';
-		for (var i = 0; i < newGlyph.layers.length; i++) {
-			var layer = newGlyph.layers[i];
-			var opt = document.createElement('option');
-			opt.value = layer.name;
-			opt.textContent = layer.name || '(unnamed)';
-			FontRig.dom.layerSelect.appendChild(opt);
+		if (FontRig.dom.layerSelect) {
+			FontRig.dom.layerSelect.innerHTML = '';
+			for (var i = 0; i < newGlyph.layers.length; i++) {
+				var layer = newGlyph.layers[i];
+				var opt = document.createElement('option');
+				opt.value = layer.name;
+				opt.textContent = layer.name || '(unnamed)';
+				FontRig.dom.layerSelect.appendChild(opt);
+			}
 		}
 
 		var found = false;
@@ -176,16 +178,16 @@ function _applyFromInstance(inst) {
 			if (newGlyph.layers[i].name === currentLayer) { found = true; break; }
 		}
 		if (found) {
-			FontRig.dom.layerSelect.value = currentLayer;
+			if (FontRig.dom.layerSelect) FontRig.dom.layerSelect.value = currentLayer;
 			FontRig.state.activeLayer = currentLayer;
 		} else if (newGlyph.layers.length > 0) {
 			FontRig.state.activeLayer = newGlyph.layers[0].name;
-			FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
+			if (FontRig.dom.layerSelect) FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 		}
 
 		var infoHtml = '<span>' + (newGlyph.name || '?') + '</span>';
 		if (newGlyph.unicodes) infoHtml += ' U+' + newGlyph.unicodes;
-		FontRig.dom.glyphInfo.innerHTML = infoHtml;
+		if (FontRig.dom.glyphInfo) FontRig.dom.glyphInfo.innerHTML = infoHtml;
 
 		// Sync all XML instances after apply
 		FontRig.buildXmlPanel();

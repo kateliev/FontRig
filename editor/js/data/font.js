@@ -6,17 +6,19 @@
 'use strict';
 
 // -- Font state -----------------------------------------------------
-FontRig.font = null;            // null = loose .trglyph mode
-FontRig.glyphCache = new Map(); // name → { glyphData, undoStack, redoStack, selection, pan, zoom }
-FontRig.dirtyGlyphs = new Set();
-FontRig.activeGlyph = null;     // current glyph name
+// In workplane context these are bridged from the main window via
+// window.opener — skip re-initialization to preserve the live references.
+if (!FontRig._isWorkplane) {
+	FontRig.font = null;            // null = loose .trglyph mode
+	FontRig.glyphCache = new Map(); // name → { glyphData, undoStack, redoStack, selection, pan, zoom }
+	FontRig.dirtyGlyphs = new Set();
+	FontRig.activeGlyph = null;     // current glyph name
+	FontRig.workspace = {
+		glyphs: [],       // ordered glyph names in strip (user-controlled)
+		activeIdx: 0,     // index of active glyph in strip
+	};
+}
 FontRig.CACHE_MAX = 32;         // LRU eviction threshold
-
-// -- Workspace (glyph strip) ----------------------------------------
-FontRig.workspace = {
-	glyphs: [],       // ordered glyph names in strip (user-controlled)
-	activeIdx: 0,     // index of active glyph in strip
-};
 
 // -- Resolve default layer name for thumbnails & strip ---------------
 // Priority: font master default → 'Regular' → first non-mask layer

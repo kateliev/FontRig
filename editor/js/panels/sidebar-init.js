@@ -117,8 +117,10 @@ FontRig._rightSidebar = FontRig.Sidebar.createFromConfig('right-sidebar', {
 // -- buildGlyphPanel: show left sidebar, rebuild all glyph instances
 var origBuildGlyphPanel = FontRig.buildGlyphPanel;
 FontRig.buildGlyphPanel = function() {
-	FontRig.Sidebar.show(FontRig._leftSidebar);
-	FontRig.Sidebar.switchTab(FontRig._leftSidebar, 'glyphs');
+	if (FontRig._leftSidebar) {
+		FontRig.Sidebar.show(FontRig._leftSidebar);
+		FontRig.Sidebar.switchTab(FontRig._leftSidebar, 'glyphs');
+	}
 
 	SBC.forEachInstance('glyphs', function(inst) {
 		inst.rebuild();
@@ -160,37 +162,43 @@ FontRig.refreshThumbnail = function(name) {
 };
 
 // -- Hook switchGlyph: notify workplanes
-var origSwitchGlyph = FontRig.switchGlyph;
-FontRig.switchGlyph = async function(name) {
-	var result = await origSwitchGlyph.apply(this, arguments);
+// Only wrap if the function exists (not in workplane popup context)
+if (FontRig.switchGlyph) {
+	var origSwitchGlyph = FontRig.switchGlyph;
+	FontRig.switchGlyph = async function(name) {
+		var result = await origSwitchGlyph.apply(this, arguments);
 
-	// Notify workplanes of glyph change
-	if (FontRig.Workplane) {
-		FontRig.Workplane.notifyGlyphChanged();
-	}
+		// Notify workplanes of glyph change
+		if (FontRig.Workplane) {
+			FontRig.Workplane.notifyGlyphChanged();
+		}
 
-	return result;
-};
+		return result;
+	};
+}
 
 // -- Hook openFont: rebuild all glyph instances + notify workplanes
-var origOpenFont = FontRig.openFont;
-FontRig.openFont = async function() {
-	var result = await origOpenFont.apply(this, arguments);
+// Only wrap if the function exists (not in workplane popup context)
+if (FontRig.openFont) {
+	var origOpenFont = FontRig.openFont;
+	FontRig.openFont = async function() {
+		var result = await origOpenFont.apply(this, arguments);
 
-	SBC.forEachInstance('glyphs', function(inst) {
-		inst.rebuild();
-	});
-	SBC.forEachInstance('font-info', function(inst) {
-		inst.update();
-	});
+		SBC.forEachInstance('glyphs', function(inst) {
+			inst.rebuild();
+		});
+		SBC.forEachInstance('font-info', function(inst) {
+			inst.update();
+		});
 
-	// Notify workplanes of font change
-	if (FontRig.Workplane) {
-		FontRig.Workplane.notifyFontChanged();
-	}
+		// Notify workplanes of font change
+		if (FontRig.Workplane) {
+			FontRig.Workplane.notifyFontChanged();
+		}
 
-	return result;
-};
+		return result;
+	};
+}
 
 // -- Helper to get font info state
 FontRig._getFontInfoState = function() {
@@ -225,6 +233,7 @@ FontRig._getFontInfoState = function() {
 // Toggle helpers
 // ===================================================================
 FontRig._toggleRightSidebar = function() {
+	if (!FontRig._rightSidebar) return;
 	FontRig.Sidebar.toggle(FontRig._rightSidebar);
 	if (FontRig._rightSidebar.visible && FontRig.state.activePanel === 'xml') {
 		FontRig.buildXmlPanel();
@@ -232,6 +241,7 @@ FontRig._toggleRightSidebar = function() {
 };
 
 FontRig._hideLeftSidebar = function() {
+	if (!FontRig._leftSidebar) return;
 	FontRig.Sidebar.hide(FontRig._leftSidebar);
 };
 

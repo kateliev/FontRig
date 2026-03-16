@@ -17,7 +17,8 @@
 // FontRig.layerSelection.getChecked() to get the list of layer names
 // the user has ticked. The Python bridge syncs this automatically.
 // -------------------------------------------------------------------
-FontRig.layerSelection = {
+// In workplane context, layerSelection is bridged from the main window
+if (!FontRig._isWorkplane) FontRig.layerSelection = {
 	layers: [],          // [{ name: str, type: str, checked: bool }, ...]
 	_onChange: null,      // external listener
 
@@ -120,8 +121,9 @@ FontRig.layerSelection = {
 //   'active'    — only the current active glyph (default)
 //   'window'    — all glyphs in the workspace strip
 //   'selection' — all glyphs selected in the font/glyph panel
+// In workplane context, scope is bridged from the main window
 // -------------------------------------------------------------------
-FontRig.scope = {
+if (!FontRig._isWorkplane) FontRig.scope = {
 	layerMode: 'masters',
 	glyphMode: 'active',
 	_onChange: null,
