@@ -245,4 +245,16 @@ FontRig._hideLeftSidebar = function() {
 	FontRig.Sidebar.hide(FontRig._leftSidebar);
 };
 
+// Listen for close panel events from config panel (for main window sidebars)
+document.addEventListener('workplanePanelClose', function(e) {
+	var panelId = e.detail.panelId;
+	console.log('[SidebarInit] Close panel requested:', panelId);
+	
+	// In main window, hide the sidebar
+	var sidebar = FontRig.Sidebar.get(panelId);
+	if (sidebar) {
+		FontRig.Sidebar.hide(sidebar);
+	}
+});
+
 })();

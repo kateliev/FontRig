@@ -730,6 +730,13 @@ document.getElementById('wp-add-btn').addEventListener('click', addPanel);
 document.getElementById('btn-save-layout').addEventListener('click', saveLayout);
 document.getElementById('btn-load-layout').addEventListener('click', loadLayout);
 
+// Listen for close panel events from config panel
+document.addEventListener('workplanePanelClose', function(e) {
+	var panelId = e.detail.panelId;
+	console.log('[Workplane] Closing panel:', panelId);
+	removePanel(panelId);
+});
+
 // ===================================================================
 // Connection monitoring
 // ===================================================================

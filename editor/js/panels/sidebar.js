@@ -752,6 +752,21 @@ FontRig.Sidebar._buildConfigPanel = function(sidebar) {
 	});
 	actions.appendChild(btnRefresh);
 
+	// Close panel (for workplane popup panels)
+	var btnClose = document.createElement('button');
+	btnClose.className = 'fr-config__btn fr-config__btn--close';
+	btnClose.title = 'Close this panel';
+	btnClose.innerHTML = '<span class="tri">close</span>';
+	btnClose.addEventListener('click', function() {
+		// Emit a custom event that the workplane can listen for
+		var evt = new CustomEvent('workplanePanelClose', {
+			detail: { panelId: sidebar.id },
+			bubbles: true
+		});
+		sidebar.el.dispatchEvent(evt);
+	});
+	actions.appendChild(btnClose);
+
 	configPanel.appendChild(actions);
 };
 

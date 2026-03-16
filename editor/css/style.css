@@ -2340,21 +2340,21 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 28px;
-	height: 26px;
+	width: 36px;
+	height: 36px;
 	padding: 0;
-	background: transparent;
-	border: 1px solid transparent;
-	border-radius: 4px;
-	color: var(--text-dim);
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text-secondary);
 	cursor: pointer;
 	transition: all 0.12s;
 }
 
 .fr-config__btn:hover {
 	background: var(--bg-hover);
-	color: var(--text-secondary);
-	border-color: var(--border);
+	color: var(--text-primary);
+	border-color: var(--accent-dim);
 }
 
 .fr-config__btn:active {
@@ -2364,6 +2364,16 @@ body {
 }
 
 .fr-config__btn .tri {
-	font-size: 14px;
+	font-size: 16px;
 	line-height: 1;
+}
+
+.fr-config__btn--close {
+	margin-left: auto;
+}
+
+.fr-config__btn--close:hover {
+	background: #c44;
+	color: #fff;
+	border-color: #c44;
 }
