@@ -254,9 +254,54 @@ body {
      The popup loads state.js to create a local FontRig const, then
      bridges data from the main FontRig before other scripts load.
      ================================================================ -->
+<!-- Pyodide: Python in WebAssembly (loaded from CDN) -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.27.4/full/pyodide.js"></script>
+
 <script src="../js/geometry/bezier.js"></script>
 <script src="../js/core/state.js"></script>
 <script>
+// -- Bridge function definition FIRST (before it's called) --
+window._workplaneBridgeMain = function(main) {
+	'use strict';
+	if (FontRig._isWorkplane) return;  // already bridged
+
+	window._mainFontRig = main;
+	FontRig._isWorkplane = true;
+
+	// Share live data references — widgets read these directly
+	FontRig.state        = main.state;
+	FontRig.glyphCache   = main.glyphCache;
+	FontRig.dirtyGlyphs  = main.dirtyGlyphs;
+	FontRig.workspace    = main.workspace;
+	FontRig.GlyphRenderer = main.GlyphRenderer;
+
+	// font and activeGlyph get reassigned on the main FontRig
+	// (e.g. FontRig.font = {...}). Use getters so the popup
+	// always reads the latest value.
+	Object.defineProperty(FontRig, 'font', {
+		get: function() { return main.font; },
+		set: function(v) { main.font = v; },
+		configurable: true,
+	});
+
+	Object.defineProperty(FontRig, 'activeGlyph', {
+		get: function() { return main.activeGlyph; },
+		set: function(v) { main.activeGlyph = v; },
+		configurable: true,
+	});
+
+	// Share XML line maps
+	FontRig.xmlLineNodeMap = main.xmlLineNodeMap;
+	FontRig.xmlNodeLineMap = main.xmlNodeLineMap;
+
+	// Share scope and layer selection (created by fr-dialogs.js)
+	if (main.layerSelection) FontRig.layerSelection = main.layerSelection;
+	if (main.scope) FontRig.scope = main.scope;
+
+	console.log('[Workplane] Bridged! font:', FontRig.font,
+		'activeGlyph:', FontRig.activeGlyph);
+};
+
 // -- Bridge: share main window's live data with this window's FontRig --
 // This runs synchronously before any other script loads.
 (function() {
@@ -287,47 +332,6 @@ body {
 
 	window._workplaneBridgeMain(main);
 })();
-
-// Shared bridge function — called either immediately above or deferred
-window._workplaneBridgeMain = function(main) {
-	'use strict';
-	if (FontRig._isWorkplane) return;  // already bridged
-
-	window._mainFontRig = main;
-	FontRig._isWorkplane = true;
-
-	// Share live data references — widgets read these directly
-	FontRig.state       = main.state;
-	FontRig.glyphCache  = main.glyphCache;
-	FontRig.dirtyGlyphs = main.dirtyGlyphs;
-	FontRig.workspace   = main.workspace;
-
-	// font and activeGlyph get reassigned on the main FontRig
-	// (e.g. FontRig.font = {...}). Use getters so the popup
-	// always reads the latest value.
-	Object.defineProperty(FontRig, 'font', {
-		get: function() { return main.font; },
-		set: function(v) { main.font = v; },
-		configurable: true,
-	});
-
-	Object.defineProperty(FontRig, 'activeGlyph', {
-		get: function() { return main.activeGlyph; },
-		set: function(v) { main.activeGlyph = v; },
-		configurable: true,
-	});
-
-	// Share XML line maps
-	FontRig.xmlLineNodeMap = main.xmlLineNodeMap;
-	FontRig.xmlNodeLineMap = main.xmlNodeLineMap;
-
-	// Share scope and layer selection (created by fr-dialogs.js)
-	if (main.layerSelection) FontRig.layerSelection = main.layerSelection;
-	if (main.scope) FontRig.scope = main.scope;
-
-	console.log('[Workplane] Bridged! font:', FontRig.font,
-		'activeGlyph:', FontRig.activeGlyph);
-};
 </script>
 <script src="../js/core/theme.js"></script>
 <script src="../js/data/parser.js"></script>
@@ -340,6 +344,7 @@ window._workplaneBridgeMain = function(main) {
 <script src="../js/drawing/visualization-layers.js"></script>
 <script src="../js/widgets/glyph-widget.js"></script>
 <script src="../js/widgets/multi-view.js"></script>
+<script src="../js/interaction/interaction.js"></script>
 <script src="../js/panels/xml-panel.js"></script>
 <script src="../js/panels/sidebar.js"></script>
 <script src="../js/panels/sidebar-config.js"></script>
@@ -458,9 +463,10 @@ function onRefresh(msg) {
 	}
 
 	if (msg.type === 'glyphChanged') {
-		// Active glyph changed — update highlights and XML
+		// Active glyph changed — update highlights, dirty state, and XML
 		SBC.forEachInstance('glyphs', function(inst) {
 			if (inst.updateActive) inst.updateActive();
+			if (inst.updateDirty) inst.updateDirty();
 		});
 		SBC.forEachInstance('xml', function(inst) {
 			if (inst.syncFromData) inst.syncFromData();
