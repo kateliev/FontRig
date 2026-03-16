@@ -292,9 +292,17 @@ function send(msg) {
 var FontRig = window.opener ? window.opener.FontRig : null;
 var FRWidget = window.opener ? window.opener.FRWidget : null;
 
+console.log('[Workplane] window.opener:', window.opener ? 'exists' : 'null');
+console.log('[Workplane] FontRig:', FontRig ? 'loaded' : 'null');
+console.log('[Workplane] location:', window.location.href);
+console.log('[Workplane] referrer:', document.referrer);
+
 // If opener is gone, we cannot function
 if (!FontRig) {
 	document.getElementById('disconnected').classList.add('visible');
+	console.error('[Workplane] FATAL: Cannot access main window FontRig object');
+	console.error('[Workplane] This usually means window.opener was blocked or cleared.');
+	console.error('[Workplane] Try: 1) Allow popups 2) Disable browser extensions that block opener 3) Check for cross-origin issues');
 }
 
 // -- Panel management -----------------------------------------------
