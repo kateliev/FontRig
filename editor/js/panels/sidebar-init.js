@@ -151,6 +151,13 @@ FontRig.filterGlyphPanel = function(query) {
 	});
 };
 
+// -- updateGlyphPanelMark: update mark tint for a glyph across all instances
+FontRig.updateGlyphPanelMark = function(name) {
+	SBC.forEachInstance('glyphs', function(inst) {
+		inst.updateMark(name);
+	});
+};
+
 // -- refreshThumbnail: refresh across all glyph instances
 FontRig.refreshThumbnail = function(name) {
 	// Invalidate once globally (shared cache)

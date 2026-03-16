@@ -405,6 +405,7 @@ FontRig.buildGlyphPanel = function() {};
 FontRig.refreshThumbnail = function() {};
 FontRig.updateGlyphPanelActive = function() {};
 FontRig.updateGlyphPanelDirty = function() {};
+FontRig.updateGlyphPanelMark = function() {};
 FontRig.filterGlyphPanel = function() {};
 
 // -- Update font info in toolbar ------------------------------------

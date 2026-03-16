@@ -124,6 +124,7 @@ FontRig.GlyphWidgetPanel.mount = function(containerEl, ctx) {
 	inst.rebuild = function() { _rebuild(inst); };
 	inst.updateActive = function() { _updateActive(inst); };
 	inst.updateDirty = function() { _updateDirty(inst); };
+	inst.updateMark = function(name) { _updateMarkTint(inst, name); };
 	inst.filter = function(q) { _filter(inst, q); };
 	inst.refreshThumbnail = function(name) { _refreshThumbnail(inst, name); };
 	inst.setViewMode = function(mode) { _setViewMode(inst, mode); };
@@ -276,12 +277,19 @@ function _rebuild(inst) {
 				canvas: canvas,
 				element: el
 			});
+
+			// Apply mark tint when entry becomes visible
+			_applyMarkTint(el, _getGlyphMark(eName));
 		}
 	}, { root: list, rootMargin: '200px 0px' });
 
 	var allEntries = list.querySelectorAll('.gw-entry');
 	for (var i = 0; i < allEntries.length; i++) {
 		inst._observer.observe(allEntries[i]);
+		// Apply mark tinting for already-cached glyphs
+		var eName = allEntries[i].dataset.name;
+		var mark = _getGlyphMark(eName);
+		if (mark) _applyMarkTint(allEntries[i], mark);
 	}
 
 	_updateActive(inst);
@@ -315,6 +323,46 @@ function _updateDirty(inst) {
 		entries[i].classList.toggle('dirty',
 			FontRig.dirtyGlyphs.has(entries[i].dataset.name));
 	}
+}
+
+// -- Helper: convert hex color to rgba for tinting -------------------
+function _hexToRgba(hex, alpha) {
+	var r = parseInt(hex.slice(1, 3), 16);
+	var g = parseInt(hex.slice(3, 5), 16);
+	var b = parseInt(hex.slice(5, 7), 16);
+	return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+}
+
+// -- Apply mark tint to a single entry element -----------------------
+// Uses a CSS custom property so hover/active states layer on top.
+function _applyMarkTint(el, mark) {
+	if (mark && /^#[0-9A-Fa-f]{6}$/.test(mark)) {
+		el.style.setProperty('--mark-color', _hexToRgba(mark, 0.15));
+		el.classList.add('gw-marked');
+	} else {
+		el.style.removeProperty('--mark-color');
+		el.classList.remove('gw-marked');
+	}
+}
+
+// -- Get mark for a glyph name (from cache) --------------------------
+function _getGlyphMark(name) {
+	var cacheEntry = FontRig.glyphCache ? FontRig.glyphCache.get(name) : null;
+	if (cacheEntry && cacheEntry.glyphData) return cacheEntry.glyphData.mark || '';
+	var state = FontRig.state;
+	if (state.glyphData && state.glyphData.name === name) return state.glyphData.mark || '';
+	return '';
+}
+
+// -- Update mark tint for a single glyph by name --------------------
+function _updateMarkTint(inst, name) {
+	var list = inst._listEl;
+	if (!list) return;
+
+	var entry = list.querySelector('.gw-entry[data-name="' + name + '"]');
+	if (!entry) return;
+
+	_applyMarkTint(entry, _getGlyphMark(name));
 }
 
 function _filter(inst, query) {

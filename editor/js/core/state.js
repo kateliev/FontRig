@@ -85,8 +85,12 @@ FontRig.dom = {
 	glyphWidgets:   document.getElementById('glyph-widgets'),
 	gwName:         document.getElementById('gw-name'),
 	gwUnicode:      document.getElementById('gw-unicode'),
+	gwMark:         document.getElementById('gw-mark'),
+	gwMarkDrop:     document.getElementById('gw-mark-dropdown'),
 	gwLayer:        document.getElementById('gw-layer'),
 	gwLsb:          document.getElementById('gw-lsb'),
 	gwAdvance:      document.getElementById('gw-advance'),
 	gwRsb:          document.getElementById('gw-rsb'),
+	gwStx:          document.getElementById('gw-stx'),
+	gwSty:          document.getElementById('gw-sty'),
 };

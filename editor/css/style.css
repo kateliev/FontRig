@@ -513,6 +513,92 @@ body {
 	margin: 0;
 }
 
+/* -- Mark/Flag color selector field ----------------------------- */
+.glyph-widget .gw-field--mark {
+	cursor: pointer;
+	position: relative;
+	min-width: 42px;
+	flex: 0 0 auto;
+	justify-content: center;
+	gap: 4px;
+}
+
+.glyph-widget .gw-mark-swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+.glyph-widget .gw-mark-swatch--active {
+	border-color: transparent;
+}
+
+/* Mark dropdown */
+.glyph-widget .gw-mark-dropdown {
+	display: none;
+	position: absolute;
+	bottom: calc(100% + 4px);
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--bg-secondary);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 4px;
+	box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+	z-index: 30;
+	width: 130px;
+}
+
+.glyph-widget .gw-mark-dropdown.visible {
+	display: block;
+}
+
+.glyph-widget .gw-mark-option {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 6px;
+	border-radius: 3px;
+	cursor: pointer;
+	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	font-size: 9px;
+	color: var(--text-secondary);
+}
+
+.glyph-widget .gw-mark-option:hover {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}
+
+.glyph-widget .gw-mark-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.glyph-widget .gw-mark-dot--clear {
+	border: 1px solid var(--text-dim);
+	position: relative;
+}
+
+.glyph-widget .gw-mark-dot--clear::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: -1px;
+	right: -1px;
+	height: 1px;
+	background: var(--text-dim);
+	transform: rotate(-45deg);
+}
+
+.glyph-widget .gw-mark-label {
+	white-space: nowrap;
+}
+
 /* -- XML Panel (class-based, multi-instance) ---------------- */
 .xml-panel__content {
 	flex: 1;
@@ -2210,6 +2296,29 @@ body {
 .glyph-widget-list--grid .gw-entry.dirty .gw-dirty {
 	background: var(--accent);
 	opacity: 1;
+}
+
+/* -- Mark color tinting (both list and grid) ------------------------ */
+.gw-entry.gw-marked {
+	background-color: var(--mark-color) !important;
+}
+
+.glyph-widget-list--list .gw-entry.gw-marked:hover {
+	background-color: var(--mark-color) !important;
+	filter: brightness(1.2);
+}
+
+.glyph-widget-list--list .gw-entry.gw-marked.active {
+	background: linear-gradient(var(--mark-color), var(--mark-color)), var(--accent-bg) !important;
+}
+
+.glyph-widget-list--grid .gw-entry.gw-marked:hover {
+	background-color: var(--mark-color) !important;
+	filter: brightness(1.2);
+}
+
+.glyph-widget-list--grid .gw-entry.gw-marked.active {
+	background: linear-gradient(var(--mark-color), var(--mark-color)), var(--accent-bg) !important;
 }
 
 /* ===================================================================

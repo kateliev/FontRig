@@ -31,7 +31,7 @@ FontRig.parseGlyphXML = function(xmlString) {
 		name: glyphEl.getAttribute('name') || '',
 		identifier: glyphEl.getAttribute('identifier') || '',
 		unicodes: glyphEl.getAttribute('unicodes') || '',
-		mark: parseInt(glyphEl.getAttribute('mark') || '0'),
+		mark: glyphEl.getAttribute('mark') || '',
 		selected: glyphEl.getAttribute('selected') === 'True',
 		layers: [],
 	};

@@ -6,6 +6,29 @@
 // ===================================================================
 'use strict';
 
+// -- Mark color palette (mirrors Python MARK_COLORS) ------------------
+FontRig.MARK_COLORS = {
+	'Red':         '#FF3B30',
+	'Orange':      '#FF9500',
+	'Brown':       '#A2845E',
+	'Yellow':      '#FFCC00',
+	'Light Green': '#34C759',
+	'Dark Green':  '#00796B',
+	'Cyan':        '#5AC8FA',
+	'Blue':        '#007AFF',
+	'Purple':      '#AF52DE',
+	'Pink':        '#FF2D55',
+	'Light Gray':  '#AEAEB2',
+	'Dark Gray':   '#636366',
+};
+
+// Ordered list for the dropdown
+FontRig.MARK_COLOR_ORDER = [
+	'Red', 'Orange', 'Brown', 'Yellow',
+	'Light Green', 'Dark Green', 'Cyan', 'Blue',
+	'Purple', 'Pink', 'Light Gray', 'Dark Gray'
+];
+
 // -- Compute widget position and size (centered on glyph middle) ------
 FontRig._getWidgetRect = function(advW, verticalOffset) {
 	var lsbScreen = FontRig.glyphToScreen(0, 0);
@@ -38,6 +61,38 @@ FontRig._getLayerColor = function(layerName, glyphData) {
 	if (idx < 0) idx = 0;
 	var colors = FontRig.getCurrentTheme().layerColors;
 	return colors[idx % colors.length];
+};
+
+// -- Helper: resolve glyph data from name -----------------------------
+FontRig._resolveGlyphData = function(glyphName) {
+	var state = FontRig.state;
+	var cacheEntry = FontRig.glyphCache.get(glyphName);
+	if (cacheEntry) return cacheEntry.glyphData;
+	if (state.glyphData && state.glyphData.name === glyphName) return state.glyphData;
+	return null;
+};
+
+// -- Update mark swatch display ---------------------------------------
+FontRig._updateMarkSwatch = function(mark) {
+	var swatch = FontRig.dom.gwMark;
+	if (!swatch) return;
+	if (mark) {
+		swatch.style.backgroundColor = mark;
+		swatch.classList.add('gw-mark-swatch--active');
+	} else {
+		swatch.style.backgroundColor = '';
+		swatch.classList.remove('gw-mark-swatch--active');
+	}
+};
+
+// -- Update stem fields -----------------------------------------------
+FontRig._updateStemFields = function(layer) {
+	var stxInput = FontRig.dom.gwStx;
+	var styInput = FontRig.dom.gwSty;
+	if (!stxInput || !styInput) return;
+
+	stxInput.value = (layer.stx !== undefined && layer.stx !== null) ? layer.stx : '';
+	styInput.value = (layer.sty !== undefined && layer.sty !== null) ? layer.sty : '';
 };
 
 // -- Glyph Widget HTML Overlay ---------------------------------------
@@ -87,6 +142,13 @@ FontRig.showGlyphWidget = function(name, layer, layerName) {
 	FontRig.dom.gwAdvance.value = advW;
 	FontRig.dom.gwRsb.value = rsbVal;
 
+	// Mark color
+	var glyphData = FontRig._resolveGlyphData(name);
+	FontRig._updateMarkSwatch(glyphData ? glyphData.mark : '');
+
+	// Stem values
+	FontRig._updateStemFields(layer);
+
 	FontRig._widgetSlot = name;
 
 	widget.classList.add('visible');
@@ -104,6 +166,8 @@ FontRig.hideGlyphWidget = function() {
 	if (FontRig.dom.glyphWidgets) {
 		FontRig.dom.glyphWidgets.innerHTML = '';
 	}
+	// Close mark dropdown if open
+	FontRig._closeMarkDropdown();
 };
 
 FontRig._createReadonlyWidget = function(name, layer, layerName, showCloseBtn) {
@@ -336,15 +400,105 @@ FontRig._positionMultiViewWidget = function() {
 	FontRig.dom.gwAdvance.value = advW;
 	FontRig.dom.gwRsb.value = rsbVal;
 
+	// Mark color
+	FontRig._updateMarkSwatch(state.glyphData ? state.glyphData.mark : '');
+
+	// Stem values
+	FontRig._updateStemFields(layer);
+
 	FontRig._widgetSlot = glyphName;
 };
 
+// -- Mark dropdown management -----------------------------------------
+FontRig._markDropdownOpen = false;
+
+FontRig._openMarkDropdown = function() {
+	var dropdown = FontRig.dom.gwMarkDrop;
+	if (!dropdown) return;
+
+	// Build dropdown content if empty
+	if (!dropdown.hasChildNodes()) {
+		FontRig._buildMarkDropdown(dropdown);
+	}
+
+	dropdown.classList.add('visible');
+	FontRig._markDropdownOpen = true;
+};
+
+FontRig._closeMarkDropdown = function() {
+	var dropdown = FontRig.dom.gwMarkDrop;
+	if (dropdown) dropdown.classList.remove('visible');
+	FontRig._markDropdownOpen = false;
+};
+
+FontRig._toggleMarkDropdown = function() {
+	if (FontRig._markDropdownOpen) {
+		FontRig._closeMarkDropdown();
+	} else {
+		FontRig._openMarkDropdown();
+	}
+};
+
+FontRig._buildMarkDropdown = function(dropdown) {
+	dropdown.innerHTML = '';
+
+	// Clear option
+	var clearEl = document.createElement('div');
+	clearEl.className = 'gw-mark-option gw-mark-option--clear';
+	clearEl.innerHTML = '<span class="gw-mark-dot gw-mark-dot--clear"></span><span class="gw-mark-label">None</span>';
+	clearEl.addEventListener('click', function(e) {
+		e.stopPropagation();
+		FontRig._setGlyphMark('');
+	});
+	dropdown.appendChild(clearEl);
+
+	// Color options
+	for (var i = 0; i < FontRig.MARK_COLOR_ORDER.length; i++) {
+		var colorName = FontRig.MARK_COLOR_ORDER[i];
+		var hex = FontRig.MARK_COLORS[colorName];
+
+		var opt = document.createElement('div');
+		opt.className = 'gw-mark-option';
+		opt.dataset.color = hex;
+		opt.innerHTML = '<span class="gw-mark-dot" style="background:' + hex + '"></span><span class="gw-mark-label">' + colorName + '</span>';
+		opt.addEventListener('click', (function(h) {
+			return function(e) {
+				e.stopPropagation();
+				FontRig._setGlyphMark(h);
+			};
+		})(hex));
+		dropdown.appendChild(opt);
+	}
+};
+
+FontRig._setGlyphMark = function(hexColor) {
+	var glyphName = FontRig._widgetSlot;
+	if (!glyphName) return;
+
+	var glyphData = FontRig._resolveGlyphData(glyphName);
+	if (!glyphData) return;
+
+	glyphData.mark = hexColor || '';
+	FontRig.dirtyGlyphs.add(glyphName);
+
+	FontRig._updateMarkSwatch(glyphData.mark);
+	FontRig._closeMarkDropdown();
+
+	// Update glyph panel cell tinting
+	if (typeof FontRig.updateGlyphPanelMark === 'function') {
+		FontRig.updateGlyphPanelMark(glyphName);
+	}
+};
+
+// -- Init: wire all widget events -------------------------------------
 FontRig.initGlyphWidget = function() {
 	var nameInput = FontRig.dom.gwName;
 	var unicodeInput = FontRig.dom.gwUnicode;
 	var lsbInput = FontRig.dom.gwLsb;
 	var advInput = FontRig.dom.gwAdvance;
 	var rsbInput = FontRig.dom.gwRsb;
+	var stxInput = FontRig.dom.gwStx;
+	var styInput = FontRig.dom.gwSty;
 
 	nameInput.addEventListener('change', function() {
 		var oldName = FontRig._widgetSlot;
@@ -391,6 +545,28 @@ FontRig.initGlyphWidget = function() {
 		}
 	});
 
+	// -- Mark color selector ------------------------------------------
+	var markField = FontRig.dom.glyphWidget.querySelector('[data-field="mark"]');
+	if (markField) {
+		markField.addEventListener('click', function(e) {
+			e.stopPropagation();
+			FontRig._toggleMarkDropdown();
+		});
+	}
+
+	// Close dropdown on outside click
+	document.addEventListener('click', function() {
+		FontRig._closeMarkDropdown();
+	});
+
+	// Prevent dropdown clicks from closing
+	if (FontRig.dom.gwMarkDrop) {
+		FontRig.dom.gwMarkDrop.addEventListener('click', function(e) {
+			e.stopPropagation();
+		});
+	}
+
+	// -- Metric inputs ------------------------------------------------
 	function updateWidths() {
 		var glyphName = FontRig._widgetSlot;
 		if (!glyphName) return;
@@ -405,16 +581,7 @@ FontRig.initGlyphWidget = function() {
 		}
 
 		var state = FontRig.state;
-		var glyphData = null;
-
-		// Try cache first (glyph strip mode), then state.glyphData (single mode)
-		var cacheEntry = FontRig.glyphCache.get(glyphName);
-		if (cacheEntry) {
-			glyphData = cacheEntry.glyphData;
-		} else if (state.glyphData && state.glyphData.name === glyphName) {
-			glyphData = state.glyphData;
-		}
-
+		var glyphData = FontRig._resolveGlyphData(glyphName);
 		if (!glyphData) return;
 
 		var layer = FontRig.getLayerByName(glyphData, state.activeLayer);
@@ -449,6 +616,32 @@ FontRig.initGlyphWidget = function() {
 	advInput.addEventListener('change', updateWidths);
 	rsbInput.addEventListener('change', updateWidths);
 
+	// -- Stem inputs --------------------------------------------------
+	function updateStems() {
+		var glyphName = FontRig._widgetSlot;
+		if (!glyphName) return;
+
+		var state = FontRig.state;
+		var glyphData = FontRig._resolveGlyphData(glyphName);
+		if (!glyphData) return;
+
+		var layer = FontRig.getLayerByName(glyphData, state.activeLayer);
+		if (!layer) layer = glyphData.layers[0];
+		if (!layer) return;
+
+		var stxVal = stxInput.value.trim();
+		var styVal = styInput.value.trim();
+
+		layer.stx = stxVal !== '' ? parseFloat(stxVal) : undefined;
+		layer.sty = styVal !== '' ? parseFloat(styVal) : undefined;
+
+		FontRig.dirtyGlyphs.add(glyphName);
+	}
+
+	if (stxInput) stxInput.addEventListener('change', updateStems);
+	if (styInput) styInput.addEventListener('change', updateStems);
+
+	// -- Close button -------------------------------------------------
 	var closeBtn = FontRig.dom.glyphWidget.querySelector('[data-field="close"]');
 	if (closeBtn) {
 		closeBtn.addEventListener('click', function() {

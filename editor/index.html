@@ -167,9 +167,10 @@
 						<span class="tri">select_glyph</span>
 						<input type="text" class="gw-input" id="gw-unicode" spellcheck="false" placeholder="U+0000">
 					</div>
-					<div class="gw-field gw-field--readonly" data-field="layer">
-						<span class="tri">layer_active</span>
-						<span class="gw-value" id="gw-layer"></span>
+					<div class="gw-field gw-field--mark" data-field="mark">
+						<span class="tri">flag</span>
+						<span class="gw-mark-swatch" id="gw-mark"></span>
+						<div class="gw-mark-dropdown" id="gw-mark-dropdown"></div>
 					</div>
 				</div>
 				<div class="gw-row">
@@ -184,6 +185,20 @@
 					<div class="gw-field" data-field="rsb">
 						<span class="tri">metrics_rsb</span>
 						<input type="number" class="gw-input" id="gw-rsb">
+					</div>
+				</div>
+				<div class="gw-row">
+					<div class="gw-field gw-field--readonly" data-field="layer">
+						<span class="tri">layer_active</span>
+						<span class="gw-value" id="gw-layer"></span>
+					</div>
+					<div class="gw-field" data-field="stx">
+						<span class="tri">stem_vertical_alt</span>
+						<input type="number" class="gw-input" id="gw-stx" placeholder="—">
+					</div>
+					<div class="gw-field" data-field="sty">
+						<span class="tri">stem_horizontal_alt</span>
+						<input type="number" class="gw-input" id="gw-sty" placeholder="—">
 					</div>
 				</div>
 			</div>

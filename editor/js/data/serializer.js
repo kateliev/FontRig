@@ -34,7 +34,7 @@ FontRig.glyphToXml = function(glyph) {
 	if (glyph.identifier) xml += ' identifier="' + FontRig.esc(glyph.identifier) + '"';
 	if (glyph.unicodes) xml += ' unicodes="' + FontRig.esc(glyph.unicodes) + '"';
 	if (glyph.selected) xml += ' selected="True"';
-	if (glyph.mark) xml += ' mark="' + glyph.mark + '"';
+	if (glyph.mark) xml += ' mark="' + FontRig.esc(glyph.mark) + '"';
 	xml += '>\n';
 
 	for (var i = 0; i < glyph.layers.length; i++) {
