@@ -384,7 +384,7 @@ body {
 	background: var(--bg-hover);
 	border-radius: 4px;
 	padding: 0 6px;
-	min-width: 70px;
+	min-width: 50px;
 	height: 24px;
 	flex: 1;
 }
@@ -491,7 +491,7 @@ body {
 	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
 	font-size: 10px;
 	color: var(--text-primary);
-	min-width: 40px;
+	min-width: 30px;
 }
 
 .glyph-widget .gw-input:focus {
@@ -517,7 +517,7 @@ body {
 .glyph-widget .gw-field--mark {
 	cursor: pointer;
 	position: relative;
-	min-width: 70px;
+	min-width: 50px;
 	height: 24px;
 	flex: 1;
 	gap: 4px;

@@ -47,7 +47,7 @@ FontRig._getWidgetRect = function(advW, verticalOffset) {
 	var state = FontRig.state;
 
 	// Fixed size: half of advance width
-	var widgetW = 260 * state.zoom;
+	var widgetW = 360 * state.zoom;
 	var minW = 80;
 	widgetW = Math.max(minW, widgetW);
 
@@ -131,7 +131,7 @@ FontRig.showGlyphWidget = function(name, layer, layerName) {
 	widget.style.width = rect.width + 'px';
 
 	// Determine if we should stack vertically (when widget is narrow)
-	var stackFields = rect.width < 220;
+	var stackFields = rect.width < 180;
 
 	if (stackFields) {
 		widget.classList.add('gw-stacked');
