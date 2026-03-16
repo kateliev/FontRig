@@ -1,15 +1,20 @@
 // ===================================================================
 // FontRig — Sidebar Framework
 // ===================================================================
-// Reusable resizable sidebar with vertical tabs. Supports left and
-// right positioning, drag-to-resize, collapse/expand, and
-// localStorage persistence for width and view preferences.
+// Reusable, configurable, resizable sidebar with vertical tabs.
+// Supports left and right positioning, drag-to-resize, collapse/expand,
+// localStorage persistence, and a built-in config tab for toggling
+// which widgets are active.
 //
 // Usage:
 //   FontRig.Sidebar.create({ id, position, ... });
+//   FontRig.Sidebar.createFromConfig(sidebarId);
 //
 // Each sidebar instance manages its own DOM, resize handle, tabs,
-// and state independently.
+// config state, and persistence independently.
+//
+// Designed for future multi-window workplanes: each workplane can
+// host N configurable sidebars, each driven by its own config.
 // ===================================================================
 'use strict';
 
@@ -38,21 +43,89 @@ FontRig.Sidebar._savePref = function(key, value) {
 };
 
 // ===================================================================
+// Sidebar.createFromConfig — Build a sidebar from SidebarConfig
+// ===================================================================
+// Creates a sidebar using the config system. The config tab is
+// automatically prepended.
+//
+// sidebarId  : config key (e.g. 'left-sidebar')
+// options    : override options { container, onResize, onTabSwitch,
+//              onToggle, callbacks }
+// ===================================================================
+FontRig.Sidebar.createFromConfig = function(sidebarId, options) {
+	options = options || {};
+
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) {
+		console.warn('SidebarConfig not loaded');
+		return null;
+	}
+
+	var config = SBC.getConfig(sidebarId);
+	if (!config) {
+		console.warn('No config for sidebar:', sidebarId);
+		return null;
+	}
+
+	// Build tabs from active widgets
+	var widgetTabs = SBC.buildTabs(config);
+
+	var sidebar = FontRig.Sidebar.create({
+		id:           config.id,
+		position:     config.position,
+		tabPosition:  config.tabPosition,
+		defaultWidth: options.defaultWidth || config.defaultWidth,
+		minWidth:     config.minWidth,
+		maxWidth:     config.maxWidth,
+		tabs:         widgetTabs,
+		defaultTab:   config.defaultTab,
+		container:    options.container || null,
+		onResize:     options.onResize || null,
+		onTabSwitch:  options.onTabSwitch || null,
+		onToggle:     options.onToggle || null,
+		configurable: true,
+		callbacks:    options.callbacks || {},
+	});
+
+	// Store config reference
+	sidebar._config = config;
+
+	// Mount widgets into their panels
+	for (var i = 0; i < widgetTabs.length; i++) {
+		var tabDef = widgetTabs[i];
+		var widget = SBC.getWidget(tabDef.id);
+		if (widget && widget.mount) {
+			var panel = FontRig.Sidebar.getPanel(sidebar, tabDef.id);
+			if (panel) {
+				widget.mount(panel);
+			}
+		}
+	}
+
+	// Build the config tab content
+	FontRig.Sidebar._buildConfigPanel(sidebar);
+
+	return sidebar;
+};
+
+// ===================================================================
 // Sidebar.create — Build a sidebar instance
 // ===================================================================
 // Options:
 //   id           : unique string identifier (e.g. 'left-sidebar')
 //   position     : 'left' | 'right'
+//   tabPosition  : 'left' | 'right' (overrides inner-edge default)
 //   defaultWidth : number (px) or string like '40%'
 //   minWidth     : number (px), default 150
 //   maxWidth     : number (px), default 600
-//   tabs         : [{ id, label, icon, detachable }] — ordered tab definitions
+//   tabs         : [{ id, label, icon }] — ordered tab definitions
 //   defaultTab   : tab id to activate on creation
 //   container    : parent DOM element (defaults to #main)
+//   configurable : bool — if true, prepend a config tab
 //   onResize     : function() — called during/after resize
 //   onTabSwitch  : function(tabId, prevTabId) — called on tab change
 //   onToggle     : function(visible) — called on show/hide
-//   onDetach     : function(tabId) — called when tab is detached
+//   callbacks    : { widgetId: { onTabSwitch: fn, ... } } per-widget
 // ===================================================================
 FontRig.Sidebar.create = function(options) {
 	var id = options.id;
@@ -60,26 +133,55 @@ FontRig.Sidebar.create = function(options) {
 		return FontRig.Sidebar._instances[id];
 	}
 
+	// Determine tab bar placement
+	var tabPosition = options.tabPosition || null;
+	if (!tabPosition) {
+		// Default: inner edge
+		tabPosition = (options.position === 'left') ? 'right' : 'left';
+	}
+
 	var sidebar = {
-		id: id,
-		position: options.position || 'left',
+		id:           id,
+		position:     options.position || 'left',
+		tabPosition:  tabPosition,
 		defaultWidth: options.defaultWidth || 220,
-		minWidth: options.minWidth || 150,
-		maxWidth: options.maxWidth || 600,
-		tabs: options.tabs || [],
-		activeTab: null,
-		visible: false,
-		el: null,           // sidebar container element
-		handleEl: null,      // resize handle element
-		tabBarEl: null,      // vertical tab bar
-		contentEl: null,     // content area (holds tab panels)
-		panelEls: {},        // tab id → panel element
-		container: options.container || FontRig.dom.main,
-		onResize: options.onResize || null,
-		onTabSwitch: options.onTabSwitch || null,
-		onToggle: options.onToggle || null,
-		onDetach: options.onDetach || null,
+		minWidth:     options.minWidth || 150,
+		maxWidth:     options.maxWidth || 600,
+		tabs:         [],      // built below
+		activeTab:    null,
+		visible:      false,
+		el:           null,    // sidebar container element
+		handleEl:     null,    // resize handle element
+		tabBarEl:     null,    // vertical tab bar
+		contentEl:    null,    // content area (holds tab panels)
+		panelEls:     {},      // tab id -> panel element
+		container:    options.container || FontRig.dom.main,
+		configurable: !!options.configurable,
+		onResize:     options.onResize || null,
+		onTabSwitch:  options.onTabSwitch || null,
+		onToggle:     options.onToggle || null,
+		callbacks:    options.callbacks || {},
+		_config:      null,    // set by createFromConfig
 	};
+
+	// Build final tab list: config tab first (if configurable), then widget tabs
+	var allTabs = [];
+
+	if (sidebar.configurable) {
+		allTabs.push({
+			id:    '_config',
+			label: 'Config',
+			icon:  'view_list',
+			isConfig: true,
+		});
+	}
+
+	var userTabs = options.tabs || [];
+	for (var i = 0; i < userTabs.length; i++) {
+		allTabs.push(userTabs[i]);
+	}
+
+	sidebar.tabs = allTabs;
 
 	// -- Build DOM --------------------------------------------------
 	FontRig.Sidebar._buildDOM(sidebar);
@@ -95,7 +197,11 @@ FontRig.Sidebar.create = function(options) {
 	if (savedTab && sidebar.panelEls[savedTab]) {
 		FontRig.Sidebar.switchTab(sidebar, savedTab);
 	} else if (sidebar.tabs.length > 0) {
-		FontRig.Sidebar.switchTab(sidebar, sidebar.tabs[0].id);
+		// Skip config tab for initial display if a real tab exists
+		var firstTab = sidebar.tabs.length > 1 && sidebar.configurable
+			? sidebar.tabs[1].id
+			: sidebar.tabs[0].id;
+		FontRig.Sidebar.switchTab(sidebar, options.defaultTab || firstTab);
 	}
 
 	// -- Wire resize ------------------------------------------------
@@ -129,6 +235,7 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 		var tabDef = sidebar.tabs[i];
 		var tabBtn = document.createElement('button');
 		tabBtn.className = 'fr-sidebar__tab';
+		if (tabDef.isConfig) tabBtn.classList.add('fr-sidebar__tab--config');
 		tabBtn.dataset.tab = tabDef.id;
 		tabBtn.title = tabDef.label || tabDef.id;
 
@@ -159,7 +266,7 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 		panel.id = sidebar.id + '-panel-' + tabDef.id;
 		panel.dataset.panel = tabDef.id;
 
-		// Add header with detach button
+		// Add header
 		var header = document.createElement('div');
 		header.className = 'fr-sidebar__panel-header';
 
@@ -167,22 +274,6 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 		title.className = 'fr-sidebar__panel-title';
 		title.textContent = tabDef.label || tabDef.id;
 		header.appendChild(title);
-
-		if (tabDef.detachable !== false) {
-			var detachBtn = document.createElement('button');
-			detachBtn.className = 'fr-sidebar__detach';
-			detachBtn.id = 'btn-detach-' + tabDef.id;
-			detachBtn.title = 'Detach to window';
-			detachBtn.innerHTML = '<span class="tri">arrows_expand</span>';
-			detachBtn.addEventListener('click', function(e) {
-				e.stopPropagation();
-				var tid = this.id.replace('btn-detach-', '');
-				if (sidebar.onDetach) {
-					sidebar.onDetach(tid);
-				}
-			});
-			header.appendChild(detachBtn);
-		}
 
 		panel.appendChild(header);
 
@@ -198,23 +289,18 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 	var handle = document.createElement('div');
 	handle.className = 'fr-sidebar__handle';
 
-	// -- Assemble based on position ----------------------------------
-	// Tabs are placed on the INSIDE edge (closest to the canvas):
-	//   Left sidebar:  [content][tabBar]  (tabs on right/inner edge)
-	//   Right sidebar: [tabBar][content]  (tabs on left/inner edge)
-	if (sidebar.position === 'left') {
-		el.appendChild(contentArea);
+	// -- Assemble based on tab position ------------------------------
+	// tabPosition determines which side the tab bar sits on.
+	if (sidebar.tabPosition === 'left') {
 		el.appendChild(tabBar);
+		el.appendChild(contentArea);
 	} else {
-		el.appendChild(tabBar);
 		el.appendChild(contentArea);
+		el.appendChild(tabBar);
 	}
 
 	// -- Insert into container in correct order ----------------------
-	// The handle is a sibling of the sidebar, placed between
-	// the sidebar and the canvas-wrap.
 	if (sidebar.position === 'left') {
-		// Insert before canvas-wrap
 		var canvasWrap = container.querySelector('#canvas-wrap');
 		if (canvasWrap) {
 			container.insertBefore(el, canvasWrap);
@@ -224,7 +310,6 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 			container.prepend(el);
 		}
 	} else {
-		// Insert after canvas-wrap (handle first, then sidebar)
 		container.appendChild(handle);
 		container.appendChild(el);
 	}
@@ -241,7 +326,7 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 		if (!tabBtn) return;
 		var tabId = tabBtn.dataset.tab;
 
-		// Click on already-active tab → toggle sidebar visibility
+		// Click on already-active tab -> toggle sidebar visibility
 		if (tabId === sidebar.activeTab && sidebar.visible) {
 			FontRig.Sidebar.hide(sidebar);
 		} else {
@@ -276,17 +361,14 @@ FontRig.Sidebar._wireResize = function(sidebar) {
 		var totalWidth;
 
 		if (sidebar.position === 'left') {
-			// Sidebar sits before the handle; mouse is on the handle
 			totalWidth = mouseX - handleW / 2;
 		} else {
-			// Sidebar sits after the handle; mouse is on the handle
 			totalWidth = containerRect.width - mouseX - handleW / 2;
 		}
 
 		totalWidth = Math.max(sidebar.minWidth, Math.min(sidebar.maxWidth, totalWidth));
 		sidebar.el.style.width = totalWidth + 'px';
 
-		// Persist width
 		FontRig.Sidebar._savePref(sidebar.id + '-width', totalWidth);
 
 		if (sidebar.onResize) sidebar.onResize();
@@ -327,6 +409,14 @@ FontRig.Sidebar.switchTab = function(sidebar, tabId) {
 
 	// Persist
 	FontRig.Sidebar._savePref(sidebar.id + '-tab', tabId);
+
+	// Widget-specific update callback
+	if (tabId !== '_config' && FontRig.SidebarConfig) {
+		var widget = FontRig.SidebarConfig.getWidget(tabId);
+		if (widget && widget.update) {
+			widget.update();
+		}
+	}
 
 	// Callback
 	if (sidebar.onTabSwitch) sidebar.onTabSwitch(tabId, prevTab);
@@ -388,6 +478,322 @@ FontRig.Sidebar.getPanelWrapper = function(sidebar, tabId) {
 // ===================================================================
 FontRig.Sidebar.get = function(id) {
 	return FontRig.Sidebar._instances[id] || null;
+};
+
+// ===================================================================
+// Rebuild sidebar from updated config (apply config changes)
+// ===================================================================
+FontRig.Sidebar.applyConfig = function(sidebar, config) {
+	if (!sidebar || !config) return;
+
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+
+	// Save the new config
+	SBC.saveConfig(sidebar.id, config);
+	sidebar._config = config;
+
+	// Get active widget tabs
+	var widgetTabs = SBC.buildTabs(config);
+
+	// Determine which tabs currently exist and which are needed
+	var currentTabIds = {};
+	for (var i = 0; i < sidebar.tabs.length; i++) {
+		currentTabIds[sidebar.tabs[i].id] = true;
+	}
+
+	var neededTabIds = { '_config': true };
+	for (var i = 0; i < widgetTabs.length; i++) {
+		neededTabIds[widgetTabs[i].id] = true;
+	}
+
+	// Remove tabs that are no longer active
+	for (var i = sidebar.tabs.length - 1; i >= 0; i--) {
+		var tid = sidebar.tabs[i].id;
+		if (!neededTabIds[tid]) {
+			// Unmount widget
+			var widget = SBC.getWidget(tid);
+			if (widget && widget.unmount) widget.unmount();
+
+			// Remove tab button
+			var btn = sidebar.tabBarEl.querySelector('[data-tab="' + tid + '"]');
+			if (btn) btn.remove();
+
+			// Remove panel
+			var panel = sidebar.panelEls[tid];
+			if (panel) panel.remove();
+			delete sidebar.panelEls[tid];
+
+			sidebar.tabs.splice(i, 1);
+		}
+	}
+
+	// Add new tabs that don't exist yet
+	for (var i = 0; i < widgetTabs.length; i++) {
+		var tabDef = widgetTabs[i];
+		if (currentTabIds[tabDef.id]) continue;
+
+		// Add to sidebar.tabs
+		sidebar.tabs.push(tabDef);
+
+		// Create tab button
+		var tabBtn = document.createElement('button');
+		tabBtn.className = 'fr-sidebar__tab';
+		tabBtn.dataset.tab = tabDef.id;
+		tabBtn.title = tabDef.label || tabDef.id;
+
+		if (tabDef.icon) {
+			var iconSpan = document.createElement('span');
+			iconSpan.className = 'tri';
+			iconSpan.textContent = tabDef.icon;
+			tabBtn.appendChild(iconSpan);
+		}
+
+		var labelSpan = document.createElement('span');
+		labelSpan.className = 'fr-sidebar__tab-label';
+		labelSpan.textContent = tabDef.label || tabDef.id;
+		tabBtn.appendChild(labelSpan);
+
+		sidebar.tabBarEl.appendChild(tabBtn);
+
+		// Create panel
+		var panel = document.createElement('div');
+		panel.className = 'fr-sidebar__panel';
+		panel.id = sidebar.id + '-panel-' + tabDef.id;
+		panel.dataset.panel = tabDef.id;
+
+		var header = document.createElement('div');
+		header.className = 'fr-sidebar__panel-header';
+		var title = document.createElement('span');
+		title.className = 'fr-sidebar__panel-title';
+		title.textContent = tabDef.label || tabDef.id;
+		header.appendChild(title);
+		panel.appendChild(header);
+
+		var content = document.createElement('div');
+		content.className = 'fr-sidebar__panel-content';
+		panel.appendChild(content);
+
+		sidebar.contentEl.appendChild(panel);
+		sidebar.panelEls[tabDef.id] = panel;
+
+		// Mount widget
+		var widget = SBC.getWidget(tabDef.id);
+		if (widget && widget.mount) {
+			widget.mount(content);
+		}
+	}
+
+	// Switch to first available widget tab if current tab was removed
+	if (!sidebar.panelEls[sidebar.activeTab]) {
+		var firstWidget = widgetTabs.length > 0 ? widgetTabs[0].id : '_config';
+		FontRig.Sidebar.switchTab(sidebar, firstWidget);
+	}
+
+	// Update the config panel checklist
+	FontRig.Sidebar._updateConfigChecklist(sidebar);
+};
+
+// ===================================================================
+// Build the config panel content
+// ===================================================================
+FontRig.Sidebar._buildConfigPanel = function(sidebar) {
+	var configPanel = FontRig.Sidebar.getPanel(sidebar, '_config');
+	if (!configPanel) return;
+
+	configPanel.innerHTML = '';
+	configPanel.className += ' fr-sidebar__config-panel';
+
+	var SBC = FontRig.SidebarConfig;
+	if (!SBC) return;
+
+	var config = sidebar._config || SBC.getConfig(sidebar.id);
+	if (!config) return;
+
+	// -- Widget checklist -------------------------------------------
+	var listWrap = document.createElement('div');
+	listWrap.className = 'fr-config__list';
+
+	var allWidgets = SBC.getAllWidgets();
+
+	for (var i = 0; i < allWidgets.length; i++) {
+		var w = allWidgets[i];
+		var isActive = false;
+
+		// Check if this widget is active in the config
+		for (var j = 0; j < config.widgets.length; j++) {
+			if (config.widgets[j].id === w.id) {
+				isActive = config.widgets[j].active;
+				break;
+			}
+		}
+
+		var row = document.createElement('label');
+		row.className = 'fr-config__item';
+		row.dataset.widgetId = w.id;
+
+		var cb = document.createElement('input');
+		cb.type = 'checkbox';
+		cb.className = 'fr-config__checkbox';
+		cb.checked = isActive;
+		cb.dataset.widgetId = w.id;
+		row.appendChild(cb);
+
+		if (w.icon) {
+			var icon = document.createElement('span');
+			icon.className = 'tri fr-config__icon';
+			icon.textContent = w.icon;
+			row.appendChild(icon);
+		}
+
+		var label = document.createElement('span');
+		label.className = 'fr-config__label';
+		label.textContent = w.label;
+		row.appendChild(label);
+
+		listWrap.appendChild(row);
+	}
+
+	configPanel.appendChild(listWrap);
+
+	// -- Action buttons (bottom bar) --------------------------------
+	var actions = document.createElement('div');
+	actions.className = 'fr-config__actions';
+
+	// Apply selection
+	var btnApply = document.createElement('button');
+	btnApply.className = 'fr-config__btn';
+	btnApply.title = 'Apply selection';
+	btnApply.innerHTML = '<span class="tri">check</span>';
+	btnApply.addEventListener('click', function() {
+		FontRig.Sidebar._applyConfigFromUI(sidebar);
+	});
+	actions.appendChild(btnApply);
+
+	// Select all
+	var btnSelectAll = document.createElement('button');
+	btnSelectAll.className = 'fr-config__btn';
+	btnSelectAll.title = 'Select all';
+	btnSelectAll.innerHTML = '<span class="tri">select_all</span>';
+	btnSelectAll.addEventListener('click', function() {
+		var cbs = listWrap.querySelectorAll('.fr-config__checkbox');
+		for (var i = 0; i < cbs.length; i++) cbs[i].checked = true;
+	});
+	actions.appendChild(btnSelectAll);
+
+	// Deselect all
+	var btnDeselectAll = document.createElement('button');
+	btnDeselectAll.className = 'fr-config__btn';
+	btnDeselectAll.title = 'Deselect all';
+	btnDeselectAll.innerHTML = '<span class="tri">select_option</span>';
+	btnDeselectAll.addEventListener('click', function() {
+		var cbs = listWrap.querySelectorAll('.fr-config__checkbox');
+		for (var i = 0; i < cbs.length; i++) cbs[i].checked = false;
+	});
+	actions.appendChild(btnDeselectAll);
+
+	// Save to file
+	var btnSave = document.createElement('button');
+	btnSave.className = 'fr-config__btn';
+	btnSave.title = 'Save configuration to file';
+	btnSave.innerHTML = '<span class="tri">file_save</span>';
+	btnSave.addEventListener('click', function() {
+		// Apply first, then export
+		FontRig.Sidebar._applyConfigFromUI(sidebar);
+		FontRig.SidebarConfig.exportToFile(sidebar.id);
+	});
+	actions.appendChild(btnSave);
+
+	// Load from file
+	var btnLoad = document.createElement('button');
+	btnLoad.className = 'fr-config__btn';
+	btnLoad.title = 'Load configuration from file';
+	btnLoad.innerHTML = '<span class="tri">file_open</span>';
+	btnLoad.addEventListener('click', function() {
+		FontRig.SidebarConfig.importFromFile(sidebar.id, function(newConfig) {
+			FontRig.Sidebar.applyConfig(sidebar, newConfig);
+		});
+	});
+	actions.appendChild(btnLoad);
+
+	// Refresh
+	var btnRefresh = document.createElement('button');
+	btnRefresh.className = 'fr-config__btn';
+	btnRefresh.title = 'Refresh / reset to defaults';
+	btnRefresh.innerHTML = '<span class="tri">refresh</span>';
+	btnRefresh.addEventListener('click', function() {
+		// Reset to default config
+		var def = FontRig.SidebarConfig.defaults[sidebar.id];
+		if (def) {
+			var resetConfig = {
+				id:           def.id,
+				position:     def.position,
+				tabPosition:  def.tabPosition,
+				defaultWidth: def.defaultWidth,
+				minWidth:     def.minWidth,
+				maxWidth:     def.maxWidth,
+				widgets:      def.widgets.slice(),
+				defaultTab:   def.defaultTab,
+			};
+			FontRig.Sidebar.applyConfig(sidebar, resetConfig);
+		}
+	});
+	actions.appendChild(btnRefresh);
+
+	configPanel.appendChild(actions);
+};
+
+// ===================================================================
+// Apply config changes from the UI checkboxes
+// ===================================================================
+FontRig.Sidebar._applyConfigFromUI = function(sidebar) {
+	var configPanel = FontRig.Sidebar.getPanel(sidebar, '_config');
+	if (!configPanel) return;
+
+	var SBC = FontRig.SidebarConfig;
+	var config = sidebar._config || SBC.getConfig(sidebar.id);
+	if (!config) return;
+
+	var cbs = configPanel.querySelectorAll('.fr-config__checkbox');
+	var newWidgets = [];
+
+	for (var i = 0; i < cbs.length; i++) {
+		newWidgets.push({
+			id: cbs[i].dataset.widgetId,
+			active: cbs[i].checked,
+		});
+	}
+
+	config.widgets = newWidgets;
+	FontRig.Sidebar.applyConfig(sidebar, config);
+
+	// Switch to first active widget tab after applying
+	var widgetTabs = SBC.buildTabs(config);
+	if (widgetTabs.length > 0) {
+		FontRig.Sidebar.switchTab(sidebar, widgetTabs[0].id);
+	}
+};
+
+// ===================================================================
+// Update the config checklist to match current config state
+// ===================================================================
+FontRig.Sidebar._updateConfigChecklist = function(sidebar) {
+	var configPanel = FontRig.Sidebar.getPanel(sidebar, '_config');
+	if (!configPanel) return;
+
+	var config = sidebar._config;
+	if (!config) return;
+
+	var activeMap = {};
+	for (var i = 0; i < config.widgets.length; i++) {
+		activeMap[config.widgets[i].id] = config.widgets[i].active;
+	}
+
+	var cbs = configPanel.querySelectorAll('.fr-config__checkbox');
+	for (var i = 0; i < cbs.length; i++) {
+		var wid = cbs[i].dataset.widgetId;
+		cbs[i].checked = !!activeMap[wid];
+	}
 };
 
 })();

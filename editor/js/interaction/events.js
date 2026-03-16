@@ -157,42 +157,12 @@ document.getElementById('btn-outline').addEventListener('click', function() {
 
 // XML/Python panel (right sidebar toggle)
 document.getElementById('btn-panel').addEventListener('click', function(e) {
-	// Shift+click → detach the current tab
-	if (e.shiftKey && FontRig.DetachablePanel) {
-		var activeTab = FontRig._rightSidebar ? FontRig._rightSidebar.activeTab : 'xml';
-		if (FontRig.DetachablePanel.get(activeTab)) {
-			FontRig.DetachablePanel.detach(activeTab);
-		}
-		return;
-	}
-
 	this.classList.toggle('active');
 	FontRig._toggleRightSidebar();
 });
 
-// Font panel button — toggles left sidebar; shift+click for detach
+// Font panel button — toggles left sidebar
 document.getElementById('btn-font-panel').addEventListener('click', function(e) {
-	// Shift+click → detach the current tab
-	if (e.shiftKey && FontRig.DetachablePanel) {
-		var activeTab = FontRig._leftSidebar ? FontRig._leftSidebar.activeTab : 'glyphs';
-		if (FontRig.DetachablePanel.get(activeTab)) {
-			FontRig.DetachablePanel.detach(activeTab);
-		}
-		return;
-	}
-
-	// Focus detached panel if already detached
-	if (FontRig.DetachablePanel && FontRig.DetachablePanel.isAnyDetached()) {
-		var leftTabs = ['glyphs', 'font-info'];
-		for (var i = 0; i < leftTabs.length; i++) {
-			var panel = FontRig.DetachablePanel.get(leftTabs[i]);
-			if (panel && panel.isDetached && panel.detachedWindow) {
-				panel.detachedWindow.focus();
-				return;
-			}
-		}
-	}
-
 	// Toggle left sidebar visibility
 	if (FontRig._leftSidebar) {
 		FontRig.Sidebar.toggle(FontRig._leftSidebar);
