@@ -169,6 +169,13 @@ document.getElementById('btn-font-panel').addEventListener('click', function(e) 
 	}
 });
 
+// Workplane button — opens a new workplane window
+document.getElementById('btn-workplane').addEventListener('click', function() {
+	if (FontRig.Workplane) {
+		FontRig.Workplane.open();
+	}
+});
+
 // -- View mode buttons (1x1, 2x1, 2x2) -----------------------------
 function setViewMode(cols, rows) {
 	const btn1x1 = document.getElementById('btn-view-1x1');

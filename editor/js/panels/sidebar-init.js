@@ -152,14 +152,20 @@ FontRig.refreshThumbnail = function(name) {
 	});
 };
 
-// -- Hook switchGlyph
+// -- Hook switchGlyph: notify workplanes
 var origSwitchGlyph = FontRig.switchGlyph;
 FontRig.switchGlyph = async function(name) {
 	var result = await origSwitchGlyph.apply(this, arguments);
+
+	// Notify workplanes of glyph change
+	if (FontRig.Workplane) {
+		FontRig.Workplane.notifyGlyphChanged();
+	}
+
 	return result;
 };
 
-// -- Hook openFont: rebuild all glyph instances after font load
+// -- Hook openFont: rebuild all glyph instances + notify workplanes
 var origOpenFont = FontRig.openFont;
 FontRig.openFont = async function() {
 	var result = await origOpenFont.apply(this, arguments);
@@ -170,6 +176,11 @@ FontRig.openFont = async function() {
 	SBC.forEachInstance('font-info', function(inst) {
 		inst.update();
 	});
+
+	// Notify workplanes of font change
+	if (FontRig.Workplane) {
+		FontRig.Workplane.notifyFontChanged();
+	}
 
 	return result;
 };

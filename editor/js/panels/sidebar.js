@@ -435,7 +435,8 @@ FontRig.Sidebar.show = function(sidebar) {
 	sidebar.handleEl.classList.add('visible');
 
 	if (sidebar.onToggle) sidebar.onToggle(true);
-	if (typeof FontRig.draw === 'function') {
+	// Only redraw if sidebar is in the main window (has the canvas)
+	if (typeof FontRig.draw === 'function' && sidebar.container === FontRig.dom.main) {
 		requestAnimationFrame(function() { FontRig.draw(); });
 	}
 };
@@ -446,7 +447,7 @@ FontRig.Sidebar.hide = function(sidebar) {
 	sidebar.handleEl.classList.remove('visible');
 
 	if (sidebar.onToggle) sidebar.onToggle(false);
-	if (typeof FontRig.draw === 'function') {
+	if (typeof FontRig.draw === 'function' && sidebar.container === FontRig.dom.main) {
 		requestAnimationFrame(function() { FontRig.draw(); });
 	}
 };
