@@ -81,6 +81,19 @@ SBC.registerWidget({
 	}
 });
 
+// -- AI Agent Widget -----------------------------------------------
+SBC.registerWidget({
+	id:    'ai-agent',
+	label: 'AI Agent',
+	icon:  'node_target',
+	mount: function(containerEl, ctx) {
+		return FontRig.AiAgentPanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.focus();
+	}
+});
+
 // ===================================================================
 // SIDEBAR CREATION
 // ===================================================================

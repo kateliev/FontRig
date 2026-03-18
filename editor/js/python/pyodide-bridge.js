@@ -71,6 +71,8 @@ FontRig.pyBridge = {
 
 		'typerig/core/func/__init__.py': '# TypeRig / Core / Func — browser stub\n',
 
+		'typerig/core/func/string.py': '# TypeRig / Core / Func / String — stub\ndef is_hex(s): return False\ndef hue_to_hex(h): return "#000000"\ndef hex_to_hue(h): return 0\n',
+
 		'typerig/core/fileio/__init__.py': '# TypeRig / Core / FileIO — browser stub\n',
 	},
 
