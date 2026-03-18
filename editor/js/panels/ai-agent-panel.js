@@ -46,6 +46,9 @@ FontRig.AiAgentBridge = {
             .then(function(r) { return r.json(); })
             .then(function(config) {
                 self.providers = config.providers;
+                if (config.autoExecute) {
+                    self.autoExecute = config.autoExecute;
+                }
                 self.currentProvider = 'ollama';
                 self.currentModel = self.providers.ollama.defaultModel;
                 self._configLoaded = true;
@@ -76,9 +79,19 @@ FontRig.AiAgentBridge = {
                 ]
             }
         };
+        this.autoExecute = {
+            enabled: true,
+            trigger: '<!--EXECUTE-->',
+            confirmFirst: false,
+            timeout: 30000
+        };
         this.currentProvider = 'ollama';
         this.currentModel = 'llama3.2';
         this._configLoaded = true;
+    },
+
+    getAutoExecute: function() {
+        return this.autoExecute || { enabled: false, trigger: '<!--EXECUTE-->', confirmFirst: false };
     },
 
     getApiKey: function(provider) {
@@ -185,7 +198,10 @@ FontRig.AiAgentBridge = {
         var systemPrompt = 'You are an expert in font design, TypeRig, and Python scripting for font editing. ' +
             'The user is working in FontRig, a browser-based font editor that uses TypeRig Python library. ' +
             'Help them with font editing tasks, Python scripts, geometry questions, and TypeRig API usage. ' +
-            'When providing code, use Python syntax compatible with TypeRig core objects.';
+            'When providing code, use Python syntax compatible with TypeRig core objects. ' +
+            'If you want the code to be automatically executed in the browser, add the line ' +
+            '<!--EXECUTE--> on a separate line AFTER the code block. ' +
+            'For example:\n```python\n# your code here\n```\n<!--EXECUTE-->';
 
         var ollamaMessages = messages.map(function(m) {
             return {
@@ -499,6 +515,21 @@ function _buildUI(inst) {
     geminiKeyGroup.appendChild(geminiKeyInput);
     settingsPanel.appendChild(geminiKeyGroup);
 
+    // Auto-execute toggle
+    var autoExecGroup = document.createElement('div');
+    autoExecGroup.className = 'ai-settings-group';
+    autoExecGroup.innerHTML = '<label>Auto-execute code</label>';
+    var autoExecCheckbox = document.createElement('input');
+    autoExecCheckbox.type = 'checkbox';
+    autoExecCheckbox.checked = FontRig.AiAgentBridge.getAutoExecute().enabled;
+    autoExecGroup.appendChild(autoExecCheckbox);
+    settingsPanel.appendChild(autoExecGroup);
+
+    var autoExecNote = document.createElement('div');
+    autoExecNote.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;';
+    autoExecNote.textContent = 'AI will auto-execute code when you add <!--EXECUTE--> after code blocks.';
+    settingsPanel.appendChild(autoExecNote);
+
     // Save button
     var saveBtn = document.createElement('button');
     saveBtn.className = 'ai-btn ai-btn--primary';
@@ -506,6 +537,7 @@ function _buildUI(inst) {
     saveBtn.addEventListener('click', function() {
         FontRig.AiAgentBridge.setBaseUrl('ollama', ollamaUrlInput.value);
         FontRig.AiAgentBridge.setApiKey('gemini', geminiKeyInput.value);
+        FontRig.AiAgentBridge.autoExecute.enabled = autoExecCheckbox.checked;
         settingsPanel.style.display = 'none';
         FontRig.AiAgentBridge.checkStatus(providerSelect.value, function(ok, text) {
             _setStatus(inst, ok ? 'ready' : 'error', text);
@@ -751,7 +783,28 @@ function _sendMessage(inst) {
             inst._messages.push({ role: 'assistant', content: finalResponse });
             _appendMessage(inst, 'assistant', finalResponse);
 
-            _setStatus(inst, 'ready', 'Ready');
+            // Check for auto-execute trigger
+            var autoConfig = FontRig.AiAgentBridge.getAutoExecute();
+            console.log('Auto-execute check:', autoConfig);
+            if (autoConfig.enabled && finalResponse.indexOf(autoConfig.trigger) !== -1) {
+                var codeBlocks = _extractCodeBlocks(finalResponse);
+                console.log('Code blocks found:', codeBlocks.length);
+                if (codeBlocks.length > 0) {
+                    _appendMessage(inst, 'system', 'Auto-executing ' + codeBlocks.length + ' code block(s)...');
+                    inst._streaming = true;
+                    sendBtn.disabled = true;
+                    _autoExecuteChain(inst, codeBlocks, 0, function() {
+                        inst._streaming = false;
+                        sendBtn.disabled = false;
+                        _setStatus(inst, 'ready', 'Ready');
+                    });
+                } else {
+                    _setStatus(inst, 'ready', 'Ready');
+                }
+            } else {
+                console.log('Auto-execute skipped - enabled:', autoConfig.enabled, 'trigger found:', finalResponse.indexOf(autoConfig.trigger) !== -1);
+                _setStatus(inst, 'ready', 'Ready');
+            }
         },
         // onError
         function(error) {
@@ -763,6 +816,51 @@ function _sendMessage(inst) {
             _setStatus(inst, 'error', 'Error: ' + error);
         }
     );
+}
+
+function _extractCodeBlocks(text) {
+    var blocks = [];
+    var codeBlockRegex = /```python\n([\s\S]*?)```/g;
+    var match;
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+        var code = match[1].trim();
+        if (code) blocks.push(code);
+    }
+    return blocks;
+}
+
+function _autoExecuteChain(inst, blocks, index, onComplete) {
+    if (index >= blocks.length) {
+        if (onComplete) onComplete();
+        return;
+    }
+
+    var code = blocks[index];
+    _appendMessage(inst, 'system', '--- Executing block ' + (index + 1) + '/' + blocks.length + ' ---\n```python\n' + code + '\n```');
+
+    if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
+        _appendMessage(inst, 'system', 'Python runtime not ready. Initialize Python panel first.');
+        if (onComplete) onComplete();
+        return;
+    }
+
+    var result = FontRig.pyBridge.run(code);
+
+    if (result.output) {
+        _appendMessage(inst, 'system', result.output);
+    }
+    if (result.error) {
+        _appendMessage(inst, 'error', 'Error: ' + result.error);
+    }
+    if (result.glyphChanged) {
+        _appendMessage(inst, 'system', 'Glyph updated.');
+    }
+
+    inst._chatEl.scrollTop = inst._chatEl.scrollHeight;
+
+    setTimeout(function() {
+        _autoExecuteChain(inst, blocks, index + 1, onComplete);
+    }, 100);
 }
 
 function _executeCode(inst, code) {

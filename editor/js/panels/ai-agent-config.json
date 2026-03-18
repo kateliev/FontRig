@@ -1,5 +1,11 @@
 {
     "version": 1,
+    "autoExecute": {
+        "enabled": true,
+        "trigger": "<!--EXECUTE-->",
+        "confirmFirst": false,
+        "timeout": 30000
+    },
     "providers": {
         "ollama": {
             "name": "Ollama (Local)",
