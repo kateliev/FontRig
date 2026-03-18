@@ -1,0 +1,138 @@
+{
+    "version": "0.2.6",
+    "description": "TypeRig Core API Reference for FontRig Browser Editor",
+    "note": "This is a subset of the TypeRig API available in the browser environment. Only methods that work with Pyodide/WebAssembly are included.",
+    
+    "classes": {
+        "Glyph": {
+            "description": "Main glyph object containing layers, contours, nodes, and anchors",
+            "constructor": "Glyph(layers=None, **kwargs)",
+            "properties": {
+                "name": "str - Glyph name",
+                "unicodes": "list - Unicode codepoints",
+                "layers": "list - Layer objects",
+                "unicode": "First unicode codepoint (property)"
+            },
+            "methods": {
+                "layer(layer_name=None)": "Get layer by name, returns Layer or None",
+                "shapes(layer_name=None)": "Get shapes on layer",
+                "contours(layer_name=None)": "Get contours on layer",
+                "nodes(layer_name=None)": "Get all nodes on layer",
+                "anchors(layer_name=None)": "Get all anchors on layer",
+                "selected_nodes(layer_name=None)": "Get selected nodes",
+                "set_mark(value)": "Set glyph mark color (hex or color name)",
+                "build_delta(layer_names_list, attrib)": "Build DeltaScale for interpolation",
+                "create_virtual_axis(layer_names, attributes=None)": "Create interpolation axis"
+            }
+        },
+        
+        "Layer": {
+            "description": "Layer within a glyph, contains shapes, contours, nodes",
+            "constructor": "Layer(data=None, name='Layer', **kwargs)",
+            "properties": {
+                "name": "str - Layer name",
+                "shapes": "list - Shape objects",
+                "contours": "list - Contour objects",
+                "nodes": "list - Node objects",
+                "anchors": "list - Anchor objects",
+                "stems": "tuple - (horizontal_stem, vertical_stem) or None",
+                "has_stems": "bool - Whether stems are defined"
+            },
+            "methods": {
+                "clear()": "Remove all content from layer",
+                "copy()": "Create a copy of the layer"
+            }
+        },
+        
+        "Shape": {
+            "description": "Collection of contours forming a filled shape",
+            "constructor": "Shape(contours=None, **kwargs)",
+            "properties": {
+                "contours": "list - Contour objects"
+            }
+        },
+        
+        "Contour": {
+            "description": "A single closed or open path",
+            "constructor": "Contour(nodes=None, closed=True, **kwargs)",
+            "properties": {
+                "nodes": "list - Node objects",
+                "closed": "bool - Whether contour is closed"
+            },
+            "methods": {
+                "reverse()": "Reverse node order",
+                "clear()": "Remove all nodes"
+            }
+        },
+        
+        "Node": {
+            "description": "Single point/anchor on a contour",
+            "constructor": "Node(x, y, type='line', smooth=False, **kwargs)",
+            "properties": {
+                "x": "float - X coordinate",
+                "y": "float - Y coordinate",
+                "type": "str - 'line', 'curve', 'qcurve', 'offcurve'",
+                "smooth": "bool - Smooth point flag",
+                "selected": "bool - Selection state"
+            }
+        },
+        
+        "Anchor": {
+            "description": "Position marker (mark or cursive attachment)",
+            "constructor": "Anchor(x, y, name='', **kwargs)",
+            "properties": {
+                "x": "float - X coordinate",
+                "y": "float - Y coordinate",
+                "name": "str - Anchor name"
+            }
+        },
+        
+        "Transform": {
+            "description": "2D transformation matrix",
+            "constructor": "Transform(matrix=None, **kwargs)",
+            "properties": {
+                "matrix": "tuple - 6-element transform matrix (a,b,c,d,e,f)"
+            },
+            "methods": {
+                "translate(tx, ty)": "Add translation",
+                "rotate(angle)": "Add rotation (radians)",
+                "scale(sx, sy)": "Add scale",
+                "apply(point)": "Apply transform to point tuple"
+            }
+        },
+        
+        "Point": {
+            "description": "Simple x,y coordinate",
+            "constructor": "Point(x=0, y=0)",
+            "properties": {
+                "x": "float",
+                "y": "float"
+            }
+        }
+    },
+    
+    "functions": {
+        "math": {
+            "lerp(a, b, t)": "Linear interpolation between a and b",
+            "clamp(value, min, max)": "Clamp value between min and max",
+            "distance(p1, p2)": "Calculate distance between two points"
+        },
+        "geometry": {
+            "line_point_distance(line, point)": "Distance from point to line",
+            "bezier_length(contour)": "Approximate bezier curve length"
+        }
+    },
+    
+    "usage_examples": {
+        "create_layer": "layer = Layer(name='Test'); glyph.layers.append(layer)",
+        "add_node": "node = Node(100, 200, 'line'); contour.nodes.append(node)",
+        "iterate_nodes": "for node in glyph.nodes('LayerName'): print(node.x, node.y)",
+        "transform_glyph": "t = Transform(); t.translate(10, 0); glyph.apply(t)"
+    },
+    
+    "known_limitations": [
+        "File I/O (读写) not available in browser",
+        "External font editors (Glyphs, Robofont) not available",
+        "Some advanced interpolation features may require stems to be set"
+    ]
+}

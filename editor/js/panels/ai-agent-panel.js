@@ -33,6 +33,8 @@ FontRig.AiAgentBridge = {
 
     _configLoaded: false,
     _configUrl: 'js/panels/ai-agent-config.json',
+    _apiRefLoaded: false,
+    _apiReference: '',
 
     providers: {},
 
@@ -42,23 +44,81 @@ FontRig.AiAgentBridge = {
             callback();
             return;
         }
-        fetch(this._configUrl)
-            .then(function(r) { return r.json(); })
-            .then(function(config) {
-                self.providers = config.providers;
-                if (config.autoExecute) {
-                    self.autoExecute = config.autoExecute;
+        
+        Promise.all([
+            fetch(this._configUrl).then(function(r) { return r.json(); }),
+            fetch('js/panels/ai-agent-api.json').then(function(r) { return r.json(); }).catch(function() { return null; })
+        ]).then(function(results) {
+            var config = results[0];
+            var apiRef = results[1];
+            
+            self.providers = config.providers;
+            if (config.autoExecute) {
+                self.autoExecute = config.autoExecute;
+            }
+            if (apiRef) {
+                self._apiReference = self._buildApiPrompt(apiRef);
+            }
+            self.currentProvider = 'ollama';
+            self.currentModel = self.providers.ollama.defaultModel;
+            self._configLoaded = true;
+            if (callback) callback();
+        }).catch(function(e) {
+            console.warn('Failed to load AI config, using defaults:', e);
+            self._loadDefaults();
+            if (callback) callback();
+        });
+    },
+
+    _buildApiPrompt: function(apiRef) {
+        var lines = [];
+        lines.push('\n\n=== TYPERIG API REFERENCE ===\n');
+        
+        for (var className in apiRef.classes) {
+            var cls = apiRef.classes[className];
+            lines.push('\n## ' + className);
+            if (cls.description) lines.push('Description: ' + cls.description);
+            
+            if (cls.properties) {
+                lines.push('Properties:');
+                for (var prop in cls.properties) {
+                    lines.push('  .' + prop + ' -> ' + cls.properties[prop]);
                 }
-                self.currentProvider = 'ollama';
-                self.currentModel = self.providers.ollama.defaultModel;
-                self._configLoaded = true;
-                if (callback) callback();
-            })
-            .catch(function(e) {
-                console.warn('Failed to load AI config, using defaults:', e);
-                self._loadDefaults();
-                if (callback) callback();
-            });
+            }
+            if (cls.methods) {
+                lines.push('Methods:');
+                for (var method in cls.methods) {
+                    lines.push('  .' + method + '() -> ' + cls.methods[method]);
+                }
+            }
+        }
+        
+        if (apiRef.functions) {
+            lines.push('\n## Functions');
+            for (var cat in apiRef.functions) {
+                lines.push('(' + cat + ')');
+                for (var fn in apiRef.functions[cat]) {
+                    lines.push('  ' + fn + ' -> ' + apiRef.functions[cat][fn]);
+                }
+            }
+        }
+        
+        if (apiRef.usage_examples) {
+            lines.push('\n## Usage Examples');
+            for (var example in apiRef.usage_examples) {
+                lines.push('  ' + example + ': ' + apiRef.usage_examples[example]);
+            }
+        }
+        
+        if (apiRef.known_limitations) {
+            lines.push('\n## Limitations in Browser');
+            for (var i = 0; i < apiRef.known_limitations.length; i++) {
+                lines.push('  - ' + apiRef.known_limitations[i]);
+            }
+        }
+        
+        lines.push('\n=== END API REFERENCE ===\n');
+        return lines.join('\n');
     },
 
     _loadDefaults: function() {
@@ -82,8 +142,8 @@ FontRig.AiAgentBridge = {
         this.autoExecute = {
             enabled: true,
             trigger: '<!--EXECUTE-->',
-            confirmFirst: false,
-            timeout: 30000
+            selfCorrect: true,
+            maxIterations: 3
         };
         this.currentProvider = 'ollama';
         this.currentModel = 'llama3.2';
@@ -91,7 +151,12 @@ FontRig.AiAgentBridge = {
     },
 
     getAutoExecute: function() {
-        return this.autoExecute || { enabled: false, trigger: '<!--EXECUTE-->', confirmFirst: false };
+        return this.autoExecute || { 
+            enabled: false, 
+            trigger: '<!--EXECUTE-->', 
+            selfCorrect: true,
+            maxIterations: 3
+        };
     },
 
     getApiKey: function(provider) {
@@ -198,10 +263,18 @@ FontRig.AiAgentBridge = {
         var systemPrompt = 'You are an expert in font design, TypeRig, and Python scripting for font editing. ' +
             'The user is working in FontRig, a browser-based font editor that uses TypeRig Python library. ' +
             'Help them with font editing tasks, Python scripts, geometry questions, and TypeRig API usage. ' +
-            'When providing code, use Python syntax compatible with TypeRig core objects. ' +
-            'If you want the code to be automatically executed in the browser, add the line ' +
-            '<!--EXECUTE--> on a separate line AFTER the code block. ' +
-            'For example:\n```python\n# your code here\n```\n<!--EXECUTE-->';
+            'When providing code, use Python syntax compatible with TypeRig core objects.\n\n' +
+            '**Auto-execution:** If you want code to be automatically executed in the browser, add the line ' +
+            '<!--EXECUTE--> on a separate line AFTER the code block.\n\n' +
+            '**Self-correction:** If code produces an error during execution, I will send the error back to you ' +
+            'and ask you to fix it. Be prepared to:\n' +
+            '1. Analyze what went wrong\n' +
+            '2. Provide corrected code\n' +
+            '3. Add <!--EXECUTE--> to try again\n' +
+            'Common issues: missing imports, wrong API usage, TypeRig object methods.\n\n' +
+            'IMPORTANT: Only use API methods documented in the TypeRig API Reference below. ' +
+            'Do not assume methods exist that are not documented.' +
+            (this._apiReference || '');
 
         var ollamaMessages = messages.map(function(m) {
             return {
@@ -278,7 +351,12 @@ FontRig.AiAgentBridge = {
             'The user is working in FontRig, a browser-based font editor that uses TypeRig Python library. ' +
             'Help them with font editing tasks, Python scripts, geometry questions, and TypeRig API usage. ' +
             'When providing code, use Python syntax compatible with TypeRig core objects. ' +
-            'Format code blocks with ```python. Be concise and helpful.';
+            'Format code blocks with ```python. Be concise and helpful.\n\n' +
+            '**Auto-execution:** If you want code to be automatically executed in the browser, add the line ' +
+            '<!--EXECUTE--> on a separate line AFTER the code block.\n\n' +
+            '**Self-correction:** If code produces an error, I will send it back for fixing.\n\n' +
+            'IMPORTANT: Only use API methods documented in the TypeRig API Reference. ' +
+            (this._apiReference || '');
 
         var contents = messages.map(function(m) {
             return {
@@ -530,6 +608,34 @@ function _buildUI(inst) {
     autoExecNote.textContent = 'AI will auto-execute code when you add <!--EXECUTE--> after code blocks.';
     settingsPanel.appendChild(autoExecNote);
 
+    // Self-correct toggle
+    var selfCorrectGroup = document.createElement('div');
+    selfCorrectGroup.className = 'ai-settings-group';
+    selfCorrectGroup.innerHTML = '<label>Auto self-correct</label>';
+    var selfCorrectCheckbox = document.createElement('input');
+    selfCorrectCheckbox.type = 'checkbox';
+    selfCorrectCheckbox.checked = FontRig.AiAgentBridge.getAutoExecute().selfCorrect;
+    selfCorrectGroup.appendChild(selfCorrectCheckbox);
+    settingsPanel.appendChild(selfCorrectGroup);
+
+    var selfCorrectNote = document.createElement('div');
+    selfCorrectNote.style.cssText = 'font-size:11px;color:#888;margin-bottom:10px;';
+    selfCorrectNote.textContent = 'AI will attempt to fix code errors automatically.';
+    settingsPanel.appendChild(selfCorrectNote);
+
+    // Max iterations
+    var maxIterGroup = document.createElement('div');
+    maxIterGroup.className = 'ai-settings-group';
+    maxIterGroup.innerHTML = '<label>Max corrections</label>';
+    var maxIterInput = document.createElement('input');
+    maxIterInput.type = 'number';
+    maxIterInput.min = 1;
+    maxIterInput.max = 5;
+    maxIterInput.value = FontRig.AiAgentBridge.getAutoExecute().maxIterations || 3;
+    maxIterInput.style.cssText = 'width:50px;';
+    maxIterGroup.appendChild(maxIterInput);
+    settingsPanel.appendChild(maxIterGroup);
+
     // Save button
     var saveBtn = document.createElement('button');
     saveBtn.className = 'ai-btn ai-btn--primary';
@@ -538,6 +644,8 @@ function _buildUI(inst) {
         FontRig.AiAgentBridge.setBaseUrl('ollama', ollamaUrlInput.value);
         FontRig.AiAgentBridge.setApiKey('gemini', geminiKeyInput.value);
         FontRig.AiAgentBridge.autoExecute.enabled = autoExecCheckbox.checked;
+        FontRig.AiAgentBridge.autoExecute.selfCorrect = selfCorrectCheckbox.checked;
+        FontRig.AiAgentBridge.autoExecute.maxIterations = parseInt(maxIterInput.value) || 3;
         settingsPanel.style.display = 'none';
         FontRig.AiAgentBridge.checkStatus(providerSelect.value, function(ok, text) {
             _setStatus(inst, ok ? 'ready' : 'error', text);
@@ -783,26 +891,44 @@ function _sendMessage(inst) {
             inst._messages.push({ role: 'assistant', content: finalResponse });
             _appendMessage(inst, 'assistant', finalResponse);
 
-            // Check for auto-execute trigger
+    // Check for auto-execute trigger
             var autoConfig = FontRig.AiAgentBridge.getAutoExecute();
-            console.log('Auto-execute check:', autoConfig);
             if (autoConfig.enabled && finalResponse.indexOf(autoConfig.trigger) !== -1) {
                 var codeBlocks = _extractCodeBlocks(finalResponse);
-                console.log('Code blocks found:', codeBlocks.length);
                 if (codeBlocks.length > 0) {
                     _appendMessage(inst, 'system', 'Auto-executing ' + codeBlocks.length + ' code block(s)...');
                     inst._streaming = true;
                     sendBtn.disabled = true;
-                    _autoExecuteChain(inst, codeBlocks, 0, function() {
+                    _autoExecuteChain(inst, codeBlocks, 0, [], autoConfig.maxIterations || 3, function(allResults) {
                         inst._streaming = false;
                         sendBtn.disabled = false;
-                        _setStatus(inst, 'ready', 'Ready');
+                        
+                        var hasErrors = allResults.some(function(r) { return r.error; });
+                        
+                        if (hasErrors) {
+                            var errorCount = allResults.filter(function(r) { return r.error; }).length;
+                            _appendMessage(inst, 'system', '--- Execution completed with ' + errorCount + ' error(s) ---');
+                            
+                            if (autoConfig.selfCorrect) {
+                                _appendMessage(inst, 'system', 'Attempting self-correction...');
+                                _selfCorrect(inst, allResults, autoConfig.maxIterations || 3, 1, function(corrected) {
+                                    inst._streaming = false;
+                                    sendBtn.disabled = false;
+                                    _setStatus(inst, 'ready', 'Ready');
+                                });
+                            } else {
+                                _appendMessage(inst, 'system', 'Self-correction disabled. Review errors above and try again manually.');
+                                _setStatus(inst, 'ready', 'Ready');
+                            }
+                        } else {
+                            _appendMessage(inst, 'system', '--- All code executed successfully! ---');
+                            _setStatus(inst, 'ready', 'Ready');
+                        }
                     });
                 } else {
                     _setStatus(inst, 'ready', 'Ready');
                 }
             } else {
-                console.log('Auto-execute skipped - enabled:', autoConfig.enabled, 'trigger found:', finalResponse.indexOf(autoConfig.trigger) !== -1);
                 _setStatus(inst, 'ready', 'Ready');
             }
         },
@@ -829,38 +955,133 @@ function _extractCodeBlocks(text) {
     return blocks;
 }
 
-function _autoExecuteChain(inst, blocks, index, onComplete) {
+function _autoExecuteChain(inst, blocks, index, results, maxIterations, onComplete) {
     if (index >= blocks.length) {
-        if (onComplete) onComplete();
+        if (onComplete) onComplete(results);
         return;
     }
 
     var code = blocks[index];
     _appendMessage(inst, 'system', '--- Executing block ' + (index + 1) + '/' + blocks.length + ' ---\n```python\n' + code + '\n```');
 
+    var blockResult = { index: index, code: code, output: '', error: null, success: false };
+
     if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
         _appendMessage(inst, 'system', 'Python runtime not ready. Initialize Python panel first.');
-        if (onComplete) onComplete();
+        blockResult.error = 'Python runtime not ready';
+        results.push(blockResult);
+        if (onComplete) onComplete(results);
         return;
     }
 
     var result = FontRig.pyBridge.run(code);
 
-    if (result.output) {
-        _appendMessage(inst, 'system', result.output);
-    }
     if (result.error) {
-        _appendMessage(inst, 'error', 'Error: ' + result.error);
-    }
-    if (result.glyphChanged) {
-        _appendMessage(inst, 'system', 'Glyph updated.');
+        blockResult.error = result.error;
+        _appendMessage(inst, 'error', 
+            '--- Error in block ' + (index + 1) + ' ---\n' +
+            'Code:\n```python\n' + code + '\n```\n' +
+            'Error: ' + result.error
+        );
+    } else {
+        blockResult.success = true;
+        if (result.output) {
+            blockResult.output = result.output;
+            _appendMessage(inst, 'system', result.output);
+        }
+        if (result.glyphChanged) {
+            _appendMessage(inst, 'system', 'Glyph updated.');
+        }
     }
 
+    results.push(blockResult);
     inst._chatEl.scrollTop = inst._chatEl.scrollHeight;
 
     setTimeout(function() {
-        _autoExecuteChain(inst, blocks, index + 1, onComplete);
+        _autoExecuteChain(inst, blocks, index + 1, results, maxIterations, onComplete);
     }, 100);
+}
+
+function _selfCorrect(inst, results, maxIterations, currentIteration, onComplete) {
+    if (currentIteration > maxIterations) {
+        _appendMessage(inst, 'system', 'Max iterations reached. Could not auto-correct errors.');
+        if (onComplete) onComplete();
+        return;
+    }
+
+    var errors = results.filter(function(r) { return r.error; });
+    if (errors.length === 0) {
+        _appendMessage(inst, 'system', 'All code executed successfully!');
+        if (onComplete) onComplete();
+        return;
+    }
+
+    _appendMessage(inst, 'system', '--- Self-correction attempt ' + currentIteration + '/' + maxIterations + ' ---');
+
+    var errorSummary = errors.map(function(e, i) {
+        return 'Block ' + (e.index + 1) + ' error:\n```python\n' + e.code + '\n```\nError: ' + e.error;
+    }).join('\n\n');
+
+    var correctionPrompt = 
+        'I need you to fix Python code that produced errors. Here are the errors:\n\n' +
+        errorSummary + '\n\n' +
+        'Context about the current glyph state:\n' + FontRig.AiAgentBridge.buildContext() + '\n\n' +
+        'TypeRig API Reference (use these methods only):\n' + (FontRig.AiAgentBridge._apiReference || 'No API reference loaded') + '\n\n' +
+        'Please provide corrected code that fixes these errors. If the original approach won\'t work, suggest an alternative. ' +
+        'Include <!--EXECUTE--> after the code if you want it to run again.';
+
+    inst._streaming = true;
+    
+    var thinkingEl = document.createElement('div');
+    thinkingEl.className = 'ai-message ai-message--thinking';
+    thinkingEl.innerHTML = '<div class="ai-message__header"><span class="tri">auto_fix_high</span><span>Self-correcting...</span></div>' +
+        '<div class="ai-message__content ai-thinking"><span class="ai-dots">...</span></div>';
+    inst._chatEl.appendChild(thinkingEl);
+    inst._chatEl.scrollTop = inst._chatEl.scrollHeight;
+
+    var fullResponse = '';
+    FontRig.AiAgentBridge.sendMessage(
+        [{ role: 'user', content: correctionPrompt }],
+        function(chunk) {
+            fullResponse += chunk;
+            var content = thinkingEl.querySelector('.ai-message__content');
+            if (content) content.innerHTML = _formatContent(fullResponse);
+            inst._chatEl.scrollTop = inst._chatEl.scrollHeight;
+        },
+        function(finalResponse) {
+            thinkingEl.remove();
+            inst._messages.push({ role: 'assistant', content: finalResponse });
+            _appendMessage(inst, 'assistant', finalResponse);
+
+            var autoConfig = FontRig.AiAgentBridge.getAutoExecute();
+            if (autoConfig.trigger && finalResponse.indexOf(autoConfig.trigger) !== -1) {
+                var newBlocks = _extractCodeBlocks(finalResponse);
+                if (newBlocks.length > 0) {
+                    _appendMessage(inst, 'system', 'Retrying with corrected code...');
+                    var newResults = [];
+                    _autoExecuteChain(inst, newBlocks, 0, newResults, maxIterations, function(allResults) {
+                        var stillHasErrors = allResults.some(function(r) { return r.error; });
+                        if (stillHasErrors) {
+                            setTimeout(function() {
+                                _selfCorrect(inst, allResults, maxIterations, currentIteration + 1, onComplete);
+                            }, 500);
+                        } else {
+                            _appendMessage(inst, 'system', 'Self-correction successful!');
+                            if (onComplete) onComplete();
+                        }
+                    });
+                    return;
+                }
+            }
+            _appendMessage(inst, 'system', 'No executable code found in correction. Manual review needed.');
+            if (onComplete) onComplete();
+        },
+        function(error) {
+            thinkingEl.remove();
+            _appendMessage(inst, 'error', 'Self-correction failed: ' + error);
+            if (onComplete) onComplete();
+        }
+    );
 }
 
 function _executeCode(inst, code) {

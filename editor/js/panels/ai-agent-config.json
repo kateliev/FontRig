@@ -3,8 +3,8 @@
     "autoExecute": {
         "enabled": true,
         "trigger": "<!--EXECUTE-->",
-        "confirmFirst": false,
-        "timeout": 30000
+        "selfCorrect": true,
+        "maxIterations": 3
     },
     "providers": {
         "ollama": {
