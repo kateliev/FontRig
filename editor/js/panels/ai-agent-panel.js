@@ -10,6 +10,8 @@
 //
 // Supports multiple instances: each mount() creates fresh DOM.
 // Messages are NOT shared between instances (each chat is independent).
+//
+// CONFIG: Edit ai-agent-config.json to customize models, providers, etc.
 // ===================================================================
 'use strict';
 
@@ -29,33 +31,55 @@ FontRig.AiAgentPanel._historyIdx = -1;
 // ===================================================================
 FontRig.AiAgentBridge = {
 
-    providers: {
-        ollama: {
-            name: 'Ollama (Local)',
-            defaultModel: 'qwen2.5-coder',
-            baseUrl: 'http://localhost:11434',
-            requiresKey: false,
-            models: [
-                { id: 'qwen2.5-coder', name: 'Qwen Coder' },
-                { id: 'codellama:13b', name: 'Code Llama 13B' },
-                { id: 'llama3.2', name: 'Llama 3.2' },
-                { id: 'mistral', name: 'Mistral' },
-            ]
-        },
-        gemini: {
-            name: 'Google Gemini (Cloud)',
-            defaultModel: 'gemini-2.0-flash',
-            requiresKey: true,
-            models: [
-                { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Fast)' },
-                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Smart)' },
-            ]
+    _configLoaded: false,
+    _configUrl: 'js/panels/ai-agent-config.json',
+
+    providers: {},
+
+    loadConfig: function(callback) {
+        var self = this;
+        if (this._configLoaded && callback) {
+            callback();
+            return;
         }
+        fetch(this._configUrl)
+            .then(function(r) { return r.json(); })
+            .then(function(config) {
+                self.providers = config.providers;
+                self.currentProvider = 'ollama';
+                self.currentModel = self.providers.ollama.defaultModel;
+                self._configLoaded = true;
+                if (callback) callback();
+            })
+            .catch(function(e) {
+                console.warn('Failed to load AI config, using defaults:', e);
+                self._loadDefaults();
+                if (callback) callback();
+            });
     },
 
-    currentProvider: 'gemini',
-    currentModel: 'gemini-2.0-flash',
+    _loadDefaults: function() {
+        this.providers = {
+            ollama: {
+                name: 'Ollama (Local)',
+                baseUrl: 'http://localhost:11434',
+                defaultModel: 'llama3.2',
+                models: [
+                    { id: 'llama3.2', name: 'Llama 3.2' }
+                ]
+            },
+            gemini: {
+                name: 'Google Gemini (Cloud)',
+                defaultModel: 'gemini-2.0-flash',
+                models: [
+                    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
+                ]
+            }
+        };
+        this.currentProvider = 'ollama';
+        this.currentModel = 'llama3.2';
+        this._configLoaded = true;
+    },
 
     getApiKey: function(provider) {
         return sessionStorage.getItem('ai-api-key-' + provider) || '';
@@ -334,7 +358,7 @@ FontRig.AiAgentBridge = {
 // ===================================================================
 // Mount: create an AI panel instance
 // ===================================================================
-FontRig.AiAgentPanel.mount = function(containerEl, ctx) {
+FontRig.AiAgentPanel.mount = function(containerEl, ctx, onReady) {
     if (!containerEl) return null;
 
     var inst = {
@@ -354,18 +378,18 @@ FontRig.AiAgentPanel.mount = function(containerEl, ctx) {
     containerEl.innerHTML = '';
     containerEl.className = 'ai-panel';
 
-    // Build UI
-    _buildUI(inst);
-
-    // Attach public methods
-    inst.appendMessage = function(role, content) { _appendMessage(inst, role, content); };
-    inst.setStatus = function(status, text) { _setStatus(inst, status, text); };
-    inst.focus = function() {
-        if (inst._inputEl) setTimeout(function() { inst._inputEl.focus(); }, 50);
-    };
-    inst.clearChat = function() { _clearChat(inst); };
-    inst.executeCode = function(code) { _executeCode(inst, code); };
-    inst.onMainWindowEvent = function(eventType) {};
+    FontRig.AiAgentBridge.loadConfig(function() {
+        _buildUI(inst);
+        inst.appendMessage = function(role, content) { _appendMessage(inst, role, content); };
+        inst.setStatus = function(status, text) { _setStatus(inst, status, text); };
+        inst.focus = function() {
+            if (inst._inputEl) setTimeout(function() { inst._inputEl.focus(); }, 50);
+        };
+        inst.clearChat = function() { _clearChat(inst); };
+        inst.executeCode = function(code) { _executeCode(inst, code); };
+        inst.onMainWindowEvent = function(eventType) {};
+        if (onReady) onReady(inst);
+    });
 
     return inst;
 };
@@ -382,7 +406,15 @@ function _buildUI(inst) {
 
     var providerSelect = document.createElement('select');
     providerSelect.className = 'ai-select';
-    providerSelect.innerHTML = '<option value="ollama">Ollama (Local)</option><option value="gemini" selected>Gemini (Cloud)</option>';
+    var providerKeys = Object.keys(FontRig.AiAgentBridge.providers);
+    for (var p = 0; p < providerKeys.length; p++) {
+        var pkey = providerKeys[p];
+        var pdata = FontRig.AiAgentBridge.providers[pkey];
+        var opt = document.createElement('option');
+        opt.value = pkey;
+        opt.textContent = pdata.name;
+        providerSelect.appendChild(opt);
+    }
     providerSelect.value = FontRig.AiAgentBridge.currentProvider;
     header.appendChild(providerSelect);
     inst._providerSelectEl = providerSelect;
@@ -401,20 +433,27 @@ function _buildUI(inst) {
 
     container.appendChild(header);
 
-    // Update model select based on provider
     function updateModelSelect() {
         var provider = providerSelect.value;
-        var models = FontRig.AiAgentBridge.providers[provider].models;
+        var pdata = FontRig.AiAgentBridge.providers[provider];
+        if (!pdata) return;
+        var models = pdata.models || [];
         modelSelect.innerHTML = '';
         for (var i = 0; i < models.length; i++) {
             var opt = document.createElement('option');
             opt.value = models[i].id;
-            opt.textContent = models[i].name;
+            opt.textContent = models[i].name + (models[i].size ? ' (' + models[i].size + ')' : '');
             modelSelect.appendChild(opt);
         }
-        modelSelect.value = FontRig.AiAgentBridge.currentModel;
+        if (modelSelect.value !== FontRig.AiAgentBridge.currentModel) {
+            modelSelect.value = models.length > 0 ? models[0].id : '';
+        }
     }
     updateModelSelect();
+
+    if (modelSelect.value !== FontRig.AiAgentBridge.currentModel) {
+        FontRig.AiAgentBridge.currentModel = modelSelect.value;
+    }
 
     // Model change handler
     providerSelect.addEventListener('change', function() {
