@@ -336,16 +336,20 @@ FontRig.AiAgentBridge = {
         });
     },
 
-    // Gemini API
+    // Gemini API — FIXED VERSION
     _sendGemini: function(messages, onChunk, onComplete, onError) {
         var apiKey = this.getApiKey('gemini');
-        if (!apiKey) {
-            onError('Gemini API key required. Enter it in settings.');
-            return;
+        var model = this.currentModel;
+
+        // FALLBACK: If model is 'gemini-pro' or empty, use a valid 1.5 model to avoid 404
+        if (!model || model === 'gemini-pro') {
+            model = 'gemini-1.5-flash';
         }
 
-        var model = this.currentModel;
-        var baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':streamGenerateContent?key=' + apiKey + '&alt=sse';
+        var proxyUrl = 'https://cors-anywhere.herokuapp.com/'; 
+        // Ensure the colon ":" is present before streamGenerateContent
+        var targetUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':streamGenerateContent?key=' + apiKey + '&alt=sse';
+        var baseUrl = proxyUrl + targetUrl;
 
         var systemInstruction = 'You are an expert in font design, TypeRig, and Python scripting for font editing. ' +
             'The user is working in FontRig, a browser-based font editor that uses TypeRig Python library. ' +
@@ -353,7 +357,7 @@ FontRig.AiAgentBridge = {
             'When providing code, use Python syntax compatible with TypeRig core objects. ' +
             'Format code blocks with ```python. Be concise and helpful.\n\n' +
             '**Auto-execution:** If you want code to be automatically executed in the browser, add the line ' +
-            '<!--EXECUTE--> on a separate line AFTER the code block.\n\n' +
+            'on a separate line AFTER the code block.\n\n' +
             '**Self-correction:** If code produces an error, I will send it back for fixing.\n\n' +
             'IMPORTANT: Only use API methods documented in the TypeRig API Reference. ' +
             (this._apiReference || '');
@@ -364,6 +368,11 @@ FontRig.AiAgentBridge = {
                 parts: [{ text: m.content }]
             };
         });
+
+        // FIX 2: Prepend context to the very first user message if needed
+        if (contents.length > 0 && contents[0].role === 'user') {
+            contents[0].parts[0].text = this.buildContext() + '\n\n' + contents[0].parts[0].text;
+        }
 
         var body = {
             contents: contents,
@@ -376,17 +385,18 @@ FontRig.AiAgentBridge = {
             }
         };
 
-        // Add context as first user message if this is the first exchange
-        if (messages.length === 1 && messages[0].role === 'user') {
-            messages[0].content = this.buildContext() + '\n\n' + messages[0].content;
-        }
-
         fetch(baseUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                // Explicitly tell the proxy we are making a cross-origin request
+                'X-Requested-With': 'XMLHttpRequest' 
+            },
             body: JSON.stringify(body)
         }).then(function(response) {
             if (!response.ok) {
+                // Handle common proxy errors (like 403 if proxy access isn't granted)
+                if (response.status === 403) throw new Error('CORS Proxy access denied. Visit [https://cors-anywhere.herokuapp.com/corsdemo](https://cors-anywhere.herokuapp.com/corsdemo) to grant temporary access.');
                 throw new Error('Gemini error: ' + response.status);
             }
             var reader = response.body.getReader();
@@ -401,11 +411,15 @@ FontRig.AiAgentBridge = {
                     }
                     var chunk = decoder.decode(result.value, { stream: true });
                     var lines = chunk.split('\n');
+                    
                     for (var i = 0; i < lines.length; i++) {
-                        if (lines[i].trim() && lines[i].startsWith('data:')) {
+                        var line = lines[i].trim();
+                        // FIX 3: Robust SSE parsing for "data: " lines
+                        if (line.startsWith('data:')) {
                             try {
-                                var data = JSON.parse(lines[i].substring(5));
-                                if (data.candidates && data.candidates[0]) {
+                                var jsonStr = line.replace(/^data:\s*/, '');
+                                var data = JSON.parse(jsonStr);
+                                if (data.candidates && data.candidates[0] && data.candidates[0].content) {
                                     var parts = data.candidates[0].content.parts;
                                     for (var j = 0; j < parts.length; j++) {
                                         if (parts[j].text) {
@@ -414,7 +428,7 @@ FontRig.AiAgentBridge = {
                                         }
                                     }
                                 }
-                            } catch (e) { /* skip invalid JSON */ }
+                            } catch (e) { /* partial JSON chunk, skip */ }
                         }
                     }
                     read();
