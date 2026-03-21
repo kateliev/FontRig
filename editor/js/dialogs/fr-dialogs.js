@@ -137,12 +137,26 @@ if (!FontRig._isWorkplane) FontRig.scope = {
 		}
 
 		if (mode === 'masters') {
-			if (!FontRig.font || !FontRig.font.masters) return FontRig.state.activeLayer ? [FontRig.state.activeLayer] : [];
-			var names = [];
-			for (var i = 0; i < FontRig.font.masters.length; i++) {
-				names.push(FontRig.font.masters[i].layerName);
+			// Use font masters if available
+			if (FontRig.font && FontRig.font.masters && FontRig.font.masters.length > 0) {
+				var names = [];
+				for (var i = 0; i < FontRig.font.masters.length; i++) {
+					names.push(FontRig.font.masters[i].layerName);
+				}
+				return names;
 			}
-			return names;
+			// Fallback: all non-mask layers in the current glyph
+			if (FontRig.state.glyphData && FontRig.state.glyphData.layers) {
+				var names = [];
+				for (var i = 0; i < FontRig.state.glyphData.layers.length; i++) {
+					var lname = FontRig.state.glyphData.layers[i].name;
+					if (!FontRig.isMaskLayer || !FontRig.isMaskLayer(lname)) {
+						names.push(lname);
+					}
+				}
+				if (names.length > 0) return names;
+			}
+			return FontRig.state.activeLayer ? [FontRig.state.activeLayer] : [];
 		}
 
 		if (mode === 'selected') {

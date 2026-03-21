@@ -186,6 +186,7 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 		_containerEl: containerEl,
 		_slopeBank: 0,
 		_moveMethod: 'SMART',
+		_targetSet: false,
 	};
 
 	containerEl.innerHTML = '';
@@ -314,6 +315,58 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 	// =================================================================
 	var grpAlign = _groupBox('Align');
 	var flowAlign = grpAlign._content;
+
+	// Pick target node for alignment
+	var btnTarget = _toggleBtn('node_target', 'Pick target node for alignment');
+	btnTarget.addEventListener('click', function() {
+		if (btnTarget.classList.contains('active')) {
+			// Store target: midpoint of selection on active layer
+			if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return;
+			FontRig.pyBridge.syncToPython();
+			try {
+				FontRig.pyBridge.pyodide.runPython(
+					'_sel = [n for s in glyph.layer(scope_layers[0] if scope_layers else None).shapes for c in s.contours for n in c.data if n.selected]\n' +
+					'if _sel:\n' +
+					'    from typerig.core.objects.point import Point\n' +
+					'    _tx = sum(n.x for n in _sel) / len(_sel)\n' +
+					'    _ty = sum(n.y for n in _sel) / len(_sel)\n' +
+					'    _align_target = Point(_tx, _ty)\n' +
+					'else:\n' +
+					'    _align_target = None\n' +
+					'del _sel\n'
+				);
+				inst._targetSet = true;
+			} catch (e) {
+				console.warn('[NodePanel] target set failed:', e);
+				inst._targetSet = false;
+			}
+		} else {
+			inst._targetSet = false;
+			if (FontRig.pyBridge && FontRig.pyBridge.ready) {
+				try { FontRig.pyBridge.pyodide.runPython('_align_target = None'); } catch(_) {}
+			}
+		}
+	});
+	flowAlign.appendChild(btnTarget);
+
+	// Collapse to target
+	var btnCollapse = _iconBtn('node_target_collapse', 'Collapse selected nodes to target');
+	btnCollapse.addEventListener('click', function() {
+		if (!inst._targetSet) return;
+		_runNodeAction(
+			'if _align_target is not None:\n' +
+			'    for layer_name in scope_layers:\n' +
+			'        layer = glyph.layer(layer_name)\n' +
+			'        if layer is None: continue\n' +
+			'        for s in layer.shapes:\n' +
+			'            for c in s.contours:\n' +
+			'                for n in c.data:\n' +
+			'                    if n.selected:\n' +
+			'                        n.x = _align_target.x\n' +
+			'                        n.y = _align_target.y\n'
+		);
+	});
+	flowAlign.appendChild(btnCollapse);
 
 	var alignModes = [
 		['node_align_left',        'L',            'Align left'],
