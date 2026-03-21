@@ -51,6 +51,9 @@ FontRig.pyBridge = {
 
 		// File I/O
 		'typerig/core/fileio/xmlio.py',
+
+		// Core actions
+		'typerig/core/actions/node-actions.py',
 	],
 
 	// -- Stub __init__.py contents -----------------------------------------
@@ -60,7 +63,7 @@ FontRig.pyBridge = {
 
 		'typerig/core/__init__.py': '# TypeRig / Core — browser stub\n',
 
-		'typerig/core/objects/__init__.py': 
+		'typerig/core/objects/__init__.py':
 			'from .node import Node\n' +
 			'from .contour import Contour\n' +
 			'from .shape import Shape\n' +
@@ -74,6 +77,8 @@ FontRig.pyBridge = {
 		'typerig/core/func/string.py': '# TypeRig / Core / Func / String — stub\ndef is_hex(s): return False\ndef hue_to_hex(h): return "#000000"\ndef hex_to_hue(h): return 0\n',
 
 		'typerig/core/fileio/__init__.py': '# TypeRig / Core / FileIO — browser stub\n',
+
+		'typerig/core/actions/__init__.py': '# TypeRig / Core / Actions — browser stub\n',
 	},
 
 	// -- Build raw GitHub URL -------------------------------------------
@@ -93,7 +98,7 @@ FontRig.pyBridge = {
 
 		try {
 			// 1. Load Pyodide runtime from CDN
-			log('Loading Python runtime…');
+			log('Loading Python runtime\u2026');
 			this.pyodide = await loadPyodide();
 			log('Python runtime loaded.');
 
@@ -109,6 +114,7 @@ FontRig.pyBridge = {
 				'typerig/core/objects',
 				'typerig/core/func',
 				'typerig/core/fileio',
+				'typerig/core/actions',
 			];
 
 			for (var i = 0; i < dirs.length; i++) {
@@ -137,7 +143,7 @@ FontRig.pyBridge = {
 
 			// 6. Fetch real module files from GitHub (if manifest provided)
 			if (this.manifest && this.manifest.length > 0) {
-				log('Fetching TypeRig core (' + this.manifest.length + ' files)…');
+				log('Fetching TypeRig core (' + this.manifest.length + ' files)\u2026');
 
 				var fetches = this.manifest.map(function(filePath) {
 					return fetch(FontRig.pyBridge._rawUrl(filePath))
@@ -158,10 +164,10 @@ FontRig.pyBridge = {
 
 				log('TypeRig core installed (' + results.length + ' modules).');
 			} else {
-				log('No TypeRig core manifest — using stubs only.');
+				log('No TypeRig core manifest \u2014 using stubs only.');
 			}
 
-			// 6. Bootstrap: import core, set up bridge helpers
+			// 7. Bootstrap: import core, set up bridge helpers
 			this.pyodide.runPython([
 				'import sys',
 				'from typerig.core.objects import Node, Contour, Shape, Layer, Glyph, Anchor',
@@ -172,62 +178,84 @@ FontRig.pyBridge = {
 				'from typerig.core.objects.array import PointArray',
 				'from typerig.core.fileio.xmlio import XMLSerializable',
 				'',
-			'# Glyph variable — synced with viewer',
-			'glyph = None',
-			'',
-			'# Layer selection — synced from Layer Select dialog',
-			'selected_layers = []   # list of checked layer names',
-			'layer_info = []        # [{ name, type, checked }, ...]',
-			'',
-			'# Scope — synced from Toolbar Controller',
-			'scope_layers = []      # resolved layer names for current scope',
-			'scope_glyphs = []      # resolved glyph names for current scope',
-			'scope_layer_mode = "masters"   # "active" | "masters" | "selected"',
-			'scope_glyph_mode = "active"    # "active" | "window" | "selection"',
+				'# Glyph variable \u2014 synced with viewer',
+				'glyph = None',
+				'',
+				'# Layer selection \u2014 synced from Layer Select dialog',
+				'selected_layers = []',
+				'layer_info = []',
+				'',
+				'# Scope \u2014 synced from Toolbar Controller',
+				'scope_layers = []',
+				'scope_glyphs = []',
+				'scope_layer_mode = "masters"',
+				'scope_glyph_mode = "active"',
 				'',
 				'# -- Selection bridge helpers --',
-				'def _set_selection(id_list, layer_name=None):',
-				'\t"""Set node selection from JS id list [\'c0_n3\', ...]"""',
-				'\tif glyph is None: return',
-				'\t# Clear all selection first',
-				'\tfor layer in glyph.layers:',
-				'\t\tfor shape in layer.shapes:',
-				'\t\t\tfor contour in shape.contours:',
-				'\t\t\t\tfor node in contour.data:',
-				'\t\t\t\t\tnode.selected = False',
-				'\t# Set selection on active layer only',
-				'\tlayer = glyph.layer(layer_name) if layer_name else (glyph.layers[0] if glyph.layers else None)',
-				'\tif layer is None: return',
-				'\tselected = set(id_list)',
-				'\tci = 0',
-				'\tfor shape in layer.shapes:',
-				'\t\tfor contour in shape.contours:',
-				'\t\t\tfor ni, node in enumerate(contour.data):',
-				'\t\t\t\tnode.selected = ("c%d_n%d" % (ci, ni)) in selected',
-				'\t\t\tci += 1',
+				'def _set_selection(id_list, layer_name=None, mirror_to_scope=True):',
+				'    """Set node selection, mirroring indices to scope layers."""',
+				'    if glyph is None: return',
+				'    for _lyr in glyph.layers:',
+				'        for shape in _lyr.shapes:',
+				'            for contour in shape.contours:',
+				'                for node in contour.data:',
+				'                    node.selected = False',
+				'    target_names = set()',
+				'    if layer_name:',
+				'        target_names.add(layer_name)',
+				'    elif glyph.layers:',
+				'        target_names.add(glyph.layers[0].name)',
+				'    if mirror_to_scope and scope_layers:',
+				'        for sn in scope_layers:',
+				'            target_names.add(sn)',
+				'    selected = set(id_list)',
+				'    for tname in target_names:',
+				'        _lyr = glyph.layer(tname)',
+				'        if _lyr is None: continue',
+				'        ci = 0',
+				'        for shape in _lyr.shapes:',
+				'            for contour in shape.contours:',
+				'                for ni, node in enumerate(contour.data):',
+				'                    node.selected = ("c%d_n%d" % (ci, ni)) in selected',
+				'                ci += 1',
 				'',
 				'def _get_selection(layer_name=None):',
-				'\t"""Get selected node ids as list [\'c0_n3\', ...]"""',
-				'\tif glyph is None: return []',
-				'\tlayer = glyph.layer(layer_name) if layer_name else (glyph.layers[0] if glyph.layers else None)',
-				'\tif layer is None: return []',
-				'\tresult = []',
-				'\tci = 0',
-				'\tfor shape in layer.shapes:',
-				'\t\tfor contour in shape.contours:',
-				'\t\t\tfor ni, node in enumerate(contour.data):',
-				'\t\t\t\tif getattr(node, "selected", False):',
-				'\t\t\t\t\tresult.append("c%d_n%d" % (ci, ni))',
-				'\t\t\tci += 1',
-				'\treturn result',
+				'    """Get selected node ids as list."""',
+				'    if glyph is None: return []',
+				'    layer = glyph.layer(layer_name) if layer_name else (glyph.layers[0] if glyph.layers else None)',
+				'    if layer is None: return []',
+				'    result = []',
+				'    ci = 0',
+				'    for shape in layer.shapes:',
+				'        for contour in shape.contours:',
+				'            for ni, node in enumerate(contour.data):',
+				'                if getattr(node, "selected", False):',
+				'                    result.append("c%d_n%d" % (ci, ni))',
+				'            ci += 1',
+				'    return result',
 				'',
-			'print("TypeRig core ready — Python", sys.version.split()[0])',
-			'print("Available: Node, Contour, Shape, Layer, Glyph, Anchor")',
-			'print("           Transform, DeltaScale, Point, Line, PointArray")',
-			'print("Selection: glyph.selected_nodes, node.selected")',
-			'print("Layers:   selected_layers, layer_info")',
-			'print("Scope:    scope_layers, scope_glyphs, scope_layer_mode, scope_glyph_mode")',
-			'print()',
+				'# Import node-actions (non-fatal)',
+				'NodeActions = None',
+				'try:',
+				'    import importlib.util as _ilu',
+				'    _na_path = __import__("site").getsitepackages()[0] + "/typerig/core/actions/node-actions.py"',
+				'    _spec = _ilu.spec_from_file_location("node_actions", _na_path)',
+				'    _mod = _ilu.module_from_spec(_spec)',
+				'    _spec.loader.exec_module(_mod)',
+				'    NodeActions = _mod.NodeActions',
+				'    sys.modules["typerig.core.actions.node_actions"] = _mod',
+				'    del _ilu, _spec, _mod, _na_path',
+				'except Exception as _e:',
+				'    print("Warning: NodeActions not loaded:", _e)',
+				'',
+				'print("TypeRig core ready \u2014 Python", sys.version.split()[0])',
+				'print("Available: Node, Contour, Shape, Layer, Glyph, Anchor")',
+				'print("           Transform, DeltaScale, Point, Line, PointArray")',
+				'print("           NodeActions:", "loaded" if NodeActions else "not available")',
+				'print("Selection: glyph.selected_nodes, node.selected")',
+				'print("Layers:   selected_layers, layer_info")',
+				'print("Scope:    scope_layers, scope_glyphs, scope_layer_mode, scope_glyph_mode")',
+				'print()',
 			].join('\n'));
 
 			this.ready = true;
@@ -242,7 +270,7 @@ FontRig.pyBridge = {
 		}
 	},
 
-	// -- Sync viewer glyph → Python glyph variable ----------------------
+	// -- Sync viewer glyph \u2192 Python glyph variable ----------------------
 	// Also syncs selection state (not in XML, passed separately)
 	syncToPython: function() {
 		if (!this.ready || !FontRig.state.glyphData) return;
@@ -256,33 +284,7 @@ FontRig.pyBridge = {
 			'del _xml_in\n'
 		);
 
-		// Sync selection: JS selectedNodeIds → Python node.selected
-		var selIds = Array.from(FontRig.state.selectedNodeIds);
-		var activeName = FontRig.state.activeLayer || '';
-		this.pyodide.globals.set('_sel_ids', selIds);
-		this.pyodide.globals.set('_sel_layer', activeName);
-		this.pyodide.runPython(
-			'_set_selection(_sel_ids.to_py(), _sel_layer)\n' +
-			'del _sel_ids, _sel_layer\n'
-		);
-
-		// Sync layer selection: FontRig.layerSelection → Python selected_layers
-		if (FontRig.layerSelection && FontRig.layerSelection.layers.length > 0) {
-			var checkedNames = FontRig.layerSelection.getChecked();
-			var layerInfo = FontRig.layerSelection.layers.map(function(l) {
-				return { name: l.name, type: l.type, checked: l.checked };
-			});
-			this.pyodide.globals.set('_layer_sel', checkedNames);
-			this.pyodide.globals.set('_layer_info', JSON.stringify(layerInfo));
-			this.pyodide.runPython(
-				'import json as _json\n' +
-				'selected_layers = list(_layer_sel.to_py())\n' +
-				'layer_info = _json.loads(_layer_info)\n' +
-				'del _layer_sel, _layer_info, _json\n'
-			);
-		}
-
-		// Sync scope: FontRig.scope → Python scope_layers / scope_glyphs
+		// Sync scope first (needed by _set_selection for mirroring)
 		if (FontRig.scope) {
 			var scopeLayerNames = FontRig.scope.getLayers();
 			var scopeGlyphNames = FontRig.scope.getGlyphs();
@@ -298,9 +300,36 @@ FontRig.pyBridge = {
 				'del _scope_layers, _scope_glyphs, _scope_layer_mode, _scope_glyph_mode\n'
 			);
 		}
+
+		// Sync selection: JS selectedNodeIds \u2192 Python node.selected
+		// Now mirrors to all scope_layers automatically
+		var selIds = Array.from(FontRig.state.selectedNodeIds);
+		var activeName = FontRig.state.activeLayer || '';
+		this.pyodide.globals.set('_sel_ids', selIds);
+		this.pyodide.globals.set('_sel_layer', activeName);
+		this.pyodide.runPython(
+			'_set_selection(_sel_ids.to_py(), _sel_layer)\n' +
+			'del _sel_ids, _sel_layer\n'
+		);
+
+		// Sync layer selection: FontRig.layerSelection \u2192 Python selected_layers
+		if (FontRig.layerSelection && FontRig.layerSelection.layers.length > 0) {
+			var checkedNames = FontRig.layerSelection.getChecked();
+			var layerInfo = FontRig.layerSelection.layers.map(function(l) {
+				return { name: l.name, type: l.type, checked: l.checked };
+			});
+			this.pyodide.globals.set('_layer_sel', checkedNames);
+			this.pyodide.globals.set('_layer_info', JSON.stringify(layerInfo));
+			this.pyodide.runPython(
+				'import json as _json\n' +
+				'selected_layers = list(_layer_sel.to_py())\n' +
+				'layer_info = _json.loads(_layer_info)\n' +
+				'del _layer_sel, _layer_info, _json\n'
+			);
+		}
 	},
 
-	// -- Sync Python glyph → viewer state --------------------------------
+	// -- Sync Python glyph \u2192 viewer state --------------------------------
 	// Reads XML and selection back from Python, updates viewer + canvas
 	syncFromPython: function() {
 		if (!this.ready) return false;
@@ -317,20 +346,20 @@ FontRig.pyBridge = {
 			FontRig.state.glyphData = newGlyph;
 			FontRig.state.rawXml = xml;
 
-			// Sync selection: Python node.selected → JS selectedNodeIds
+			// Sync selection: Python node.selected \u2192 JS selectedNodeIds
 			var activeName = FontRig.state.activeLayer || '';
 			this.pyodide.globals.set('_sel_layer', activeName);
 			var pySelRaw = this.pyodide.runPython(
 				'_get_selection(_sel_layer)'
 			);
 			this.pyodide.runPython('del _sel_layer');
-			// Pyodide may return a JsProxy for lists — convert to native JS
+			// Pyodide may return a JsProxy for lists \u2014 convert to native JS
 			var pySel = pySelRaw && pySelRaw.toJs ? pySelRaw.toJs() : pySelRaw;
 			if (Array.isArray(pySel)) {
 				FontRig.state.selectedNodeIds = new Set(pySel);
 			}
 
-			// Update layer selector (only if DOM element exists — not in workplane popup)
+			// Update layer selector (only if DOM element exists)
 			var currentLayer = FontRig.state.activeLayer;
 			if (FontRig.dom.layerSelect) {
 				FontRig.dom.layerSelect.innerHTML = '';
@@ -349,7 +378,6 @@ FontRig.pyBridge = {
 					FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 				}
 			} else {
-				// Still update activeLayer even without the DOM selector
 				if (!newGlyph.layers.find(function(l) { return l.name === currentLayer; })) {
 					if (newGlyph.layers.length > 0) {
 						FontRig.state.activeLayer = newGlyph.layers[0].name;
@@ -388,7 +416,7 @@ FontRig.pyBridge = {
 			return { output: '', error: 'Python not ready. Click Init to load.', glyphChanged: false };
 		}
 
-		// Sync current viewer state → Python (glyph + selection)
+		// Sync current viewer state \u2192 Python (glyph + selection)
 		this.syncToPython();
 
 		// Capture stdout/stderr
@@ -407,28 +435,23 @@ FontRig.pyBridge = {
 
 		try {
 			// Use AST to separate exec from final expression eval.
-			// This avoids re-executing the last line for repr display.
 			this.pyodide.globals.set('_user_code', code);
 
 			this.pyodide.runPython([
 				'_user_result = None',
 				'import ast as _ast',
 				'try:',
-				'\t_tree = _ast.parse(_user_code)',
-				'\t# If last statement is a bare expression, eval it separately',
-				'\tif _tree.body and isinstance(_tree.body[-1], _ast.Expr):',
-				'\t\t_last_expr = _tree.body.pop()',
-				'\t\t# Exec everything before the last expression',
-				'\t\tif _tree.body:',
-				'\t\t\texec(compile(_tree, "<repl>", "exec"))',
-				'\t\t# Eval last expression for display',
-				'\t\t_expr_tree = _ast.Expression(body=_last_expr.value)',
-				'\t\t_user_result = eval(compile(_expr_tree, "<repl>", "eval"))',
-				'\telse:',
-				'\t\texec(compile(_tree, "<repl>", "exec"))',
+				'    _tree = _ast.parse(_user_code)',
+				'    if _tree.body and isinstance(_tree.body[-1], _ast.Expr):',
+				'        _last_expr = _tree.body.pop()',
+				'        if _tree.body:',
+				'            exec(compile(_tree, "<repl>", "exec"))',
+				'        _expr_tree = _ast.Expression(body=_last_expr.value)',
+				'        _user_result = eval(compile(_expr_tree, "<repl>", "eval"))',
+				'    else:',
+				'        exec(compile(_tree, "<repl>", "exec"))',
 				'except SyntaxError:',
-				'\t# Fallback: just exec the whole thing',
-				'\texec(compile(_user_code, "<repl>", "exec"))',
+				'    exec(compile(_user_code, "<repl>", "exec"))',
 				'del _user_code, _ast',
 			].join('\n'));
 
@@ -460,12 +483,11 @@ FontRig.pyBridge = {
 				'_sys.stdout = _old_stdout\n' +
 				'_sys.stderr = _old_stderr\n' +
 				'del _capture, _old_stdout, _old_stderr, _io, _sys\n' +
-				'try:\n\tdel _user_result\nexcept: pass\n'
+				'try:\n    del _user_result\nexcept: pass\n'
 			);
 		} catch (_) { /* safety net */ }
 
-		// Always sync back — even after errors, partial mutations
-		// may have occurred before the exception
+		// Always sync back
 		glyphChanged = this.syncFromPython();
 
 		return { output: output, error: error, glyphChanged: glyphChanged };

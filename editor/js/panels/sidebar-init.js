@@ -81,6 +81,19 @@ SBC.registerWidget({
 	}
 });
 
+// -- Node Widget ---------------------------------------------------
+SBC.registerWidget({
+	id:    'node',
+	label: 'Node',
+	icon:  'node_add',
+	mount: function(containerEl, ctx) {
+		return FontRig.NodePanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.update();
+	}
+});
+
 // -- AI Agent Widget -----------------------------------------------
 SBC.registerWidget({
 	id:    'ai-agent',
