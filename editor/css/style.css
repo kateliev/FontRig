@@ -1986,6 +1986,30 @@ body {
 	color: var(--frw-text-dim);
 }
 
+/* -- Group Box ---------------------------------------------------- */
+.frw-group {
+	background: var(--frw-bg-secondary, var(--bg-tertiary));
+	border: 1px solid var(--frw-border, var(--border));
+	border-radius: var(--frw-radius, 4px);
+	overflow: hidden;
+}
+
+.frw-group__label {
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--frw-text-dim, var(--text-tertiary));
+	padding: 4px 8px 2px;
+}
+
+.frw-group__content {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: 4px 6px 6px;
+}
+
 .frw-row {
 	display: flex;
 	align-items: center;
@@ -2824,103 +2848,6 @@ body {
 	padding: 6px;
 	overflow-y: auto;
 	height: 100%;
-}
-
-.np-group {
-	background: var(--bg-tertiary);
-	border: 1px solid var(--border);
-	border-radius: 4px;
-	overflow: hidden;
-}
-
-.np-group__label {
-	font-size: 10px;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-	color: var(--text-tertiary);
-	padding: 4px 8px 2px;
-}
-
-.np-group__content {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 2px;
-	padding: 4px 6px 6px;
-}
-
-/* -- Icon buttons ------------------------------------------------- */
-.np-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	padding: 0;
-	background: transparent;
-	border: 1px solid transparent;
-	border-radius: 3px;
-	color: var(--text-secondary);
-	cursor: pointer;
-	transition: all 0.12s;
-}
-
-.np-btn:hover {
-	background: var(--bg-hover);
-	color: var(--text-primary);
-	border-color: var(--border);
-}
-
-.np-btn:active {
-	background: var(--accent-bg);
-	color: var(--accent);
-}
-
-.np-btn .tri {
-	font-size: 16px;
-}
-
-/* -- Toggle buttons ----------------------------------------------- */
-.np-toggle {
-	border: 1px solid var(--border-dim, var(--border));
-}
-
-.np-toggle.active {
-	background: var(--accent-bg);
-	color: var(--accent);
-	border-color: var(--accent-dim);
-}
-
-/* -- Spin inputs (number + button) -------------------------------- */
-.np-spin {
-	display: inline-flex;
-	align-items: center;
-	gap: 2px;
-}
-
-.np-spin__input {
-	width: 48px;
-	height: 26px;
-	padding: 2px 4px;
-	background: var(--bg-primary);
-	border: 1px solid var(--border);
-	border-radius: 3px;
-	color: var(--text-primary);
-	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
-	font-size: 11px;
-	text-align: center;
-	-moz-appearance: textfield;
-}
-
-.np-spin__input::-webkit-inner-spin-button,
-.np-spin__input::-webkit-outer-spin-button {
-	-webkit-appearance: none;
-	margin: 0;
-}
-
-.np-spin__input:focus {
-	outline: none;
-	border-color: var(--accent);
 }
 
 /* -- Move grid layout --------------------------------------------- */

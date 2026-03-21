@@ -78,11 +78,24 @@ FRWidget.ToggleButton = function(text, opts) {
 	el.classList.add('frw-toggle');
 
 	if (opts.active) el.classList.add('active');
+	if (opts.group)  el.setAttribute('data-group', opts.group);
 
 	var _onChange = opts.onChange || null;
 
 	el.addEventListener('click', function() {
-		el.classList.toggle('active');
+		if (opts.group) {
+			// Radio behavior: deactivate siblings in same group
+			var parent = el.parentElement;
+			if (parent) {
+				var siblings = parent.querySelectorAll('.frw-toggle[data-group="' + opts.group + '"]');
+				for (var i = 0; i < siblings.length; i++) {
+					siblings[i].classList.remove('active');
+				}
+			}
+			el.classList.add('active');
+		} else {
+			el.classList.toggle('active');
+		}
 		if (_onChange) _onChange(el.classList.contains('active'));
 	});
 
@@ -91,6 +104,38 @@ FRWidget.ToggleButton = function(text, opts) {
 	el.setValue = function(v) { el.classList.toggle('active', !!v); };
 
 	return el;
+};
+
+// ===================================================================
+// GROUP BOX (titled container with flow content area)
+// ===================================================================
+FRWidget.GroupBox = function(title, opts) {
+	opts = opts || {};
+	var box = document.createElement('div');
+	box.className = 'frw-group';
+
+	if (title) {
+		var lbl = document.createElement('div');
+		lbl.className = 'frw-group__label';
+		lbl.textContent = title;
+		box.appendChild(lbl);
+	}
+
+	var content = document.createElement('div');
+	content.className = 'frw-group__content';
+	box.appendChild(content);
+
+	// API
+	box.content = content;
+	box.addWidget = function(widget) { content.appendChild(widget); return box; };
+	box.addSeparator = function() {
+		var sep = document.createElement('div');
+		sep.className = 'frw-separator';
+		content.appendChild(sep);
+		return box;
+	};
+
+	return box;
 };
 
 // ===================================================================
@@ -658,7 +703,19 @@ FRWidget.SpinButton = function(buttonText, opts) {
 	var btn = document.createElement('button');
 	btn.className = 'frw-spin-button__action';
 	btn.type = 'button';
-	btn.textContent = buttonText;
+
+	// Support icon or text for the action button
+	if (opts.icon) {
+		var ic = FRWidget.icon(opts.icon);
+		if (ic) btn.appendChild(ic);
+	}
+	if (buttonText) {
+		var span = document.createElement('span');
+		span.textContent = buttonText;
+		btn.appendChild(span);
+	}
+
+	if (opts.tooltip) btn.title = opts.tooltip;
 	if (opts.onClick) btn.addEventListener('click', function() {
 		opts.onClick(spin.getValue());
 	});

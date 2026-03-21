@@ -56,6 +56,13 @@ FontRig.pyBridge = {
 		'typerig/core/actions/node-actions.py',
 	],
 
+	// -- Local modules: editor-specific Python files served from FontRig --
+	// These are fetched relative to the editor root, not from GitHub.
+	// Installed into the same Pyodide site-packages tree.
+	localModules: [
+		{ src: 'python/node-panel-actions.py', dest: 'typerig/core/actions/node-panel-actions.py' },
+	],
+
 	// -- Stub __init__.py contents -----------------------------------------
 	// We stub these to avoid importing proxy/FL-dependent subpackages
 	stubs: {
@@ -153,18 +160,64 @@ FontRig.pyBridge = {
 						})
 						.then(function(text) {
 							return { path: filePath, text: text };
+						})
+						.catch(function(err) {
+							console.warn('[pyBridge] Fetch failed (non-fatal):', err.message || err);
+							return null;
 						});
 				});
 
 				var results = await Promise.all(fetches);
+				var installed = 0;
 
 				for (var j = 0; j < results.length; j++) {
-					this.pyodide.FS.writeFile(sitePackages + results[j].path, results[j].text);
+					if (results[j]) {
+						this.pyodide.FS.writeFile(sitePackages + results[j].path, results[j].text);
+						installed++;
+					}
 				}
 
-				log('TypeRig core installed (' + results.length + ' modules).');
+				log('TypeRig core installed (' + installed + '/' + this.manifest.length + ' modules).');
 			} else {
 				log('No TypeRig core manifest \u2014 using stubs only.');
+			}
+
+			// 6b. Fetch local editor-specific modules
+			if (this.localModules && this.localModules.length > 0) {
+				log('Fetching editor modules (' + this.localModules.length + ' files)\u2026');
+
+				var localFetches = this.localModules.map(function(mod) {
+					return fetch(mod.src)
+						.then(function(r) {
+							if (!r.ok) throw new Error(mod.src + ': ' + r.status);
+							return r.text();
+						})
+						.then(function(text) {
+							return { dest: mod.dest, text: text };
+						})
+						.catch(function(err) {
+							console.warn('[pyBridge] Local fetch failed (non-fatal):', err.message || err);
+							return null;
+						});
+				});
+
+				var localResults = await Promise.all(localFetches);
+				var localInstalled = 0;
+
+				for (var k = 0; k < localResults.length; k++) {
+					if (localResults[k]) {
+						// Ensure dest directory exists
+						var destParts = localResults[k].dest.split('/');
+						for (var d = 1; d < destParts.length; d++) {
+							var dirPath = destParts.slice(0, d).join('/');
+							try { this.pyodide.FS.mkdirTree(sitePackages + dirPath); } catch(_) {}
+						}
+						this.pyodide.FS.writeFile(sitePackages + localResults[k].dest, localResults[k].text);
+						localInstalled++;
+					}
+				}
+
+				log('Editor modules installed (' + localInstalled + '/' + this.localModules.length + ').');
 			}
 
 			// 7. Bootstrap: import core, set up bridge helpers
@@ -248,10 +301,31 @@ FontRig.pyBridge = {
 				'except Exception as _e:',
 				'    print("Warning: NodeActions not loaded:", _e)',
 				'',
+				'# Import node-panel-actions (non-fatal)',
+				'_npa = None',
+				'try:',
+				'    import importlib.util as _ilu',
+				'    _npa_path = __import__("site").getsitepackages()[0] + "/typerig/core/actions/node-panel-actions.py"',
+				'    _spec = _ilu.spec_from_file_location("node_panel_actions", _npa_path)',
+				'    _mod = _ilu.module_from_spec(_spec)',
+				'    _spec.loader.exec_module(_mod)',
+				'    _npa = _mod',
+				'    sys.modules["typerig.core.actions.node_panel_actions"] = _mod',
+				'    del _ilu, _spec, _mod, _npa_path',
+				'except Exception as _e:',
+				'    print("Warning: NodePanelActions not loaded:", _e)',
+				'',
+				'# Thin wrappers that inject bridge globals (glyph, scope_layers, NodeActions)',
+				'def npa(name, *args, **kw):',
+				'    fn = getattr(_npa, name, None)',
+				'    if fn is None: raise RuntimeError("Unknown action: " + name)',
+				'    return fn(glyph, scope_layers, NodeActions, *args, **kw)',
+				'',
 				'print("TypeRig core ready \u2014 Python", sys.version.split()[0])',
 				'print("Available: Node, Contour, Shape, Layer, Glyph, Anchor")',
 				'print("           Transform, DeltaScale, Point, Line, PointArray")',
 				'print("           NodeActions:", "loaded" if NodeActions else "not available")',
+				'print("           NodePanelActions:", "loaded" if _npa else "not available")',
 				'print("Selection: glyph.selected_nodes, node.selected")',
 				'print("Layers:   selected_layers, layer_info")',
 				'print("Scope:    scope_layers, scope_glyphs, scope_layer_mode, scope_glyph_mode")',
