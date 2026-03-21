@@ -241,23 +241,31 @@ FontRig.AiAgentBridge = {
         return lines.join('\n');
     },
 
-    // Send message to AI provider
+    // Send message to AI provider (uses config type field)
     sendMessage: function(messages, onChunk, onComplete, onError) {
         var provider = this.currentProvider;
-        var model = this.currentModel;
+        var providerConfig = this.providers[provider];
 
-        if (provider === 'ollama') {
+        if (!providerConfig) {
+            onError('Unknown provider: ' + provider);
+            return;
+        }
+
+        var type = providerConfig.type || provider;
+        if (type === 'ollama') {
             this._sendOllama(messages, onChunk, onComplete, onError);
-        } else if (provider === 'gemini') {
+        } else if (type === 'gemini') {
             this._sendGemini(messages, onChunk, onComplete, onError);
         } else {
-            onError('Unknown provider: ' + provider);
+            onError('Unsupported provider type: ' + type);
         }
     },
 
-    // Ollama API
+    // Ollama API — uses config for URLs
     _sendOllama: function(messages, onChunk, onComplete, onError) {
-        var baseUrl = this.getBaseUrl('ollama') || this.providers.ollama.baseUrl;
+        var providerConfig = this.providers.ollama || {};
+        var baseUrl = this.getBaseUrl('ollama') || providerConfig.baseUrl || 'http://localhost:11434';
+        var apiEndpoint = providerConfig.apiEndpoint || '/api/chat';
         var model = this.currentModel;
 
         var systemPrompt = 'You are an expert in font design, TypeRig, and Python scripting for font editing. ' +
@@ -292,7 +300,7 @@ FontRig.AiAgentBridge = {
             stream: true
         };
 
-        fetch(baseUrl + '/api/chat', {
+        fetch(baseUrl + apiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -336,20 +344,22 @@ FontRig.AiAgentBridge = {
         });
     },
 
-    // Gemini API — FIXED VERSION
+    // Gemini API — uses config for URLs
     _sendGemini: function(messages, onChunk, onComplete, onError) {
         var apiKey = this.getApiKey('gemini');
         var model = this.currentModel;
+        var providerConfig = this.providers.gemini || {};
 
         // FALLBACK: If model is 'gemini-pro' or empty, use a valid 1.5 model to avoid 404
         if (!model || model === 'gemini-pro') {
-            model = 'gemini-1.5-flash';
+            model = providerConfig.defaultModel || 'gemini-1.5-flash';
         }
 
-        var proxyUrl = 'https://cors-anywhere.herokuapp.com/'; 
-        // Ensure the colon ":" is present before streamGenerateContent
-        var targetUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':streamGenerateContent?key=' + apiKey + '&alt=sse';
-        var baseUrl = proxyUrl + targetUrl;
+        var geminiBase = providerConfig.baseUrl || 'https://generativelanguage.googleapis.com';
+        var apiEndpoint = (providerConfig.apiEndpoint || '/v1beta/models/{model}:streamGenerateContent').replace('{model}', model);
+        var corsProxy = sessionStorage.getItem('ai-cors-proxy-gemini') || providerConfig.corsProxy || '';
+        var targetUrl = geminiBase + apiEndpoint + '?key=' + apiKey + '&alt=sse';
+        var baseUrl = corsProxy ? corsProxy + targetUrl : targetUrl;
 
         var systemInstruction = 'You are an expert in font design, TypeRig, and Python scripting for font editing. ' +
             'The user is working in FontRig, a browser-based font editor that uses TypeRig Python library. ' +
@@ -396,7 +406,7 @@ FontRig.AiAgentBridge = {
         }).then(function(response) {
             if (!response.ok) {
                 // Handle common proxy errors (like 403 if proxy access isn't granted)
-                if (response.status === 403) throw new Error('CORS Proxy access denied. Visit [https://cors-anywhere.herokuapp.com/corsdemo](https://cors-anywhere.herokuapp.com/corsdemo) to grant temporary access.');
+                if (response.status === 403) throw new Error('CORS Proxy access denied. ' + (providerConfig.corsProxyNote || 'Check your CORS proxy settings.'));
                 throw new Error('Gemini error: ' + response.status);
             }
             var reader = response.body.getReader();
@@ -443,8 +453,10 @@ FontRig.AiAgentBridge = {
     // Check provider status
     checkStatus: function(provider, onResult) {
         if (provider === 'ollama') {
-            var baseUrl = this.getBaseUrl('ollama') || this.providers.ollama.baseUrl;
-            fetch(baseUrl + '/api/tags', { method: 'GET' })
+            var providerConfig = this.providers.ollama || {};
+            var baseUrl = this.getBaseUrl('ollama') || providerConfig.baseUrl || 'http://localhost:11434';
+            var statusEndpoint = providerConfig.statusEndpoint || '/api/tags';
+            fetch(baseUrl + statusEndpoint, { method: 'GET' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     onResult(true, 'Ollama ready - ' + (data.models ? data.models.length : 0) + ' models');
@@ -452,12 +464,18 @@ FontRig.AiAgentBridge = {
                 .catch(function(e) {
                     onResult(false, 'Ollama not available: ' + e.message);
                 });
-        } else if (provider === 'gemini') {
-            var apiKey = this.getApiKey('gemini');
-            if (!apiKey) {
-                onResult(false, 'API key required');
+        } else {
+            // Generic check for API-key-based providers (gemini, etc.)
+            var pConf = this.providers[provider];
+            if (pConf && pConf.requiresApiKey) {
+                var apiKey = this.getApiKey(provider);
+                if (!apiKey) {
+                    onResult(false, pConf.name + ': API key required');
+                } else {
+                    onResult(true, pConf.name + ': API key configured');
+                }
             } else {
-                onResult(true, 'API key configured');
+                onResult(true, 'Provider ready');
             }
         }
     }
@@ -583,29 +601,72 @@ function _buildUI(inst) {
 
     settingsPanel.innerHTML = '<div class="ai-settings-title">Settings</div>';
 
-    // Ollama URL
-    var ollamaUrlGroup = document.createElement('div');
-    ollamaUrlGroup.className = 'ai-settings-group';
-    ollamaUrlGroup.innerHTML = '<label>Ollama URL</label>';
-    var ollamaUrlInput = document.createElement('input');
-    ollamaUrlInput.type = 'text';
-    ollamaUrlInput.className = 'ai-input';
-    ollamaUrlInput.value = FontRig.AiAgentBridge.getBaseUrl('ollama') || 'http://localhost:11434';
-    ollamaUrlInput.placeholder = 'http://localhost:11434';
-    ollamaUrlGroup.appendChild(ollamaUrlInput);
-    settingsPanel.appendChild(ollamaUrlGroup);
+    // Dynamically build provider settings from config
+    var _providerInputs = {};
+    var providerKeys = Object.keys(FontRig.AiAgentBridge.providers);
+    for (var pi = 0; pi < providerKeys.length; pi++) {
+        var pkey = providerKeys[pi];
+        var pconf = FontRig.AiAgentBridge.providers[pkey];
+        _providerInputs[pkey] = {};
 
-    // Gemini API Key
-    var geminiKeyGroup = document.createElement('div');
-    geminiKeyGroup.className = 'ai-settings-group';
-    geminiKeyGroup.innerHTML = '<label>Gemini API Key</label>';
-    var geminiKeyInput = document.createElement('input');
-    geminiKeyInput.type = 'text';
-    geminiKeyInput.className = 'ai-input';
-    geminiKeyInput.value = FontRig.AiAgentBridge.getApiKey('gemini') || '';
-    geminiKeyInput.placeholder = 'Enter API key';
-    geminiKeyGroup.appendChild(geminiKeyInput);
-    settingsPanel.appendChild(geminiKeyGroup);
+        // Provider section title
+        var pTitle = document.createElement('div');
+        pTitle.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-secondary);margin:8px 0 4px;';
+        pTitle.textContent = pconf.name;
+        settingsPanel.appendChild(pTitle);
+
+        // Base URL field (if provider requires it)
+        if (pconf.requiresBaseUrl) {
+            var urlGroup = document.createElement('div');
+            urlGroup.className = 'ai-settings-group';
+            urlGroup.innerHTML = '<label>' + pconf.name + ' URL</label>';
+            var urlInput = document.createElement('input');
+            urlInput.type = 'text';
+            urlInput.className = 'ai-input';
+            urlInput.value = FontRig.AiAgentBridge.getBaseUrl(pkey) || pconf.baseUrl || '';
+            urlInput.placeholder = pconf.baseUrl || 'Enter URL';
+            urlGroup.appendChild(urlInput);
+            settingsPanel.appendChild(urlGroup);
+            _providerInputs[pkey].urlInput = urlInput;
+        }
+
+        // API Key field (if provider requires it)
+        if (pconf.requiresApiKey) {
+            var keyGroup = document.createElement('div');
+            keyGroup.className = 'ai-settings-group';
+            keyGroup.innerHTML = '<label>' + pconf.name + ' API Key</label>';
+            var keyInput = document.createElement('input');
+            keyInput.type = 'password';
+            keyInput.className = 'ai-input';
+            keyInput.value = FontRig.AiAgentBridge.getApiKey(pkey) || '';
+            keyInput.placeholder = 'Enter API key';
+            keyGroup.appendChild(keyInput);
+            settingsPanel.appendChild(keyGroup);
+            _providerInputs[pkey].keyInput = keyInput;
+        }
+
+        // CORS Proxy field (if provider uses one)
+        if (pconf.corsProxy !== undefined && pconf.corsProxy !== '') {
+            var corsGroup = document.createElement('div');
+            corsGroup.className = 'ai-settings-group';
+            corsGroup.innerHTML = '<label>CORS Proxy (leave empty to disable)</label>';
+            var corsInput = document.createElement('input');
+            corsInput.type = 'text';
+            corsInput.className = 'ai-input';
+            corsInput.value = sessionStorage.getItem('ai-cors-proxy-' + pkey) || pconf.corsProxy || '';
+            corsInput.placeholder = pconf.corsProxy || 'https://proxy.example.com/';
+            corsGroup.appendChild(corsInput);
+            settingsPanel.appendChild(corsGroup);
+            _providerInputs[pkey].corsInput = corsInput;
+
+            if (pconf.corsProxyNote) {
+                var corsNote = document.createElement('div');
+                corsNote.style.cssText = 'font-size:10px;color:#888;margin-bottom:6px;';
+                corsNote.textContent = pconf.corsProxyNote;
+                settingsPanel.appendChild(corsNote);
+            }
+        }
+    }
 
     // Auto-execute toggle
     var autoExecGroup = document.createElement('div');
@@ -655,8 +716,26 @@ function _buildUI(inst) {
     saveBtn.className = 'ai-btn ai-btn--primary';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', function() {
-        FontRig.AiAgentBridge.setBaseUrl('ollama', ollamaUrlInput.value);
-        FontRig.AiAgentBridge.setApiKey('gemini', geminiKeyInput.value);
+        // Save all dynamic provider settings
+        var pkeys = Object.keys(_providerInputs);
+        for (var si = 0; si < pkeys.length; si++) {
+            var sk = pkeys[si];
+            var inputs = _providerInputs[sk];
+            if (inputs.urlInput) {
+                FontRig.AiAgentBridge.setBaseUrl(sk, inputs.urlInput.value);
+            }
+            if (inputs.keyInput) {
+                FontRig.AiAgentBridge.setApiKey(sk, inputs.keyInput.value);
+            }
+            if (inputs.corsInput) {
+                var corsVal = inputs.corsInput.value.trim();
+                if (corsVal) {
+                    sessionStorage.setItem('ai-cors-proxy-' + sk, corsVal);
+                } else {
+                    sessionStorage.removeItem('ai-cors-proxy-' + sk);
+                }
+            }
+        }
         FontRig.AiAgentBridge.autoExecute.enabled = autoExecCheckbox.checked;
         FontRig.AiAgentBridge.autoExecute.selfCorrect = selfCorrectCheckbox.checked;
         FontRig.AiAgentBridge.autoExecute.maxIterations = parseInt(maxIterInput.value) || 3;
@@ -787,11 +866,38 @@ function _appendMessage(inst, role, content) {
     var msg = document.createElement('div');
     msg.className = 'ai-message ai-message--' + role;
 
-    var roleLabel = role === 'user' ? 'You' : (role === 'assistant' ? 'AI' : 'System');
-    var roleIcon = role === 'user' ? 'help' : (role === 'assistant' ? 'node_target' : 'info');
+    var roleLabel = role === 'user' ? 'You' : (role === 'assistant' ? 'AI' : (role === 'error' ? 'Error' : 'System'));
+    var roleIcon = role === 'user' ? 'help' : (role === 'assistant' ? 'node_target' : (role === 'error' ? 'warning' : 'info'));
 
     msg.innerHTML = '<div class="ai-message__header"><span class="tri">' + roleIcon + '</span><span>' + roleLabel + '</span></div>' +
         '<div class="ai-message__content">' + _formatContent(content) + '</div>';
+
+    // Add copy button for assistant and error messages
+    if (role === 'assistant' || role === 'error' || role === 'system') {
+        var actions = document.createElement('div');
+        actions.className = 'ai-message__actions';
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'ai-copy-btn';
+        copyBtn.innerHTML = '<span class="tri">content_copy</span> Copy';
+        copyBtn.addEventListener('click', function() {
+            // Get plain text content (strip HTML)
+            var textContent = msg.querySelector('.ai-message__content').innerText || content;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textContent).then(function() {
+                    copyBtn.innerHTML = '<span class="tri">check</span> Copied';
+                    setTimeout(function() {
+                        copyBtn.innerHTML = '<span class="tri">content_copy</span> Copy';
+                    }, 1500);
+                }).catch(function() {
+                    _fallbackCopy(textContent, copyBtn);
+                });
+            } else {
+                _fallbackCopy(textContent, copyBtn);
+            }
+        });
+        actions.appendChild(copyBtn);
+        msg.appendChild(actions);
+    }
 
     chat.appendChild(msg);
     chat.scrollTop = chat.scrollHeight;
@@ -808,6 +914,22 @@ function _appendMessage(inst, role, content) {
             }
         }
     }
+}
+
+function _fallbackCopy(text, btn) {
+    var textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.cssText = 'position:fixed;left:-9999px;';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        btn.innerHTML = '<span class="tri">check</span> Copied';
+        setTimeout(function() {
+            btn.innerHTML = '<span class="tri">content_copy</span> Copy';
+        }, 1500);
+    } catch (e) { /* silent fail */ }
+    document.body.removeChild(textarea);
 }
 
 function _formatContent(content) {
@@ -992,11 +1114,7 @@ function _autoExecuteChain(inst, blocks, index, results, maxIterations, onComple
 
     if (result.error) {
         blockResult.error = result.error;
-        _appendMessage(inst, 'error', 
-            '--- Error in block ' + (index + 1) + ' ---\n' +
-            'Code:\n```python\n' + code + '\n```\n' +
-            'Error: ' + result.error
-        );
+        _appendErrorDetail(inst, 'Execution error in block ' + (index + 1), code, result.error);
     } else {
         blockResult.success = true;
         if (result.output) {
@@ -1016,6 +1134,43 @@ function _autoExecuteChain(inst, blocks, index, results, maxIterations, onComple
     }, 100);
 }
 
+function _appendErrorDetail(inst, title, code, error) {
+    var chat = inst._chatEl;
+    if (!chat) return;
+
+    var msg = document.createElement('div');
+    msg.className = 'ai-message ai-message--error';
+
+    msg.innerHTML = '<div class="ai-message__header"><span class="tri">warning</span><span>' + title + '</span></div>' +
+        '<div class="ai-message__content">' +
+        (code ? '<pre class="ai-code"><code>' + code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code></pre>' : '') +
+        '<div class="ai-error-detail">' + String(error).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+        '</div>';
+
+    // Copy button for error
+    var actions = document.createElement('div');
+    actions.className = 'ai-message__actions';
+    var copyBtn = document.createElement('button');
+    copyBtn.className = 'ai-copy-btn';
+    copyBtn.innerHTML = '<span class="tri">content_copy</span> Copy error';
+    copyBtn.addEventListener('click', function() {
+        var textContent = 'Error: ' + error + (code ? '\n\nCode:\n' + code : '');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textContent).then(function() {
+                copyBtn.innerHTML = '<span class="tri">check</span> Copied';
+                setTimeout(function() { copyBtn.innerHTML = '<span class="tri">content_copy</span> Copy error'; }, 1500);
+            }).catch(function() { _fallbackCopy(textContent, copyBtn); });
+        } else {
+            _fallbackCopy(textContent, copyBtn);
+        }
+    });
+    actions.appendChild(copyBtn);
+    msg.appendChild(actions);
+
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+}
+
 function _selfCorrect(inst, results, maxIterations, currentIteration, onComplete) {
     if (currentIteration > maxIterations) {
         _appendMessage(inst, 'system', 'Max iterations reached. Could not auto-correct errors.');
@@ -1031,6 +1186,11 @@ function _selfCorrect(inst, results, maxIterations, currentIteration, onComplete
     }
 
     _appendMessage(inst, 'system', '--- Self-correction attempt ' + currentIteration + '/' + maxIterations + ' ---');
+
+    // Show each error clearly to the user before sending to AI
+    for (var ei = 0; ei < errors.length; ei++) {
+        _appendErrorDetail(inst, 'Error sent to AI (block ' + (errors[ei].index + 1) + ')', errors[ei].code, errors[ei].error);
+    }
 
     var errorSummary = errors.map(function(e, i) {
         return 'Block ' + (e.index + 1) + ' error:\n```python\n' + e.code + '\n```\nError: ' + e.error;

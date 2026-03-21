@@ -898,6 +898,15 @@ body {
 	line-height: 1.6;
 	color: var(--text-primary);
 	word-break: break-word;
+	user-select: text;
+	-webkit-user-select: text;
+	cursor: text;
+}
+
+.ai-message__content .ai-code {
+	user-select: text;
+	-webkit-user-select: text;
+	cursor: text;
 }
 
 .ai-message__content .tri {
@@ -925,6 +934,56 @@ body {
 	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
 	font-size: 11px;
 	color: var(--accent);
+}
+
+.ai-message__actions {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 6px;
+	gap: 4px;
+}
+
+.ai-copy-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 2px 8px;
+	background: var(--bg-primary);
+	border: 1px solid var(--border);
+	border-radius: 3px;
+	color: var(--text-dim);
+	font-size: 10px;
+	cursor: pointer;
+	transition: all 0.12s;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+.ai-copy-btn:hover {
+	color: var(--text-primary);
+	border-color: var(--accent-dim);
+	background: var(--bg-hover);
+}
+
+.ai-copy-btn .tri {
+	font-size: 13px;
+}
+
+.ai-error-detail {
+	background: rgba(255, 107, 107, 0.08);
+	border: 1px solid rgba(255, 107, 107, 0.25);
+	border-radius: 4px;
+	padding: 8px 10px;
+	margin: 6px 0;
+	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	font-size: 11px;
+	line-height: 1.5;
+	color: #ff6b6b;
+	white-space: pre-wrap;
+	word-break: break-word;
+	user-select: text;
+	-webkit-user-select: text;
+	overflow-x: auto;
 }
 
 .ai-thinking {

@@ -1,5 +1,5 @@
 {
-    "version": 1,
+    "version": 2,
     "autoExecute": {
         "enabled": true,
         "trigger": "<!--EXECUTE-->",
@@ -9,8 +9,14 @@
     "providers": {
         "ollama": {
             "name": "Ollama (Local)",
+            "type": "ollama",
             "baseUrl": "http://localhost:11434",
+            "apiEndpoint": "/api/chat",
+            "statusEndpoint": "/api/tags",
             "defaultModel": "qwen3-coder:latest",
+            "requiresApiKey": false,
+            "requiresBaseUrl": true,
+            "corsProxy": "",
             "models": [
                 { "id": "qwen3-coder:latest", "name": "Qwen 3 Coder (30.5B)", "size": "18.5GB" },
                 { "id": "todorov/bggpt:latest", "name": "BG GPT (9.2B)", "size": "5.5GB" },
@@ -20,7 +26,14 @@
         },
         "gemini": {
             "name": "Google Gemini (Cloud)",
+            "type": "gemini",
+            "baseUrl": "https://generativelanguage.googleapis.com",
+            "apiEndpoint": "/v1beta/models/{model}:streamGenerateContent",
+            "corsProxy": "https://cors-anywhere.herokuapp.com/",
+            "corsProxyNote": "Visit https://cors-anywhere.herokuapp.com/corsdemo to grant temporary access",
             "defaultModel": "gemini-2.0-flash",
+            "requiresApiKey": true,
+            "requiresBaseUrl": false,
             "models": [
                 { "id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash (Fast)" },
                 { "id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash" },
