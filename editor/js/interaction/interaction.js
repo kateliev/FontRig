@@ -107,21 +107,46 @@ FontRig._undoStacks = function() {
 	return { undo: FontRig.undoStack, redo: FontRig.redoStack };
 };
 
-// Deep-clone the active layer's shape tree (shapes → contours → nodes)
+// Deep-clone all layers' shape trees for multi-layer undo.
+// Returns { _allLayers: true, layers: { name: shapesClone, ... } }
 FontRig._snapshotLayer = function() {
-	var layer = FontRig.getActiveLayer();
-	if (!layer) return null;
-	return JSON.parse(JSON.stringify(layer.shapes));
+	var gd = FontRig.state.glyphData;
+	if (!gd || !gd.layers || gd.layers.length === 0) return null;
+	var snap = { _allLayers: true, layers: {} };
+	for (var i = 0; i < gd.layers.length; i++) {
+		var l = gd.layers[i];
+		snap.layers[l.name] = JSON.parse(JSON.stringify(l.shapes));
+	}
+	console.log('[undo] snapshot taken, layers:', Object.keys(snap.layers));
+	return snap;
 };
 
-// Restore a snapshot into the active layer
+// Restore a snapshot. Supports both:
+//   - new multi-layer format { _allLayers: true, layers: { name: shapes } }
+//   - legacy single-layer format (plain shapes array)
 FontRig._restoreSnapshot = function(snapshot) {
-	var layer = FontRig.getActiveLayer();
-	if (!layer || !snapshot) return;
-	layer.shapes = JSON.parse(JSON.stringify(snapshot));
-	// shapes reference changed — _getLayerPaths detects this automatically,
-	// but mark dirty explicitly for safety
-	FontRig.invalidatePathCache(layer);
+	if (!snapshot) return;
+	var gd = FontRig.state.glyphData;
+
+	if (snapshot._allLayers && gd && gd.layers) {
+		// Multi-layer restore
+		var restored = [];
+		for (var i = 0; i < gd.layers.length; i++) {
+			var l = gd.layers[i];
+			if (snapshot.layers[l.name]) {
+				l.shapes = JSON.parse(JSON.stringify(snapshot.layers[l.name]));
+				FontRig.invalidatePathCache(l);
+				restored.push(l.name);
+			}
+		}
+		console.log('[undo] restored layers:', restored);
+	} else {
+		// Legacy: single active layer
+		var layer = FontRig.getActiveLayer();
+		if (!layer) return;
+		layer.shapes = JSON.parse(JSON.stringify(snapshot));
+		FontRig.invalidatePathCache(layer);
+	}
 };
 
 // Push current state onto undo stack (call before modifying)
@@ -163,12 +188,14 @@ FontRig.pushUndoNudge = function() {
 
 FontRig.undo = function() {
 	var stacks = FontRig._undoStacks();
+	console.log('[undo] stack size:', stacks.undo.length, 'redo:', stacks.redo.length);
 	if (stacks.undo.length === 0) return;
 	// Save current state to redo
 	var current = FontRig._snapshotLayer();
 	if (current) stacks.redo.push(current);
 	// Restore previous
 	var snapshot = stacks.undo.pop();
+	console.log('[undo] snapshot type:', snapshot._allLayers ? 'multi-layer' : 'legacy', snapshot._allLayers ? Object.keys(snapshot.layers) : '(active only)');
 	FontRig._restoreSnapshot(snapshot);
 	FontRig.state.selectedNodeIds.clear();
 	FontRig.draw();

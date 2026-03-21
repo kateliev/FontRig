@@ -167,7 +167,8 @@ document.getElementById('btn-font-panel').addEventListener('click', function(e) 
 	if (FontRig._leftSidebar) {
 		FontRig.Sidebar.toggle(FontRig._leftSidebar);
 		// Mirror sidebar visibility to button active state
-		this.classList.toggle('active', FontRig._leftSidebar.classList.contains('visible'));
+		var isVisible = FontRig._leftSidebar.el && FontRig._leftSidebar.el.classList.contains('visible');
+		this.classList.toggle('active', isVisible);
 	}
 });
 
