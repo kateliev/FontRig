@@ -350,6 +350,16 @@ FRWidget.ComboBox = function(opts) {
 	if (opts.value !== undefined) select.value = opts.value;
 	if (opts.onChange) select.addEventListener('change', function() { opts.onChange(select.value); });
 
+	select.addEventListener('wheel', function(e) {
+		e.preventDefault();
+		var idx = select.selectedIndex + (e.deltaY > 0 ? 1 : -1);
+		idx = Math.max(0, Math.min(select.options.length - 1, idx));
+		if (idx !== select.selectedIndex) {
+			select.selectedIndex = idx;
+			select.dispatchEvent(new Event('change'));
+		}
+	}, { passive: false });
+
 	wrap.appendChild(select);
 	wrap.style.minWidth = opts.width || '';
 
