@@ -613,6 +613,8 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	var toCurveItem = ctxMenu.querySelector('[data-action="convertToCurve"]');
 	var toQuadItem = ctxMenu.querySelector('[data-action="convertToQuadratic"]');
 	var selectContourItem = ctxMenu.querySelector('[data-action="selectContour"]');
+	var setStartItem = ctxMenu.querySelector('[data-action="setContourStart"]');
+	var reverseItem = ctxMenu.querySelector('[data-action="reverseContour"]');
 	var joinItem = ctxMenu.querySelector('[data-action="joinContour"]');
 	var transformItem = ctxMenu.querySelector('[data-action="transformSelection"]');
 
@@ -640,6 +642,16 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 			var epCheck = FontRig.isOpenEndpoint(nodeHit.id);
 			joinItem.style.display = epCheck ? '' : 'none';
 		}
+
+		// Set Start Node: show only for on-curve nodes on closed contours
+		if (setStartItem) {
+			var nodeRef = FontRig.findNodeById(nodeHit.id);
+			var isOnClosed = nodeRef && nodeRef.node.type === 'on' && nodeRef.contour.closed;
+			setStartItem.style.display = isOnClosed ? '' : 'none';
+		}
+
+		// Reverse Contour: always show when a contour is identified
+		if (reverseItem) reverseItem.style.display = '';
 
 		// Show node items, hide segment items
 		if (toggleItem) toggleItem.style.display = '';
@@ -683,6 +695,8 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 		if (retractItem) retractItem.style.display = 'none';
 		if (insertItem) insertItem.style.display = '';
 		if (selectContourItem) selectContourItem.style.display = '';
+		if (setStartItem) setStartItem.style.display = 'none';
+		if (reverseItem) reverseItem.style.display = '';
 		if (joinItem) joinItem.style.display = 'none';
 		if (transformItem) transformItem.style.display = (state.selectedNodeIds.size >= 2) ? '' : 'none';
 		pendingContourIdx = segHit.ci;
@@ -729,16 +743,22 @@ if (ctxMenu) {
 		var action = item.dataset.action;
 		if (action === 'toggleSmooth') {
 			FontRig.pushUndo();
-			FontRig.toggleSmooth();
+			FontRig.sync_toggleSmooth();
 		} else if (action === 'retractHandles') {
 			FontRig.pushUndo();
-			FontRig.retractHandles();
+			FontRig.sync_retractHandles();
 		} else if (action === 'joinContour') {
 			FontRig.pushUndo();
 			FontRig.tryJoinEndpoints();
 		} else if (action === 'openContour') {
 			FontRig.pushUndo();
-			FontRig.openContourAtNode();
+			FontRig.sync_openContourAtNode();
+		} else if (action === 'setContourStart') {
+			FontRig.pushUndo();
+			FontRig.sync_setContourStart();
+		} else if (action === 'reverseContour') {
+			FontRig.pushUndo();
+			FontRig.sync_reverseContour(pendingContourIdx >= 0 ? pendingContourIdx : undefined);
 		} else if (action === 'selectContour') {
 			if (pendingContourIdx >= 0) {
 				var ids = FontRig.getContourNodeIds(pendingContourIdx);
@@ -748,28 +768,28 @@ if (ctxMenu) {
 		} else if (action === 'insertNode') {
 			if (pendingSegmentHit) {
 				FontRig.pushUndo();
-				FontRig.insertNodeOnSegment(pendingSegmentHit);
+				FontRig.sync_insertNodeOnSegment(pendingSegmentHit);
 				pendingSegmentHit = null;
-	pendingContourIdx = -1;
+				pendingContourIdx = -1;
 			}
 		} else if (action === 'convertToLine') {
 			if (pendingSegmentHit) {
 				FontRig.pushUndo();
-				FontRig.convertSegmentToLine(pendingSegmentHit);
+				FontRig.sync_convertSegmentToLine(pendingSegmentHit);
 				pendingSegmentHit = null;
 				pendingContourIdx = -1;
 			}
 		} else if (action === 'convertToCurve') {
 			if (pendingSegmentHit) {
 				FontRig.pushUndo();
-				FontRig.convertSegmentToCubic(pendingSegmentHit);
+				FontRig.sync_convertSegmentToCubic(pendingSegmentHit);
 				pendingSegmentHit = null;
 				pendingContourIdx = -1;
 			}
 		} else if (action === 'convertToQuadratic') {
 			if (pendingSegmentHit) {
 				FontRig.pushUndo();
-				FontRig.convertSegmentToQuadratic(pendingSegmentHit);
+				FontRig.sync_convertSegmentToQuadratic(pendingSegmentHit);
 				pendingSegmentHit = null;
 				pendingContourIdx = -1;
 			}

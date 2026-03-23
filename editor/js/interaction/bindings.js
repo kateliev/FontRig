@@ -139,17 +139,17 @@ FontRig.actions = {
 	// -- Node operations ---
 	openContour: function() {
 		FontRig.pushUndo();
-		FontRig.openContourAtNode();
+		FontRig.sync_openContourAtNode();
 	},
 
 	deleteNode: function() {
 		FontRig.pushUndo();
-		FontRig.deleteNode();
+		FontRig.sync_deleteNode();
 	},
 
 	retractHandles: function() {
 		FontRig.pushUndo();
-		FontRig.retractHandles();
+		FontRig.sync_retractHandles();
 	},
 
 	joinContour: function() {
