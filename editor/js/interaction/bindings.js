@@ -102,11 +102,13 @@ FontRig.actions = {
 	// -- Node movement (arrow keys) ---
 	// All movement reads base step from FontRig.movementPrefs.
 	// Shift = x10, Ctrl/Cmd = x100 multiplier on the base step.
+	// When S or A is held, slides along curves or lines instead.
 	moveUp: function(ctx) {
 		var mult = 1;
 		if (ctx.e.shiftKey) mult = 10;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
+		if (FontRig._tryKeyboardSlide(0, 1, mult)) return;
 		FontRig.sync_moveSelectedNodes(0, 1, mult);
 	},
 
@@ -115,6 +117,7 @@ FontRig.actions = {
 		if (ctx.e.shiftKey) mult = 10;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
+		if (FontRig._tryKeyboardSlide(0, -1, mult)) return;
 		FontRig.sync_moveSelectedNodes(0, -1, mult);
 	},
 
@@ -123,6 +126,7 @@ FontRig.actions = {
 		if (ctx.e.shiftKey) mult = 10;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
+		if (FontRig._tryKeyboardSlide(1, 0, mult)) return;
 		FontRig.sync_moveSelectedNodes(1, 0, mult);
 	},
 
@@ -131,6 +135,7 @@ FontRig.actions = {
 		if (ctx.e.shiftKey) mult = 10;
 		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
+		if (FontRig._tryKeyboardSlide(-1, 0, mult)) return;
 		FontRig.sync_moveSelectedNodes(-1, 0, mult);
 	},
 

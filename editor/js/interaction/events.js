@@ -496,10 +496,18 @@ document.addEventListener('keyup', function(e) {
 	if (e.code === 'KeyS') {
 		state.sKeyDown = false;
 		if (state.slideData && state.slideData.mode === 'curve') state.slideData = null;
+		if (state._kbSlideData && state._kbSlideData.mode === 'curve') {
+			state._kbSlideData = null;
+			state._kbSlideDataLayers = null;
+		}
 	}
 	if (e.code === 'KeyA') {
 		state.aKeyDown = false;
 		if (state.slideData && state.slideData.mode === 'line') state.slideData = null;
+		if (state._kbSlideData && state._kbSlideData.mode === 'line') {
+			state._kbSlideData = null;
+			state._kbSlideDataLayers = null;
+		}
 	}
 });
 

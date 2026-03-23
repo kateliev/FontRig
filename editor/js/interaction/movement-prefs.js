@@ -87,13 +87,74 @@ FontRig.sync_moveSelectedNodes = function(dirX, dirY, multiplier) {
 	FontRig.draw();
 };
 
-// Move nodes by ID set in a specific layer (no smooth enforcement yet).
+// Move nodes by ID set in a specific layer, with smooth enforcement.
 FontRig._moveNodesInLayer = function(layer, nodeIds, dx, dy) {
 	for (var id of nodeIds) {
 		var ref = FontRig._findNodeInLayer(layer, id);
 		if (!ref) continue;
 		ref.node.x = Math.round((ref.node.x + dx) * 10) / 10;
 		ref.node.y = Math.round((ref.node.y + dy) * 10) / 10;
+	}
+
+	// Enforce smooth tangent continuity (same logic as enforceSmoothForKeys
+	// but operating on the given layer instead of the active layer)
+	FontRig._enforceSmoothForKeysInLayer(layer, nodeIds, dx, dy);
+};
+
+// Layer-parameterized version of enforceSmoothForKeys.
+// Translates adjacent handles of selected on-curves, then enforces
+// collinearity for smooth nodes — all within the specified layer.
+FontRig._enforceSmoothForKeysInLayer = function(layer, draggedIds, dx, dy) {
+	if (!layer) return;
+
+	// First pass: translate non-selected handles adjacent to selected on-curves
+	var ci = 0;
+	for (var si = 0; si < layer.shapes.length; si++) {
+		var shape = layer.shapes[si];
+		for (var ki = 0; ki < shape.contours.length; ki++) {
+			var nodes = shape.contours[ki].nodes;
+			var n = nodes.length;
+
+			for (var ni = 0; ni < n; ni++) {
+				var id = 'c' + ci + '_n' + ni;
+				if (!draggedIds.has(id)) continue;
+				if (nodes[ni].type !== 'on') continue;
+
+				var prevIdx = (ni - 1 + n) % n;
+				var nextIdx = (ni + 1) % n;
+				var prevId = 'c' + ci + '_n' + prevIdx;
+				var nextId = 'c' + ci + '_n' + nextIdx;
+
+				if (nodes[prevIdx].type !== 'on' && !draggedIds.has(prevId)) {
+					nodes[prevIdx].x = Math.round((nodes[prevIdx].x + dx) * 10) / 10;
+					nodes[prevIdx].y = Math.round((nodes[prevIdx].y + dy) * 10) / 10;
+				}
+				if (nodes[nextIdx].type !== 'on' && !draggedIds.has(nextId)) {
+					nodes[nextIdx].x = Math.round((nodes[nextIdx].x + dx) * 10) / 10;
+					nodes[nextIdx].y = Math.round((nodes[nextIdx].y + dy) * 10) / 10;
+				}
+			}
+			ci++;
+		}
+	}
+
+	// Second pass: enforce collinearity for moved handles
+	ci = 0;
+	for (var si = 0; si < layer.shapes.length; si++) {
+		var shape = layer.shapes[si];
+		for (var ki = 0; ki < shape.contours.length; ki++) {
+			var nodes = shape.contours[ki].nodes;
+			var n = nodes.length;
+
+			for (var ni = 0; ni < n; ni++) {
+				var id = 'c' + ci + '_n' + ni;
+				if (!draggedIds.has(id)) continue;
+				if (nodes[ni].type === 'on') continue;
+
+				FontRig._enforceOppositeSmooth(nodes, n, ni, ci, draggedIds);
+			}
+			ci++;
+		}
 	}
 };
 

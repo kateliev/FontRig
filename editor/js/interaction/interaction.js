@@ -1907,6 +1907,249 @@ FontRig._fitSamplesToSide = function(nodes, handleIndices, samples, startPt, end
 	}
 };
 
+// -- Keyboard slide (S/A + arrow keys) -------------------------------
+// When S or A is held and a single on-curve node is selected,
+// arrow keys slide the node along curves (S) or lines (A) instead
+// of doing a straight move. Returns true if slide was performed.
+//
+// The slide data is lazily initialized and cached in state._kbSlideData
+// (active layer) and state._kbSlideDataLayers (sync layers).
+// Cleared when S/A is released (handled in events.js keyup).
+FontRig._tryKeyboardSlide = function(dirX, dirY, multiplier) {
+	var state = FontRig.state;
+
+	// Check if S or A is held
+	var mode = null;
+	if (state.sKeyDown) mode = 'curve';
+	else if (state.aKeyDown) mode = 'line';
+	if (!mode) return false;
+
+	// Need exactly one on-curve node selected
+	if (state.selectedNodeIds.size !== 1) return false;
+	var nodeId = state.selectedNodeIds.values().next().value;
+
+	// Lazily initialize keyboard slide data for active layer
+	if (!state._kbSlideData || state._kbSlideData.nodeId !== nodeId || state._kbSlideData.mode !== mode) {
+		var sd = FontRig.initSlideMode(nodeId, mode);
+		if (!sd) return false;
+		var ref = FontRig.findNodeById(nodeId);
+		if (!ref) return false;
+		sd.nodeId = nodeId;
+		sd.currentArcLen = FontRig._findArcLenForNode(sd, ref.node.x, ref.node.y);
+		state._kbSlideData = sd;
+
+		// Also init slide data for sync layers
+		state._kbSlideDataLayers = [];
+		var prefs = FontRig.movementPrefs;
+		if (prefs.syncMovement && FontRig.scope.layerMode !== 'active') {
+			var layers = FontRig.getSyncLayers();
+			for (var li = 1; li < layers.length; li++) {
+				var layerSd = FontRig._initSlideModeInLayer(layers[li], nodeId, mode);
+				if (layerSd) {
+					layerSd.layer = layers[li];
+					state._kbSlideDataLayers.push(layerSd);
+				}
+			}
+		}
+	}
+
+	var sd = state._kbSlideData;
+	var prefs = FontRig.movementPrefs;
+	var step = prefs.getStepForLayer(state.activeLayer);
+
+	// Compute the delta in glyph units
+	var dx = dirX * step.x * multiplier;
+	var dy = dirY * step.y * multiplier;
+
+	// Project: take current node position, add delta, project onto polyline
+	var ref = FontRig.findNodeById(nodeId);
+	if (!ref) return false;
+
+	var targetX = ref.node.x + dx;
+	var targetY = ref.node.y + dy;
+
+	// Slide on active layer
+	FontRig.performSlide(sd, targetX, targetY);
+
+	// Slide on sync layers
+	if (state._kbSlideDataLayers) {
+		for (var li = 0; li < state._kbSlideDataLayers.length; li++) {
+			var layerSd = state._kbSlideDataLayers[li];
+			var layerStep = prefs.getStepForLayer(layerSd.layer.name);
+			var ldx = dirX * layerStep.x * multiplier;
+			var ldy = dirY * layerStep.y * multiplier;
+
+			// Find the node in this layer
+			var layerRef = FontRig._findNodeInLayer(layerSd.layer, nodeId);
+			if (!layerRef) continue;
+
+			var layerTargetX = layerRef.node.x + ldx;
+			var layerTargetY = layerRef.node.y + ldy;
+
+			FontRig.performSlide(layerSd, layerTargetX, layerTargetY);
+			FontRig.invalidatePathCache(layerSd.layer);
+		}
+	}
+
+	FontRig.draw();
+	FontRig.updateStatusSelected();
+	return true;
+};
+
+// Initialize slide mode for a specific layer (not just the active layer).
+// Same logic as initSlideMode but finds the contour in the given layer.
+FontRig._initSlideModeInLayer = function(layer, nodeId, mode) {
+	mode = mode || 'curve';
+	var m = nodeId.match(/^c(\d+)_n(\d+)$/);
+	if (!m) return null;
+	var ci = parseInt(m[1]);
+	var ni = parseInt(m[2]);
+
+	var cRef = FontRig._findContourInLayer(layer, ci);
+	if (!cRef) return null;
+
+	var contour = cRef.contour;
+	var nodes = contour.nodes;
+	var n = nodes.length;
+
+	if (ni >= n || nodes[ni].type !== 'on') return null;
+
+	var incoming = FontRig._analyzeIncoming(nodes, n, ni);
+	var outgoing = FontRig._analyzeOutgoing(nodes, n, ni);
+
+	var activeIn = false, activeOut = false;
+	if (mode === 'curve') {
+		activeIn = (incoming.type === 'cubic');
+		activeOut = (outgoing.type === 'cubic');
+	} else if (mode === 'line') {
+		activeIn = (incoming.type === 'line');
+		activeOut = (outgoing.type === 'line');
+	}
+
+	if (!activeIn && !activeOut) return null;
+
+	var inH = incoming.handleIndices;
+	var outH = outgoing.handleIndices;
+	var inPts = null, outPts = null;
+
+	if (incoming.type === 'cubic' && inH.length >= 2) {
+		inPts = [
+			{ x: nodes[incoming.prevOnIdx].x, y: nodes[incoming.prevOnIdx].y },
+			{ x: nodes[inH[inH.length - 1]].x, y: nodes[inH[inH.length - 1]].y },
+			{ x: nodes[inH[0]].x, y: nodes[inH[0]].y },
+			{ x: nodes[ni].x, y: nodes[ni].y }
+		];
+	}
+	if (outgoing.type === 'cubic' && outH.length >= 2) {
+		outPts = [
+			{ x: nodes[ni].x, y: nodes[ni].y },
+			{ x: nodes[outH[0]].x, y: nodes[outH[0]].y },
+			{ x: nodes[outH[outH.length - 1]].x, y: nodes[outH[outH.length - 1]].y },
+			{ x: nodes[outgoing.nextOnIdx].x, y: nodes[outgoing.nextOnIdx].y }
+		];
+	}
+
+	var prevOn = { x: nodes[incoming.prevOnIdx].x, y: nodes[incoming.prevOnIdx].y };
+	var onNode = { x: nodes[ni].x, y: nodes[ni].y };
+	var nextOn = { x: nodes[outgoing.nextOnIdx].x, y: nodes[outgoing.nextOnIdx].y };
+
+	var numSamples = 60;
+	var polyline = [];
+	var canExtrapolate = (mode === 'curve') && (activeIn !== activeOut);
+
+	if (activeIn) {
+		if (mode === 'line') {
+			for (var i = 0; i <= numSamples; i++) {
+				var t = -0.5 + 2.0 * i / numSamples;
+				polyline.push({
+					x: prevOn.x + t * (onNode.x - prevOn.x),
+					y: prevOn.y + t * (onNode.y - prevOn.y),
+					seg: 0, t: t
+				});
+			}
+		} else {
+			var tMin = canExtrapolate ? -0.4 : 0;
+			var tMax = canExtrapolate ? 1.4 : 1;
+			for (var i = 0; i <= numSamples; i++) {
+				var t = tMin + (tMax - tMin) * i / numSamples;
+				var pt = FontRig._sampleCubic(inPts[0], inPts[1], inPts[2], inPts[3], t);
+				polyline.push({ x: pt.x, y: pt.y, seg: 0, t: t });
+			}
+		}
+	}
+
+	if (activeOut) {
+		var skip = (activeIn) ? 1 : 0;
+		if (mode === 'line') {
+			for (var i = skip; i <= numSamples; i++) {
+				var t = -0.5 + 2.0 * i / numSamples;
+				polyline.push({
+					x: onNode.x + t * (nextOn.x - onNode.x),
+					y: onNode.y + t * (nextOn.y - onNode.y),
+					seg: 1, t: t
+				});
+			}
+		} else {
+			var tMin = canExtrapolate ? -0.4 : 0;
+			var tMax = canExtrapolate ? 1.4 : 1;
+			for (var i = skip; i <= numSamples; i++) {
+				var t = tMin + (tMax - tMin) * i / numSamples;
+				var pt = FontRig._sampleCubic(outPts[0], outPts[1], outPts[2], outPts[3], t);
+				polyline.push({ x: pt.x, y: pt.y, seg: 1, t: t });
+			}
+		}
+	}
+
+	if (polyline.length < 2) return null;
+
+	var arcLens = [0];
+	for (var i = 1; i < polyline.length; i++) {
+		var dx = polyline[i].x - polyline[i - 1].x;
+		var dy = polyline[i].y - polyline[i - 1].y;
+		arcLens.push(arcLens[i - 1] + Math.sqrt(dx * dx + dy * dy));
+	}
+
+	return {
+		contour: contour,
+		nodeIdx: ni,
+		ci: ci,
+		mode: mode,
+		incoming: incoming,
+		outgoing: outgoing,
+		activeIn: activeIn,
+		activeOut: activeOut,
+		inPts: inPts,
+		outPts: outPts,
+		prevOn: prevOn,
+		onNode: onNode,
+		nextOn: nextOn,
+		inHandleIndices: inH,
+		outHandleIndices: outH,
+		polyline: polyline,
+		arcLens: arcLens,
+		totalLen: arcLens[arcLens.length - 1],
+		canExtrapolate: canExtrapolate
+	};
+};
+
+// Find arc-length position of a point on the slide polyline.
+FontRig._findArcLenForNode = function(slideData, nx, ny) {
+	var poly = slideData.polyline;
+	var arcLens = slideData.arcLens;
+	var bestDist = Infinity;
+	var bestArc = 0;
+
+	for (var i = 0; i < poly.length; i++) {
+		var dx = poly[i].x - nx, dy = poly[i].y - ny;
+		var d = dx * dx + dy * dy;
+		if (d < bestDist) {
+			bestDist = d;
+			bestArc = arcLens[i];
+		}
+	}
+	return bestArc;
+};
+
 // -- Retract handles -------------------------------------------------
 // If on-curve selected: retract both adjacent handles to on-curve pos.
 // If handle selected: retract only that handle.
