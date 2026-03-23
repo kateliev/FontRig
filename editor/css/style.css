@@ -1998,6 +1998,7 @@ body {
 	border: 1px solid var(--frw-border, var(--border));
 	border-radius: var(--frw-radius, 4px);
 	overflow: hidden;
+	align-items: stretch;
 }
 
 .frw-group__label {
@@ -2006,7 +2007,11 @@ body {
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
 	color: var(--frw-text-dim, var(--text-tertiary));
-	padding: 4px 8px 2px;
+	padding: 8px 3px;
+	writing-mode: vertical-rl;
+	transform: rotate(180deg);
+	border-right: 1px solid var(--frw-border, var(--border));
+	user-select: none;
 }
 
 .frw-group__content {
@@ -2014,6 +2019,7 @@ body {
 	flex-wrap: wrap;
 	gap: 2px;
 	padding: 4px 6px 6px;
+	flex: 1;
 }
 
 .frw-row {
