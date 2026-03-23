@@ -582,6 +582,16 @@ FontRig.initGlyphWidget();
 FontRig.wireToolbar();
 FontRig.wireTransformInputs();
 
+// -- Editor > Movement menu item ------------------------------------
+(function() {
+	var btn = document.getElementById('btn-movement-prefs');
+	if (btn) {
+		btn.addEventListener('click', function() {
+			FontRig.openMovementPrefs();
+		});
+	}
+})();
+
 // ===================================================================
 // Context menu (right-click)
 // ===================================================================

@@ -100,40 +100,38 @@ FontRig.actions = {
 	},
 
 	// -- Node movement (arrow keys) ---
+	// All movement reads base step from FontRig.movementPrefs.
+	// Shift = x10, Ctrl/Cmd = x100 multiplier on the base step.
 	moveUp: function(ctx) {
-		var t = FontRig.getCurrentTheme().keyboard;
-		var step = t.arrowStep;
-		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
-		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
+		var mult = 1;
+		if (ctx.e.shiftKey) mult = 10;
+		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
-		FontRig.moveSelectedNodes(0, step);
+		FontRig.sync_moveSelectedNodes(0, 1, mult);
 	},
 
 	moveDown: function(ctx) {
-		var t = FontRig.getCurrentTheme().keyboard;
-		var step = t.arrowStep;
-		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
-		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
+		var mult = 1;
+		if (ctx.e.shiftKey) mult = 10;
+		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
-		FontRig.moveSelectedNodes(0, -step);
+		FontRig.sync_moveSelectedNodes(0, -1, mult);
 	},
 
 	moveRight: function(ctx) {
-		var t = FontRig.getCurrentTheme().keyboard;
-		var step = t.arrowStep;
-		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
-		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
+		var mult = 1;
+		if (ctx.e.shiftKey) mult = 10;
+		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
-		FontRig.moveSelectedNodes(step, 0);
+		FontRig.sync_moveSelectedNodes(1, 0, mult);
 	},
 
 	moveLeft: function(ctx) {
-		var t = FontRig.getCurrentTheme().keyboard;
-		var step = t.arrowStep;
-		if (ctx.e.shiftKey) step = t.arrowStep_SHIFT;
-		if (ctx.e.ctrlKey || ctx.e.metaKey) step = t.arrowStep_CTRL;
+		var mult = 1;
+		if (ctx.e.shiftKey) mult = 10;
+		if (ctx.e.ctrlKey || ctx.e.metaKey) mult = 100;
 		FontRig.pushUndoNudge();
-		FontRig.moveSelectedNodes(-step, 0);
+		FontRig.sync_moveSelectedNodes(-1, 0, mult);
 	},
 
 	// -- Node operations ---

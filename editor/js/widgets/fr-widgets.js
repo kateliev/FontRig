@@ -837,6 +837,48 @@ FRWidget.Dialog = function(opts) {
 
 	backdrop.appendChild(dialog);
 
+	// -- Draggable by header -------------------------------------------
+	var _dragging = false, _dragOx = 0, _dragOy = 0;
+	var _positioned = false; // once dragged, switch to absolute positioning
+
+	function _positionAbsolute() {
+		if (_positioned) return;
+		// Read current centered position and switch to absolute
+		var rect = dialog.getBoundingClientRect();
+		dialog.style.position = 'absolute';
+		dialog.style.left = rect.left + 'px';
+		dialog.style.top = rect.top + 'px';
+		dialog.style.margin = '0';
+		backdrop.style.alignItems = 'flex-start';
+		backdrop.style.justifyContent = 'flex-start';
+		_positioned = true;
+	}
+
+	header.style.cursor = 'move';
+	header.addEventListener('mousedown', function(e) {
+		if (e.target === closeBtn) return; // don't drag on close button
+		e.preventDefault();
+		_positionAbsolute();
+		_dragging = true;
+		_dragOx = e.clientX - dialog.offsetLeft;
+		_dragOy = e.clientY - dialog.offsetTop;
+	});
+
+	window.addEventListener('mousemove', function(e) {
+		if (!_dragging) return;
+		var nx = e.clientX - _dragOx;
+		var ny = e.clientY - _dragOy;
+		// Clamp to viewport
+		nx = Math.max(0, Math.min(nx, window.innerWidth - 40));
+		ny = Math.max(0, Math.min(ny, window.innerHeight - 40));
+		dialog.style.left = nx + 'px';
+		dialog.style.top = ny + 'px';
+	});
+
+	window.addEventListener('mouseup', function() {
+		_dragging = false;
+	});
+
 	// Close logic
 	closeBtn.addEventListener('click', function() { api.close(); });
 	backdrop.addEventListener('click', function(e) {
@@ -847,6 +889,7 @@ FRWidget.Dialog = function(opts) {
 	var api = {
 		el: backdrop,
 		body: body,
+		dialog: dialog,
 		open: function() {
 			document.body.appendChild(backdrop);
 			requestAnimationFrame(function() {
@@ -859,6 +902,18 @@ FRWidget.Dialog = function(opts) {
 				if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
 			}, 180);
 			if (opts.onClose) opts.onClose();
+		},
+		// Reset to centered position (e.g. after content changes size)
+		recenter: function() {
+			if (_positioned) {
+				dialog.style.position = '';
+				dialog.style.left = '';
+				dialog.style.top = '';
+				dialog.style.margin = '';
+				backdrop.style.alignItems = '';
+				backdrop.style.justifyContent = '';
+				_positioned = false;
+			}
 		},
 	};
 

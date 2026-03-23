@@ -1923,6 +1923,75 @@ body {
 	border-top: 1px solid var(--frw-border-subtle);
 }
 
+/* -- Movement Preferences dialog --------------------------------- */
+.frw-mvp__row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.frw-mvp__icon {
+	font-size: 14px;
+	flex-shrink: 0;
+}
+
+.frw-mvp__toggle {
+	width: 100%;
+	justify-content: flex-start;
+}
+
+.frw-mvp__master-table {
+	border-top: 1px solid var(--frw-border-subtle);
+	padding-top: 8px;
+	margin-top: 2px;
+}
+
+.frw-mvp__table-hdr,
+.frw-mvp__table-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 0;
+}
+
+.frw-mvp__table-hdr {
+	font-size: 10px;
+	color: var(--frw-text-dim);
+	border-bottom: 1px solid var(--frw-border-subtle);
+	padding-bottom: 4px;
+	margin-bottom: 2px;
+}
+
+.frw-mvp__table-cell--name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+}
+
+.frw-mvp__table-cell--val {
+	flex: 0 0 72px;
+}
+
+.frw-mvp__table-cell--val .frw-spinbox {
+	width: 100%;
+}
+
+.frw-mvp__table-row--active .frw-mvp__table-cell--name {
+	font-weight: 600;
+	color: var(--frw-text);
+}
+
+.frw-mvp__empty {
+	font-size: 11px;
+	color: var(--frw-text-dim);
+	padding: 8px 0;
+	text-align: center;
+}
+
 .frw-icon {
 	display: inline-block;
 	width: 14px;
