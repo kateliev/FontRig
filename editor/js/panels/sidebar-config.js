@@ -159,6 +159,7 @@ FontRig.SidebarConfig.defaults = {
 			{ id: 'xml',        active: true },
 			{ id: 'python',     active: true },
 			{ id: 'ai-agent',   active: false },
+			{ id: 'help',       active: true },
 		],
 		defaultTab: 'xml',
 	}

@@ -1058,6 +1058,65 @@ body {
 .ai-status--loading { color: var(--accent); background: rgba(91,157,239,0.1); }
 
 
+/* -- Help Panel ---------------------------------------------- */
+.help-panel {
+	padding: 12px 14px;
+	overflow-y: auto;
+	height: 100%;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-secondary);
+	user-select: text;
+	-webkit-user-select: text;
+}
+
+.help-panel__heading {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-primary);
+	margin: 16px 0 6px;
+	padding-bottom: 3px;
+	border-bottom: 1px solid var(--border);
+}
+
+.help-panel__heading:first-child {
+	margin-top: 0;
+}
+
+.help-panel__text {
+	margin: 0 0 4px;
+	color: var(--text-secondary);
+}
+
+.help-panel__table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 11px;
+	margin-bottom: 12px;
+}
+
+.help-panel__table th {
+	text-align: left;
+	font-weight: 600;
+	color: var(--text-primary);
+	padding: 4px 8px 4px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.help-panel__table td {
+	padding: 3px 8px 3px 0;
+	border-bottom: 1px solid var(--bg-tertiary);
+	color: var(--text-secondary);
+}
+
+.help-panel__key {
+	white-space: nowrap;
+	font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+	font-size: 11px;
+	color: var(--accent);
+}
+
+
 /* -- XML action bar (Refresh / Apply) ------------------------ */
 .xml-panel__actions {
 	display: flex;

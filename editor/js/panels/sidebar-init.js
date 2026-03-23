@@ -107,6 +107,16 @@ SBC.registerWidget({
 	}
 });
 
+// -- Help Widget ----------------------------------------------------
+SBC.registerWidget({
+	id:    'help',
+	label: 'Help',
+	icon:  'help',
+	mount: function(containerEl, ctx) {
+		return FontRig.HelpPanel.mount(containerEl, ctx);
+	}
+});
+
 // ===================================================================
 // SIDEBAR CREATION
 // ===================================================================
