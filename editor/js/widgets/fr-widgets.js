@@ -152,11 +152,6 @@ FRWidget.SpinBox = function(opts) {
 	var wrap = document.createElement('div');
 	wrap.className = 'frw-spinbox';
 
-	var btnDec = document.createElement('button');
-	btnDec.className = 'frw-spinbox__btn frw-spinbox__btn--dec';
-	btnDec.type = 'button';
-	btnDec.textContent = '\u2212'; // minus sign
-
 	var input = document.createElement('input');
 	input.className = 'frw-spinbox__input';
 	input.type = 'text';
@@ -172,12 +167,21 @@ FRWidget.SpinBox = function(opts) {
 	var btnInc = document.createElement('button');
 	btnInc.className = 'frw-spinbox__btn frw-spinbox__btn--inc';
 	btnInc.type = 'button';
-	btnInc.textContent = '+';
+	btnInc.textContent = '\u25B4'; // small up triangle
 
-	wrap.appendChild(btnDec);
+	var btnDec = document.createElement('button');
+	btnDec.className = 'frw-spinbox__btn frw-spinbox__btn--dec';
+	btnDec.type = 'button';
+	btnDec.textContent = '\u25BE'; // small down triangle
+
+	var arrows = document.createElement('div');
+	arrows.className = 'frw-spinbox__arrows';
+	arrows.appendChild(btnInc);
+	arrows.appendChild(btnDec);
+
 	wrap.appendChild(input);
 	if (suffixEl) wrap.appendChild(suffixEl);
-	wrap.appendChild(btnInc);
+	wrap.appendChild(arrows);
 
 	function clamp(v) { return Math.max(min, Math.min(max, v)); }
 
@@ -226,11 +230,6 @@ FRWidget.DoubleSpinBox = function(opts) {
 	var wrap = document.createElement('div');
 	wrap.className = 'frw-spinbox';
 
-	var btnDec = document.createElement('button');
-	btnDec.className = 'frw-spinbox__btn frw-spinbox__btn--dec';
-	btnDec.type = 'button';
-	btnDec.textContent = '\u2212';
-
 	var input = document.createElement('input');
 	input.className = 'frw-spinbox__input';
 	input.type = 'text';
@@ -246,12 +245,21 @@ FRWidget.DoubleSpinBox = function(opts) {
 	var btnInc = document.createElement('button');
 	btnInc.className = 'frw-spinbox__btn frw-spinbox__btn--inc';
 	btnInc.type = 'button';
-	btnInc.textContent = '+';
+	btnInc.textContent = '\u25B4'; // small up triangle
 
-	wrap.appendChild(btnDec);
+	var btnDec = document.createElement('button');
+	btnDec.className = 'frw-spinbox__btn frw-spinbox__btn--dec';
+	btnDec.type = 'button';
+	btnDec.textContent = '\u25BE'; // small down triangle
+
+	var arrows = document.createElement('div');
+	arrows.className = 'frw-spinbox__arrows';
+	arrows.appendChild(btnInc);
+	arrows.appendChild(btnDec);
+
 	wrap.appendChild(input);
 	if (suffixEl) wrap.appendChild(suffixEl);
-	wrap.appendChild(btnInc);
+	wrap.appendChild(arrows);
 
 	function clamp(v) { return Math.max(min, Math.min(max, v)); }
 
