@@ -155,6 +155,7 @@ FontRig.SidebarConfig.defaults = {
 		minWidth:     200,
 		maxWidth:     800,
 		widgets: [
+			{ id: 'layer',      active: true },
 			{ id: 'node',       active: true },
 			{ id: 'xml',        active: true },
 			{ id: 'python',     active: true },

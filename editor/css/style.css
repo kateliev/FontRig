@@ -3005,3 +3005,239 @@ body {
 	text-align: center;
 	width: 28px;
 }
+
+/* ================================================================= */
+/* Layer Panel                                                       */
+/* ================================================================= */
+
+.layer-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	overflow: hidden;
+	height: 100%;
+}
+
+/* -- Header ------------------------------------------------------- */
+.lp-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 2px;
+	min-height: 28px;
+	flex-shrink: 0;
+}
+
+.lp-header__icon {
+	color: var(--text-dim);
+	font-size: 16px;
+}
+
+.lp-header__name {
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-primary);
+}
+
+/* -- Content options row ------------------------------------------ */
+.lp-options .frw-group__content {
+	gap: 4px;
+}
+
+/* -- Bottom groups: stay compact, don't steal from table ---------- */
+.layer-panel > .frw-group {
+	flex-shrink: 0;
+}
+
+.layer-panel > .lp-options {
+	flex-shrink: 0;
+}
+
+/* -- Layer Table -------------------------------------------------- */
+.lp-table {
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	overflow: hidden;
+	flex: 1 1 0;
+	min-height: 60px;
+	display: flex;
+	flex-direction: column;
+}
+
+.lp-table__header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	background: var(--bg-tertiary);
+	border-bottom: 1px solid var(--border);
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--text-dim);
+	user-select: none;
+}
+
+.lp-table__hcell--compat {
+	width: 18px;
+	flex-shrink: 0;
+	font-size: 12px;
+	text-align: center;
+}
+
+.lp-table__hcell--name {
+	flex: 1;
+}
+
+.lp-table__hcell--type {
+	width: 24px;
+	flex-shrink: 0;
+	text-align: center;
+}
+
+.lp-table__body {
+	overflow-y: auto;
+	flex: 1;
+}
+
+.lp-table__row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px;
+	cursor: pointer;
+	user-select: none;
+	border-bottom: 1px solid var(--border-subtle);
+	transition: background 0.15s;
+}
+
+.lp-table__row:last-child {
+	border-bottom: none;
+}
+
+.lp-table__row:hover {
+	background: var(--bg-hover);
+}
+
+.lp-table__row.selected {
+	background: var(--accent-bg);
+	outline: 1px solid var(--accent-dim);
+	outline-offset: -1px;
+}
+
+/* -- Active layer name -------------------------------------------- */
+.lp-table__cell--active {
+	font-weight: 600;
+}
+
+/* -- Compatibility row background tinting ------------------------- */
+.lp-row-compat--compatible {
+	background: rgba(80, 200, 120, 0.04);
+	border-left: 2px solid rgba(80, 200, 120, 0.35);
+}
+
+.lp-row-compat--semi {
+	background: rgba(240, 173, 78, 0.04);
+	border-left: 2px solid rgba(240, 173, 78, 0.35);
+}
+
+.lp-row-compat--incompatible {
+	background: rgba(228, 86, 73, 0.04);
+	border-left: 2px solid rgba(228, 86, 73, 0.35);
+}
+
+.lp-row-compat--compatible:hover { background: rgba(80, 200, 120, 0.08); }
+.lp-row-compat--semi:hover { background: rgba(240, 173, 78, 0.08); }
+.lp-row-compat--incompatible:hover { background: rgba(228, 86, 73, 0.08); }
+
+/* -- Drag and drop indicators ------------------------------------- */
+.lp-dragging {
+	opacity: 0.4;
+}
+
+.lp-drop-above {
+	box-shadow: 0 -2px 0 0 var(--accent) inset;
+}
+
+.lp-drop-below {
+	box-shadow: 0 2px 0 0 var(--accent) inset;
+}
+
+/* -- Active layer triangle indicator ------------------------------ */
+.lp-table__active-indicator {
+	width: 0;
+	height: 0;
+	border-top: 5px solid transparent;
+	border-bottom: 5px solid transparent;
+	border-left: 7px solid #50c878;
+	flex-shrink: 0;
+	margin: 0 4px 0 2px;
+}
+
+.lp-tri--compatible { border-left-color: #50c878; }
+.lp-tri--semi       { border-left-color: #f0ad4e; }
+.lp-tri--incompatible { border-left-color: #e45649; }
+
+/* -- Compatibility dot -------------------------------------------- */
+.lp-table__compat {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	margin: 0 4px 0 3px;
+}
+
+.lp-compat--compatible {
+	background: #50c878;
+}
+
+.lp-compat--semi {
+	background: #f0ad4e;
+}
+
+.lp-compat--incompatible {
+	background: #e45649;
+}
+
+/* -- Name cell ---------------------------------------------------- */
+.lp-table__cell--name {
+	flex: 1;
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 11px;
+	color: var(--text-primary);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* -- Type badge --------------------------------------------------- */
+.lp-table__badge {
+	width: 18px;
+	height: 18px;
+	border-radius: 3px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.lp-badge--master {
+	background: rgba(0, 255, 0, 0.10);
+	color: #50c878;
+}
+
+.lp-badge--mask {
+	background: rgba(255, 0, 0, 0.10);
+	color: #e45649;
+}
+
+.lp-badge--service {
+	background: rgba(0, 0, 255, 0.10);
+	color: #5b9def;
+}

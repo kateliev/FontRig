@@ -294,6 +294,7 @@ dom.layerSelect.addEventListener('change', function() {
 
 	FontRig.draw();
 	FontRig.buildXmlPanel();
+	FontRig.updateLayerPanel();
 });
 
 // ===================================================================
@@ -361,17 +362,20 @@ dom.fileInput.addEventListener('change', function(e) {
 });
 
 document.addEventListener('dragover', function(e) {
+	if (FontRig._internalDrag) return;
 	e.preventDefault();
 	dom.dropOverlay.classList.add('visible');
 });
 
 document.addEventListener('dragleave', function(e) {
+	if (FontRig._internalDrag) return;
 	if (e.relatedTarget === null || !document.contains(e.relatedTarget)) {
 		dom.dropOverlay.classList.remove('visible');
 	}
 });
 
 document.addEventListener('drop', function(e) {
+	if (FontRig._internalDrag) return;
 	e.preventDefault();
 	dom.dropOverlay.classList.remove('visible');
 	const file = e.dataTransfer.files[0];

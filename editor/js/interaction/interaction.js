@@ -171,6 +171,11 @@ FontRig.pushUndo = function() {
 			FontRig.refreshThumbnail(name);
 		}, 300);
 	}
+	// Debounced layer panel refresh (compatibility may have changed)
+	clearTimeout(FontRig._layerPanelRefreshTimer);
+	FontRig._layerPanelRefreshTimer = setTimeout(function() {
+		if (typeof FontRig.updateLayerPanel === 'function') FontRig.updateLayerPanel();
+	}, 200);
 };
 
 // Push undo for nudge with timer coalescing.

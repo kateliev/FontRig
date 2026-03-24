@@ -81,6 +81,19 @@ SBC.registerWidget({
 	}
 });
 
+// -- Layer Widget --------------------------------------------------
+SBC.registerWidget({
+	id:    'layer',
+	label: 'Layer',
+	icon:  'layer_actions',
+	mount: function(containerEl, ctx) {
+		return FontRig.LayerPanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.update();
+	}
+});
+
 // -- Node Widget ---------------------------------------------------
 SBC.registerWidget({
 	id:    'node',
@@ -166,11 +179,19 @@ FontRig.buildGlyphPanel = function() {
 	});
 };
 
-// -- updateGlyphPanelActive: update all glyph instances
+// -- updateLayerPanel: refresh all layer panel instances
+FontRig.updateLayerPanel = function() {
+	SBC.forEachInstance('layer', function(inst) {
+		inst.update();
+	});
+};
+
+// -- updateGlyphPanelActive: update all glyph instances + layer panel
 FontRig.updateGlyphPanelActive = function() {
 	SBC.forEachInstance('glyphs', function(inst) {
 		inst.updateActive();
 	});
+	FontRig.updateLayerPanel();
 };
 
 // -- updateGlyphPanelDirty: update all glyph instances
@@ -215,6 +236,9 @@ if (FontRig.switchGlyph) {
 		if (FontRig.Workplane) {
 			FontRig.Workplane.notifyGlyphChanged();
 		}
+
+		// Refresh layer panel for new glyph
+		FontRig.updateLayerPanel();
 
 		return result;
 	};
