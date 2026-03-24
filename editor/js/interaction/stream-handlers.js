@@ -226,6 +226,10 @@ FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 
 	FontRig.pushUndo();
 
+	// Ensure lerp snapshot is fresh (pushUndo also calls lerpEditStart,
+	// but call again to guarantee the snapshot matches the current state)
+	if (typeof FontRig.lerpEditStart === 'function') FontRig.lerpEditStart();
+
 	var gp;
 	FontRig._withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
 	var dragOrigin = { x: gp.x, y: gp.y };
@@ -287,8 +291,11 @@ FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 			continue;
 		}
 
+		// Transform stream event coords the same way as initial coords
+		var evtCoords = FontRig._interactionCoords(event.absSx, event.absSy);
+
 		FontRig._withActiveOffset(function() {
-			var dgp = FontRig.screenToGlyph(event.sx, event.sy);
+			var dgp = FontRig.screenToGlyph(evtCoords.sx, evtCoords.sy);
 
 			// Slide mode
 			if (slideData) {
@@ -354,6 +361,9 @@ FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 			}
 		});
 
+		// Live lerp: forward or reverse interpolation (mirrors moveSelectedNodes)
+		if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
+
 		FontRig.draw();
 		FontRig.updateStatusSelected();
 	}
@@ -397,13 +407,17 @@ FontRig._handleSegmentDrag = async function(stream, initialEvent, sx, sy, segHit
 	var dragOrigin = { x: gp.x, y: gp.y };
 
 	FontRig.pushUndo();
+	if (typeof FontRig.lerpEditStart === 'function') FontRig.lerpEditStart();
 	FontRig.dom.canvasWrap.style.cursor = 'move';
 
 	for await (var event of stream) {
 		if (event.sx === undefined) continue;
 
+		// Transform stream event coords the same way as initial coords
+		var evtCoords = FontRig._interactionCoords(event.absSx, event.absSy);
+
 		FontRig._withActiveOffset(function() {
-			var dgp = FontRig.screenToGlyph(event.sx, event.sy);
+			var dgp = FontRig.screenToGlyph(evtCoords.sx, evtCoords.sy);
 			var dx = dgp.x - dragOrigin.x;
 			var dy = dgp.y - dragOrigin.y;
 
@@ -421,6 +435,9 @@ FontRig._handleSegmentDrag = async function(stream, initialEvent, sx, sy, segHit
 			var movedHandles = new Set([h1Id, h2Id]);
 			FontRig.enforceSmoothCollinearity(movedHandles);
 		});
+
+		// Live lerp: forward or reverse interpolation
+		if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
 
 		FontRig.draw();
 		FontRig.updateStatusSelected();

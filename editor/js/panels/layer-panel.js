@@ -12,6 +12,8 @@
 //   - Content operations: swap, pull, push, clean
 //   - Contour operations: pull/push node positions
 //   - Visibility and type controls
+//   - Lerp layers: live interpolation between masters with
+//     reverse propagation for editing the interpolated result
 // ===================================================================
 'use strict';
 
@@ -100,6 +102,520 @@ FontRig.LayerPanel.checkCompatibility = function(refLayer, testLayer) {
 };
 
 // =====================================================================
+// LERP ENGINE — live interpolation layers with reverse propagation
+// =====================================================================
+// A lerp axis is stored per panel instance in inst._lerpAxes[].
+// Each axis: { name, masters: [name1, name2, ...], tx: 500, ty: 500 }
+// The actual lerp. layer lives in glyphData.layers like any other.
+// Forward: masters → lerp layer (recompute on any master edit)
+// Reverse: lerp layer edit → distribute delta back to masters
+// ---------------------------------------------------------------------
+
+FontRig.LayerPanel.Lerp = {};
+
+// -- Create a lerp axis from selected layers
+FontRig.LayerPanel.Lerp.createAxis = function(inst) {
+	var glyphData = FontRig.state.glyphData;
+	if (!glyphData) return;
+
+	var names = FontRig.LayerPanel._getSelectedLayerNames(inst);
+	if (names.length < 2) {
+		console.warn('[Lerp] Need at least 2 layers selected to create axis');
+		return;
+	}
+
+	// Check pairwise compatibility — require at least semi-compatible
+	var refLayer = FontRig.getLayerByName(glyphData, names[0]);
+	for (var i = 1; i < names.length; i++) {
+		var testLayer = FontRig.getLayerByName(glyphData, names[i]);
+		var compat = FontRig.LayerPanel.checkCompatibility(refLayer, testLayer);
+		if (compat.tier === 'incompatible') {
+			console.warn('[Lerp] Layers are incompatible:', names[0], '↔', names[i]);
+			return;
+		}
+	}
+
+	// Generate lerp layer name
+	var lerpName = 'lerp.' + names.join('+');
+
+	// Check if already exists
+	if (FontRig.getLayerByName(glyphData, lerpName)) {
+		console.warn('[Lerp] Axis already exists:', lerpName);
+		return;
+	}
+
+	if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
+
+	// Create the lerp layer (deep clone of first master as starting point)
+	var srcLayer = FontRig.getLayerByName(glyphData, names[0]);
+	var lerpLayer = JSON.parse(JSON.stringify(srcLayer));
+	lerpLayer.name = lerpName;
+	lerpLayer.identifier = '';
+	glyphData.layers.push(lerpLayer);
+
+	// Store axis definition on the instance
+	var axis = {
+		name: lerpName,
+		masters: names.slice(),
+		tx: 500,   // blend X (0–1000 → 0.0–1.0)
+		ty: 500    // blend Y (0–1000 → 0.0–1.0)
+	};
+
+	inst._lerpAxes.push(axis);
+
+	// Compute initial interpolation
+	FontRig.LayerPanel.Lerp._forward(inst, axis);
+
+	FontRig.LayerPanel._afterChange(inst, 'Create lerp axis: ' + lerpName);
+};
+
+// -- Remove a lerp axis
+FontRig.LayerPanel.Lerp.removeAxis = function(inst, axisName) {
+	var glyphData = FontRig.state.glyphData;
+	if (!glyphData) return;
+
+	// Find and remove axis definition
+	for (var i = inst._lerpAxes.length - 1; i >= 0; i--) {
+		if (inst._lerpAxes[i].name === axisName) {
+			inst._lerpAxes.splice(i, 1);
+			break;
+		}
+	}
+
+	if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
+
+	// Remove the lerp layer from glyph data
+	for (var j = glyphData.layers.length - 1; j >= 0; j--) {
+		if (glyphData.layers[j].name === axisName) {
+			glyphData.layers.splice(j, 1);
+			break;
+		}
+	}
+
+	// If active layer was the removed lerp, switch to first layer
+	if (FontRig.state.activeLayer === axisName && glyphData.layers.length > 0) {
+		FontRig.LayerPanel._setActiveLayer(inst, glyphData.layers[0].name);
+	}
+
+	FontRig.LayerPanel._afterChange(inst, 'Remove lerp axis: ' + axisName);
+};
+
+// -- Forward interpolation: recompute lerp layer from masters
+FontRig.LayerPanel.Lerp._forward = function(inst, axis) {
+	var glyphData = FontRig.state.glyphData;
+	if (!glyphData) return;
+
+	var lerpLayer = FontRig.getLayerByName(glyphData, axis.name);
+	if (!lerpLayer) return;
+
+	var masterLayers = [];
+	for (var i = 0; i < axis.masters.length; i++) {
+		var ml = FontRig.getLayerByName(glyphData, axis.masters[i]);
+		if (!ml) return;
+		masterLayers.push(ml);
+	}
+
+	if (masterLayers.length < 2) return;
+
+	var tx = axis.tx / 1000;  // 0.0 – 1.0
+	var ty = axis.ty / 1000;
+
+	if (masterLayers.length === 2) {
+		// Simple two-master lerp
+		FontRig.LayerPanel.Lerp._lerpTwo(masterLayers[0], masterLayers[1], lerpLayer, tx, ty);
+	} else {
+		// N-master: subdivide evenly along t
+		// e.g. 3 masters at t=0, 0.5, 1.0
+		FontRig.LayerPanel.Lerp._lerpN(masterLayers, lerpLayer, tx, ty);
+	}
+
+	// Invalidate path cache so the outline redraws
+	FontRig.invalidatePathCache(lerpLayer);
+};
+
+// -- Two-master interpolation
+FontRig.LayerPanel.Lerp._lerpTwo = function(layerA, layerB, dst, tx, ty) {
+	var nodesA = FontRig.LayerPanel.Lerp._flatNodes(layerA);
+	var nodesB = FontRig.LayerPanel.Lerp._flatNodes(layerB);
+	var nodesDst = FontRig.LayerPanel.Lerp._flatNodes(dst);
+
+	var count = Math.min(nodesA.length, nodesB.length, nodesDst.length);
+	for (var i = 0; i < count; i++) {
+		nodesDst[i].ref.x = nodesA[i].x * (1 - tx) + nodesB[i].x * tx;
+		nodesDst[i].ref.y = nodesA[i].y * (1 - ty) + nodesB[i].y * ty;
+	}
+
+	// Interpolate width
+	dst.width = layerA.width * (1 - tx) + layerB.width * tx;
+};
+
+// -- N-master interpolation (piecewise linear)
+FontRig.LayerPanel.Lerp._lerpN = function(masters, dst, tx, ty) {
+	var n = masters.length;
+	// Compute which segment we're in
+	var segCount = n - 1;
+	var segT = tx * segCount;
+	var segIdx = Math.min(Math.floor(segT), segCount - 1);
+	var localT = segT - segIdx;
+
+	var segTy = ty * segCount;
+	var segIdxY = Math.min(Math.floor(segTy), segCount - 1);
+	var localTy = segTy - segIdxY;
+
+	var layerA = masters[segIdx];
+	var layerB = masters[segIdx + 1];
+	var layerAy = masters[segIdxY];
+	var layerBy = masters[segIdxY + 1];
+
+	var nodesA = FontRig.LayerPanel.Lerp._flatNodes(layerA);
+	var nodesB = FontRig.LayerPanel.Lerp._flatNodes(layerB);
+	var nodesAy = FontRig.LayerPanel.Lerp._flatNodes(layerAy);
+	var nodesBy = FontRig.LayerPanel.Lerp._flatNodes(layerBy);
+	var nodesDst = FontRig.LayerPanel.Lerp._flatNodes(dst);
+
+	var count = Math.min(nodesA.length, nodesB.length, nodesDst.length);
+	for (var i = 0; i < count; i++) {
+		nodesDst[i].ref.x = nodesA[i].x * (1 - localT) + nodesB[i].x * localT;
+		nodesDst[i].ref.y = nodesAy[i].y * (1 - localTy) + nodesBy[i].y * localTy;
+	}
+
+	// Width: use X axis blend
+	dst.width = layerA.width * (1 - localT) + layerB.width * localT;
+};
+
+// -- Reverse propagation: distribute delta from lerp edit back to masters
+// Policy: proportional — nearer master absorbs more of the change.
+// For 2 masters at blend t: A += Δ·(1−t), B += Δ·t
+FontRig.LayerPanel.Lerp._reverse = function(inst, axis, prevSnapshot) {
+	var glyphData = FontRig.state.glyphData;
+	if (!glyphData) return;
+
+	var lerpLayer = FontRig.getLayerByName(glyphData, axis.name);
+	if (!lerpLayer) return;
+
+	var masterLayers = [];
+	for (var i = 0; i < axis.masters.length; i++) {
+		var ml = FontRig.getLayerByName(glyphData, axis.masters[i]);
+		if (!ml) return;
+		masterLayers.push(ml);
+	}
+
+	var tx = axis.tx / 1000;
+	var ty = axis.ty / 1000;
+	var currentNodes = FontRig.LayerPanel.Lerp._flatNodes(lerpLayer);
+	var prevNodes = prevSnapshot; // array of {x, y}
+
+	if (!prevNodes || currentNodes.length !== prevNodes.length) return;
+
+	if (masterLayers.length === 2) {
+		var nodesA = FontRig.LayerPanel.Lerp._flatNodes(masterLayers[0]);
+		var nodesB = FontRig.LayerPanel.Lerp._flatNodes(masterLayers[1]);
+		var count = Math.min(nodesA.length, nodesB.length, currentNodes.length);
+
+		for (var i = 0; i < count; i++) {
+			var dx = currentNodes[i].ref.x - prevNodes[i].x;
+			var dy = currentNodes[i].ref.y - prevNodes[i].y;
+			if (dx === 0 && dy === 0) continue;
+
+			// Proportional distribution
+			nodesA[i].ref.x += dx * (1 - tx);
+			nodesA[i].ref.y += dy * (1 - ty);
+			nodesB[i].ref.x += dx * tx;
+			nodesB[i].ref.y += dy * ty;
+		}
+
+		// Width delta
+		var dw = lerpLayer.width - (masterLayers[0].width * (1 - tx) + masterLayers[1].width * tx);
+		if (dw !== 0) {
+			masterLayers[0].width += dw * (1 - tx);
+			masterLayers[1].width += dw * tx;
+		}
+	} else {
+		// N-master: compute weights per master
+		var n = masterLayers.length;
+		var segCount = n - 1;
+
+		// X-axis segment
+		var segT = tx * segCount;
+		var segIdx = Math.min(Math.floor(segT), segCount - 1);
+		var localT = segT - segIdx;
+
+		// Y-axis segment
+		var segTy = ty * segCount;
+		var segIdxY = Math.min(Math.floor(segTy), segCount - 1);
+		var localTy = segTy - segIdxY;
+
+		var masterNodesArr = [];
+		for (var m = 0; m < n; m++) {
+			masterNodesArr.push(FontRig.LayerPanel.Lerp._flatNodes(masterLayers[m]));
+		}
+
+		var count = currentNodes.length;
+		for (var i = 0; i < count; i++) {
+			var dx = currentNodes[i].ref.x - prevNodes[i].x;
+			var dy = currentNodes[i].ref.y - prevNodes[i].y;
+			if (dx === 0 && dy === 0) continue;
+
+			// X: distribute to the two masters in the active segment
+			if (masterNodesArr[segIdx] && masterNodesArr[segIdx + 1]) {
+				masterNodesArr[segIdx][i].ref.x += dx * (1 - localT);
+				masterNodesArr[segIdx + 1][i].ref.x += dx * localT;
+			}
+
+			// Y: distribute to the two masters in the active Y segment
+			if (masterNodesArr[segIdxY] && masterNodesArr[segIdxY + 1]) {
+				masterNodesArr[segIdxY][i].ref.y += dy * (1 - localTy);
+				masterNodesArr[segIdxY + 1][i].ref.y += dy * localTy;
+			}
+		}
+	}
+
+	// Invalidate path caches for all affected master layers
+	for (var m = 0; m < masterLayers.length; m++) {
+		FontRig.invalidatePathCache(masterLayers[m]);
+	}
+};
+
+// -- Snapshot lerp layer node positions (for computing deltas in reverse)
+FontRig.LayerPanel.Lerp._snapshot = function(lerpLayer) {
+	var nodes = FontRig.LayerPanel.Lerp._flatNodes(lerpLayer);
+	var snap = [];
+	for (var i = 0; i < nodes.length; i++) {
+		snap.push({ x: nodes[i].ref.x, y: nodes[i].ref.y });
+	}
+	return snap;
+};
+
+// -- Flatten all nodes in a layer to an array of { x, y, ref }
+// ref points to the actual node object for direct mutation
+FontRig.LayerPanel.Lerp._flatNodes = function(layer) {
+	var result = [];
+	if (!layer || !layer.shapes) return result;
+	for (var si = 0; si < layer.shapes.length; si++) {
+		var shape = layer.shapes[si];
+		for (var ci = 0; ci < shape.contours.length; ci++) {
+			var contour = shape.contours[ci];
+			for (var ni = 0; ni < contour.nodes.length; ni++) {
+				var node = contour.nodes[ni];
+				result.push({ x: node.x, y: node.y, ref: node });
+			}
+		}
+	}
+	return result;
+};
+
+// -- Run forward interpolation for ALL axes in this instance
+FontRig.LayerPanel.Lerp.updateAll = function(inst) {
+	if (!inst._lerpAxes || !inst._lerpAxes.length) return;
+	for (var i = 0; i < inst._lerpAxes.length; i++) {
+		FontRig.LayerPanel.Lerp._forward(inst, inst._lerpAxes[i]);
+	}
+};
+
+// -- Find axis by lerp layer name
+FontRig.LayerPanel.Lerp.findAxis = function(inst, lerpLayerName) {
+	if (!inst._lerpAxes) return null;
+	for (var i = 0; i < inst._lerpAxes.length; i++) {
+		if (inst._lerpAxes[i].name === lerpLayerName) return inst._lerpAxes[i];
+	}
+	return null;
+};
+
+// -- Check if a layer name is a master in any lerp axis
+FontRig.LayerPanel.Lerp.isMasterInAnyAxis = function(inst, layerName) {
+	if (!inst._lerpAxes) return false;
+	for (var i = 0; i < inst._lerpAxes.length; i++) {
+		if (inst._lerpAxes[i].masters.indexOf(layerName) !== -1) return true;
+	}
+	return false;
+};
+
+// -- Check if a layer name is a lerp layer
+FontRig.LayerPanel.Lerp.isLerpLayer = function(name) {
+	return name.indexOf('lerp.') === 0;
+};
+
+// =====================================================================
+// LERP UI — build lerp group rows in the table
+// =====================================================================
+
+FontRig.LayerPanel.Lerp._buildGroupUI = function(inst, axis, body) {
+	var glyphData = FontRig.state.glyphData;
+	var activeLayerName = FontRig.state.activeLayer;
+	var isLerpActive = (activeLayerName === axis.name);
+
+	// Determine compatibility of the lerp layer
+	var lerpLayer = FontRig.getLayerByName(glyphData, axis.name);
+	var activeLayer = FontRig.getActiveLayer();
+	var compat = { tier: 'compatible', contours: [] };
+	if (lerpLayer && activeLayer && axis.name !== activeLayerName) {
+		compat = FontRig.LayerPanel.checkCompatibility(activeLayer, lerpLayer);
+	}
+
+	// -- Lerp header row
+	var hdr = document.createElement('div');
+	hdr.className = 'lp-table__row lp-lerp-header lp-row-compat--' + compat.tier;
+	if (isLerpActive) hdr.classList.add('lp-row--active');
+	hdr.dataset.layer = axis.name;
+	hdr.dataset.lerp = 'true';
+
+	// Indicator (triangle if active, dot otherwise)
+	var indicator = document.createElement('span');
+	if (isLerpActive) {
+		indicator.className = 'lp-table__active-indicator lp-tri--' + compat.tier;
+		indicator.title = 'Active lerp layer';
+	} else {
+		indicator.className = 'lp-table__compat lp-compat--' + compat.tier;
+	}
+	hdr.appendChild(indicator);
+
+	// Icon: interpolate
+	var ico = FRWidget.icon('interpolate');
+	ico.className += ' lp-lerp-icon';
+	hdr.appendChild(ico);
+
+	// Name
+	var nameEl = document.createElement('span');
+	nameEl.className = 'lp-table__cell lp-table__cell--name';
+	if (isLerpActive) nameEl.classList.add('lp-table__cell--active');
+	nameEl.textContent = axis.name;
+	hdr.appendChild(nameEl);
+
+	// Remove axis button
+	var removeBtn = document.createElement('span');
+	removeBtn.className = 'lp-lerp-remove';
+	removeBtn.title = 'Remove lerp axis';
+	removeBtn.textContent = '×';
+	removeBtn.addEventListener('click', function(e) {
+		e.stopPropagation();
+		FontRig.LayerPanel.Lerp.removeAxis(inst, axis.name);
+	});
+	hdr.appendChild(removeBtn);
+
+	// Click to select
+	hdr.addEventListener('click', function(e) {
+		FontRig.LayerPanel._onRowClick(inst, hdr, e);
+	});
+
+	// Double-click to activate
+	hdr.addEventListener('dblclick', function() {
+		FontRig.LayerPanel._setActiveLayer(inst, axis.name);
+	});
+
+	body.appendChild(hdr);
+	inst._rows.push({ el: hdr, name: axis.name, type: 'Lerp', compat: compat, layerIdx: -1, isLerpHeader: true });
+
+	// -- Master child rows (indented)
+	for (var mi = 0; mi < axis.masters.length; mi++) {
+		var mName = axis.masters[mi];
+		var childRow = document.createElement('div');
+		childRow.className = 'lp-table__row lp-lerp-child';
+		childRow.dataset.layer = mName;
+
+		var treeGlyph = document.createElement('span');
+		treeGlyph.className = 'lp-lerp-tree';
+		treeGlyph.textContent = (mi < axis.masters.length - 1) ? '├' : '└';
+		childRow.appendChild(treeGlyph);
+
+		var childName = document.createElement('span');
+		childName.className = 'lp-table__cell lp-table__cell--name lp-lerp-child-name';
+		childName.textContent = mName;
+		childRow.appendChild(childName);
+
+		body.appendChild(childRow);
+	}
+
+	// -- Blend controls row
+	var ctrlRow = document.createElement('div');
+	ctrlRow.className = 'lp-lerp-controls';
+
+	// X slider
+	var xWrap = document.createElement('div');
+	xWrap.className = 'lp-lerp-slider-row';
+
+	var xLabel = document.createElement('span');
+	xLabel.className = 'lp-lerp-slider-label';
+	xLabel.textContent = 'X';
+	xWrap.appendChild(xLabel);
+
+	var xSlider = document.createElement('input');
+	xSlider.type = 'range';
+	xSlider.className = 'lp-lerp-slider';
+	xSlider.min = 0;
+	xSlider.max = 1000;
+	xSlider.step = 1;
+	xSlider.value = axis.tx;
+	xWrap.appendChild(xSlider);
+
+	var xSpin = document.createElement('input');
+	xSpin.type = 'text';
+	xSpin.className = 'lp-lerp-spin';
+	xSpin.value = axis.tx;
+	xWrap.appendChild(xSpin);
+
+	ctrlRow.appendChild(xWrap);
+
+	// Y slider
+	var yWrap = document.createElement('div');
+	yWrap.className = 'lp-lerp-slider-row';
+
+	var yLabel = document.createElement('span');
+	yLabel.className = 'lp-lerp-slider-label';
+	yLabel.textContent = 'Y';
+	yWrap.appendChild(yLabel);
+
+	var ySlider = document.createElement('input');
+	ySlider.type = 'range';
+	ySlider.className = 'lp-lerp-slider';
+	ySlider.min = 0;
+	ySlider.max = 1000;
+	ySlider.step = 1;
+	ySlider.value = axis.ty;
+	yWrap.appendChild(ySlider);
+
+	var ySpin = document.createElement('input');
+	ySpin.type = 'text';
+	ySpin.className = 'lp-lerp-spin';
+	ySpin.value = axis.ty;
+	yWrap.appendChild(ySpin);
+
+	ctrlRow.appendChild(yWrap);
+
+	// Wire sliders ↔ spinboxes
+	function onBlendChange() {
+		axis.tx = parseInt(xSlider.value, 10);
+		axis.ty = parseInt(ySlider.value, 10);
+		xSpin.value = axis.tx;
+		ySpin.value = axis.ty;
+		FontRig.LayerPanel.Lerp._forward(inst, axis);
+		FontRig.draw();
+	}
+
+	xSlider.addEventListener('input', onBlendChange);
+	ySlider.addEventListener('input', onBlendChange);
+
+	xSpin.addEventListener('change', function() {
+		var v = Math.max(0, Math.min(1000, parseInt(xSpin.value, 10) || 0));
+		xSlider.value = v;
+		xSpin.value = v;
+		axis.tx = v;
+		FontRig.LayerPanel.Lerp._forward(inst, axis);
+		FontRig.draw();
+	});
+
+	ySpin.addEventListener('change', function() {
+		var v = Math.max(0, Math.min(1000, parseInt(ySpin.value, 10) || 0));
+		ySlider.value = v;
+		ySpin.value = v;
+		axis.ty = v;
+		FontRig.LayerPanel.Lerp._forward(inst, axis);
+		FontRig.draw();
+	});
+
+	body.appendChild(ctrlRow);
+};
+
+// =====================================================================
 // LAYER TABLE — selectable rows with type & compatibility badges
 // =====================================================================
 
@@ -146,12 +662,31 @@ FontRig.LayerPanel._populateTable = function(inst) {
 	var activeLayer = FontRig.getActiveLayer();
 	var activeLayerName = activeLayer ? activeLayer.name : '';
 
+	// -- Collect lerp layer names so we skip them in the regular list
+	var lerpNames = {};
+	if (inst._lerpAxes) {
+		for (var li = 0; li < inst._lerpAxes.length; li++) {
+			lerpNames[inst._lerpAxes[li].name] = true;
+		}
+	}
+
+	// -- Render lerp axis groups at the top
+	if (inst._lerpAxes) {
+		for (var ai = 0; ai < inst._lerpAxes.length; ai++) {
+			FontRig.LayerPanel.Lerp._buildGroupUI(inst, inst._lerpAxes[ai], body);
+		}
+	}
+
+	// -- Render regular layers (skip lerp. layers)
 	for (var i = 0; i < glyphData.layers.length; i++) {
 		var layer = glyphData.layers[i];
 		var lname = layer.name;
 
 		// Skip hidden layers
 		if (lname.indexOf('#') !== -1) continue;
+
+		// Skip lerp layers — they are rendered above as groups
+		if (lerpNames[lname]) continue;
 
 		// Determine type
 		var ltype = 'Master';
@@ -1087,6 +1622,13 @@ FontRig.LayerPanel._afterChange = function(inst, msg) {
 	// Mark dirty
 	if (typeof FontRig.markDirty === 'function') FontRig.markDirty();
 
+	// Run forward interpolation on all lerp axes (a master may have changed)
+	if (!inst._isLerpUpdate) {
+		inst._isLerpUpdate = true;
+		FontRig.LayerPanel.Lerp.updateAll(inst);
+		inst._isLerpUpdate = false;
+	}
+
 	// Refresh panel
 	inst.update();
 
@@ -1114,6 +1656,9 @@ FontRig.LayerPanel.mount = function(containerEl, ctx) {
 		_hiddenLayers: new Set(),
 		_contourClipboard: null,
 		_dragIdx: null,
+		_lerpAxes: [],          // Lerp axis definitions
+		_lerpSnapshot: null,    // Pre-edit snapshot for reverse propagation
+		_isLerpUpdate: false,   // Guard against circular updates
 		_opt: {
 			outline: true,
 			anchors: false,
@@ -1240,6 +1785,39 @@ FontRig.LayerPanel.mount = function(containerEl, ctx) {
 	content.appendChild(grpActions);
 
 	// =================================================================
+	// 4b. INTERPOLATION — set axis, remove axis
+	// =================================================================
+	var grpLerp = FRWidget.GroupBox('Interpolation');
+
+	grpLerp.addWidget(FRWidget.Button(null, {
+		icon: 'axis_set', tooltip: 'Set lerp axis from selected layers',
+		onClick: function() { FontRig.LayerPanel.Lerp.createAxis(inst); }
+	}));
+
+	grpLerp.addWidget(FRWidget.Button(null, {
+		icon: 'axis_remove', tooltip: 'Remove lerp axis for selected layer',
+		onClick: function() {
+			var names = FontRig.LayerPanel._getSelectedLayerNames(inst);
+			for (var i = 0; i < names.length; i++) {
+				if (FontRig.LayerPanel.Lerp.isLerpLayer(names[i])) {
+					FontRig.LayerPanel.Lerp.removeAxis(inst, names[i]);
+					return;
+				}
+			}
+		}
+	}));
+
+	grpLerp.addWidget(FRWidget.Button(null, {
+		icon: 'extrapolate', tooltip: 'Toggle extrapolation (allow values beyond 0–1000)',
+		onClick: function() {
+			// Future: toggle extrapolation mode
+			console.log('[Lerp] Extrapolation toggle — not yet implemented');
+		}
+	}));
+
+	content.appendChild(grpLerp);
+
+	// =================================================================
 	// 5. CONTENT OPERATIONS — swap, pull, push, clean
 	// =================================================================
 	var grpContent = FRWidget.GroupBox('Content');
@@ -1309,7 +1887,52 @@ FontRig.LayerPanel.mount = function(containerEl, ctx) {
 	inst.update = function() {
 		inst._glyphName.textContent = FontRig.state.glyphData ? FontRig.state.glyphData.name : '—';
 		inst._selectedNames = FontRig.LayerPanel._getSelectedLayerNames(inst);
+
+		// Prune stale lerp axes (whose lerp layer no longer exists)
+		if (inst._lerpAxes && FontRig.state.glyphData) {
+			for (var li = inst._lerpAxes.length - 1; li >= 0; li--) {
+				if (!FontRig.getLayerByName(FontRig.state.glyphData, inst._lerpAxes[li].name)) {
+					inst._lerpAxes.splice(li, 1);
+				}
+			}
+		}
+
 		FontRig.LayerPanel._populateTable(inst);
+	};
+
+	// Called by the drawing/editing pipeline on every change
+	inst.onGlyphEdit = function() {
+		if (inst._isLerpUpdate) return; // prevent circular
+		inst._isLerpUpdate = true;
+
+		var activeName = FontRig.state.activeLayer;
+
+		if (FontRig.LayerPanel.Lerp.isLerpLayer(activeName)) {
+			// Active layer IS a lerp layer — run reverse propagation
+			var axis = FontRig.LayerPanel.Lerp.findAxis(inst, activeName);
+			if (axis && inst._lerpSnapshot) {
+				FontRig.LayerPanel.Lerp._reverse(inst, axis, inst._lerpSnapshot);
+				// Re-snapshot after reverse
+				var lerpLayer = FontRig.getLayerByName(FontRig.state.glyphData, activeName);
+				if (lerpLayer) inst._lerpSnapshot = FontRig.LayerPanel.Lerp._snapshot(lerpLayer);
+			}
+		} else {
+			// Active layer is a regular layer — run forward on all axes
+			FontRig.LayerPanel.Lerp.updateAll(inst);
+		}
+
+		inst._isLerpUpdate = false;
+	};
+
+	// Snapshot before edit begins (called on mousedown/toolstart)
+	inst.onEditStart = function() {
+		var activeName = FontRig.state.activeLayer;
+		if (FontRig.LayerPanel.Lerp.isLerpLayer(activeName)) {
+			var lerpLayer = FontRig.getLayerByName(FontRig.state.glyphData, activeName);
+			if (lerpLayer) {
+				inst._lerpSnapshot = FontRig.LayerPanel.Lerp._snapshot(lerpLayer);
+			}
+		}
 	};
 
 	inst.onMainWindowEvent = function(eventType) {};

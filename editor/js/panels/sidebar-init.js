@@ -186,6 +186,20 @@ FontRig.updateLayerPanel = function() {
 	});
 };
 
+// -- lerpEditStart: snapshot lerp layer before editing begins
+FontRig.lerpEditStart = function() {
+	SBC.forEachInstance('layer', function(inst) {
+		if (inst.onEditStart) inst.onEditStart();
+	});
+};
+
+// -- lerpSync: run forward/reverse interpolation after node changes
+FontRig.lerpSync = function() {
+	SBC.forEachInstance('layer', function(inst) {
+		if (inst.onGlyphEdit) inst.onGlyphEdit();
+	});
+};
+
 // -- updateGlyphPanelActive: update all glyph instances + layer panel
 FontRig.updateGlyphPanelActive = function() {
 	SBC.forEachInstance('glyphs', function(inst) {

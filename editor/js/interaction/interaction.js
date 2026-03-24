@@ -176,6 +176,9 @@ FontRig.pushUndo = function() {
 	FontRig._layerPanelRefreshTimer = setTimeout(function() {
 		if (typeof FontRig.updateLayerPanel === 'function') FontRig.updateLayerPanel();
 	}, 200);
+
+	// Snapshot lerp layers for reverse propagation
+	if (typeof FontRig.lerpEditStart === 'function') FontRig.lerpEditStart();
 };
 
 // Push undo for nudge with timer coalescing.
@@ -2785,6 +2788,9 @@ FontRig.moveSelectedNodes = function(dx, dy) {
 
 	// Enforce smooth tangent continuity on neighbors
 	FontRig.enforceSmoothForKeys(sel, dx, dy);
+
+	// Live lerp: forward or reverse interpolation
+	if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
 
 	// Invalidate Path2D cache and redraw
 	FontRig.invalidatePathCache();
