@@ -3330,9 +3330,45 @@ body {
 
 .lp-lerp-slider {
 	flex: 1;
-	height: 14px;
+	height: 12px;
 	cursor: pointer;
-	accent-color: var(--accent);
+	-webkit-appearance: none;
+	appearance: none;
+	background: transparent;
+}
+
+.lp-lerp-slider::-webkit-slider-runnable-track {
+	height: 1px;
+	background: var(--border);
+	border-radius: 0;
+}
+
+.lp-lerp-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--accent);
+	border: none;
+	margin-top: -4px;
+	cursor: pointer;
+}
+
+.lp-lerp-slider::-moz-range-track {
+	height: 1px;
+	background: var(--border);
+	border: none;
+	border-radius: 0;
+}
+
+.lp-lerp-slider::-moz-range-thumb {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--accent);
+	border: none;
+	cursor: pointer;
 }
 
 .lp-lerp-spin {
