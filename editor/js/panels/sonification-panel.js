@@ -125,8 +125,9 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	grpSweep.addWidget(sweepRow);
 
 	var lblSweepHint = FRWidget.Label(
-		'Spatial sweep lets you compare opposing contour sides\n' +
-		'(e.g. both edges of a stem) in the same direction.',
+		'Reverses playback of contours that flow against the\n' +
+		'chosen direction so opposing sides play in sync.\n' +
+		'Reversed voices show \u21C4 in the analysis info.',
 		{ dim: true }
 	);
 	lblSweepHint.style.display = 'block';
@@ -462,8 +463,6 @@ function _drawCurvature(inst, analyses) {
 	// Update info label
 	if (inst._lblInfo) {
 		var lines = [];
-		var sweep = analyses[0].sweepDirection || 'path';
-		lines.push('sweep: ' + sweep);
 		for (var a = 0; a < analyses.length; a++) {
 			var an = analyses[a];
 			var maxK = 0, minK = Infinity;
@@ -473,8 +472,9 @@ function _drawCurvature(inst, analyses) {
 				if (absK < minK) minK = absK;
 			}
 			lines.push(
-				'Voice ' + (a + 1) + ': ' +
-				'len=' + Math.round(an.totalLength) +
+				'Voice ' + (a + 1) +
+				(an.reversed ? ' \u21C4' : '') +    // ⇄ arrow when reversed
+				': len=' + Math.round(an.totalLength) +
 				'  K=[' + minK.toFixed(4) + ', ' + maxK.toFixed(4) + ']' +
 				'  infl=' + an.inflections.length
 			);

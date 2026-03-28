@@ -61,13 +61,18 @@ var _settings   = {
 	// Multi-voice
 	stereoSpread: 0.8,      // 0-1: how far voices are panned
 
-	// Sweep direction — how samples are ordered in time
-	// 'path'        : walk along contour in its native direction
-	// 'bottom-top'  : sort by Y ascending  (stem comparison)
-	// 'top-bottom'  : sort by Y descending
-	// 'left-right'  : sort by X ascending  (crossbar comparison)
-	// 'right-left'  : sort by X descending
+	// Sweep direction — aligns opposing contours for comparison.
+	// Walks the path normally but reverses playback when the contour
+	// flows against the chosen direction.
+	// 'path'        : native contour direction (no reversal)
+	// 'bottom-top'  : reverse if contour flows downward  (stem comparison)
+	// 'top-bottom'  : reverse if contour flows upward
+	// 'left-right'  : reverse if contour flows rightward (crossbar comparison)
+	// 'right-left'  : reverse if contour flows leftward
 	sweepDirection: 'bottom-top',
+
+	// Looping
+	loop: false,
 };
 
 // -- Public getters/setters -----------------------------------------
@@ -328,25 +333,18 @@ function _extractSegments(contour) {
 // ===================================================================
 // Curvature analysis
 // ===================================================================
-// Returns { kappa[], dKappa[], arcT[], positions[], inflections[],
-//           totalLength, sweepDirection }
+// Returns { kappa[], dKappa[], arcT[], inflections[],
+//           totalLength, reversed }
 //
-// The sweep direction setting controls the playback order:
-//   'path'       — native contour walk order (arc-length)
-//   'bottom-top' — re-sort samples by Y ascending
-//   'top-bottom' — re-sort samples by Y descending
-//   'left-right' — re-sort samples by X ascending
-//   'right-left' — re-sort samples by X descending
-//
-// For spatial sweeps the curvature is re-parameterized so that
-// two opposing contour sides (e.g. left and right edges of a stem)
-// are both played in the same spatial direction, enabling direct
-// auditory comparison of their profiles.
+// Walk along the path at uniform arc-length (smooth, no artefacts).
+// If sweepDirection is not 'path', check the net direction of the
+// segment run and REVERSE the arrays when the contour flows against
+// the desired direction.  This keeps the smooth walk intact — just
+// plays it backwards so opposing contour sides are aligned in time.
 function _analyzeCurvature(segments, sampleCount) {
-	if (segments.length === 0) {
-		return { kappa: [], dKappa: [], arcT: [], positions: [],
-				 inflections: [], totalLength: 0, sweepDirection: _settings.sweepDirection };
-	}
+	var empty = { kappa: [], dKappa: [], arcT: [], inflections: [],
+				  totalLength: 0, reversed: false };
+	if (segments.length === 0) return empty;
 
 	// Compute total arc length
 	var segLengths = [];
@@ -356,16 +354,17 @@ function _analyzeCurvature(segments, sampleCount) {
 		segLengths.push(len);
 		totalLength += len;
 	}
-
-	if (totalLength === 0) {
-		return { kappa: [], dKappa: [], arcT: [], positions: [],
-				 inflections: [], totalLength: 0, sweepDirection: _settings.sweepDirection };
-	}
+	if (totalLength === 0) return empty;
 
 	// ------------------------------------------------------------------
-	// Phase 1: Sample curvature AND position at uniform arc-length
+	// Sample curvature at uniform arc-length intervals
 	// ------------------------------------------------------------------
-	var samples = [];  // { k, x, y, arcNorm }
+	var kappa = [];
+	var arcT  = [];
+
+	// We also need start and end positions to decide reversal
+	var startPos = null;
+	var endPos   = null;
 
 	for (var i = 0; i < sampleCount; i++) {
 		var targetDist = (i / (sampleCount - 1)) * totalLength;
@@ -384,61 +383,53 @@ function _analyzeCurvature(segments, sampleCount) {
 			cumDist += segLengths[s];
 		}
 
-		// Convert arc distance to t parameter (linear approximation)
 		var localT = segLengths[segIdx] > 0 ? localDist / segLengths[segIdx] : 0;
 		localT = Math.max(0, Math.min(1, localT));
 
-		// Get curvature
 		var k = _curvatureAt(segments[segIdx], localT);
 		if (!isFinite(k)) k = 0;
 
-		// Get position
-		var pos = _pointOnSegment(segments[segIdx], localT);
+		kappa.push(k);
+		arcT.push(i / (sampleCount - 1));
 
-		samples.push({
-			k:       k,
-			x:       pos.x,
-			y:       pos.y,
-			arcNorm: i / (sampleCount - 1),
-		});
+		// Capture endpoints for direction check
+		if (i === 0) startPos = _pointOnSegment(segments[segIdx], localT);
+		if (i === sampleCount - 1) endPos = _pointOnSegment(segments[segIdx], localT);
 	}
 
 	// ------------------------------------------------------------------
-	// Phase 2: Re-sort by sweep direction (if not 'path')
+	// Direction alignment: reverse if contour flows against sweep
 	// ------------------------------------------------------------------
+	var reversed = false;
 	var dir = _settings.sweepDirection;
 
-	if (dir && dir !== 'path') {
-		samples.sort(function(a, b) {
-			switch (dir) {
-				case 'bottom-top':
-					return a.y !== b.y ? a.y - b.y : a.x - b.x;
-				case 'top-bottom':
-					return a.y !== b.y ? b.y - a.y : a.x - b.x;
-				case 'left-right':
-					return a.x !== b.x ? a.x - b.x : a.y - b.y;
-				case 'right-left':
-					return a.x !== b.x ? b.x - a.x : a.y - b.y;
-				default:
-					return 0;
-			}
-		});
+	if (dir && dir !== 'path' && startPos && endPos) {
+		var needsReverse = false;
+
+		switch (dir) {
+			case 'bottom-top':
+				needsReverse = (endPos.y < startPos.y);  // contour runs top→bottom
+				break;
+			case 'top-bottom':
+				needsReverse = (endPos.y > startPos.y);  // contour runs bottom→top
+				break;
+			case 'left-right':
+				needsReverse = (endPos.x < startPos.x);  // contour runs right→left
+				break;
+			case 'right-left':
+				needsReverse = (endPos.x > startPos.x);  // contour runs left→right
+				break;
+		}
+
+		if (needsReverse) {
+			kappa.reverse();
+			reversed = true;
+		}
 	}
 
 	// ------------------------------------------------------------------
-	// Phase 3: Extract ordered arrays from (possibly re-sorted) samples
+	// Compute dKappa and inflections on the (possibly reversed) data
 	// ------------------------------------------------------------------
-	var kappa     = [];
-	var arcT      = [];
-	var positions = [];
-
-	for (var i = 0; i < samples.length; i++) {
-		kappa.push(samples[i].k);
-		arcT.push(i / (sampleCount - 1));  // re-normalized after sort
-		positions.push({ x: samples[i].x, y: samples[i].y });
-	}
-
-	// Compute curvature derivative (rate of change) on the re-ordered data
 	var dKappa = [];
 	for (var i = 0; i < kappa.length; i++) {
 		if (i === 0) {
@@ -450,7 +441,6 @@ function _analyzeCurvature(segments, sampleCount) {
 		}
 	}
 
-	// Detect inflection points (sign changes in curvature)
 	var inflections = [];
 	for (var i = 1; i < kappa.length; i++) {
 		if ((kappa[i - 1] > 0 && kappa[i] < 0) ||
@@ -460,13 +450,12 @@ function _analyzeCurvature(segments, sampleCount) {
 	}
 
 	return {
-		kappa:          kappa,
-		dKappa:         dKappa,
-		arcT:           arcT,
-		positions:      positions,
-		inflections:    inflections,
-		totalLength:    totalLength,
-		sweepDirection: dir,
+		kappa:       kappa,
+		dKappa:      dKappa,
+		arcT:        arcT,
+		inflections: inflections,
+		totalLength: totalLength,
+		reversed:    reversed,
 	};
 }
 
