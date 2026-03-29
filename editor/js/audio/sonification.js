@@ -9,12 +9,10 @@
 // Mapping strategy:
 //   - Curvature kappa(t)  ->  Pitch (frequency)
 //   - d(kappa)/dt         ->  Harmonic distortion (roughness)
-//   - Arc-length speed    ->  Amplitude envelope
 //   - Inflection points   ->  Transient clicks
-//   - G2 breaks           ->  Noise bursts
 //
-// Multiple contours can be played as simultaneous voices
-// (left/right stereo panning) for comparative listening.
+// Live loop mode: stores contour references and re-reads node
+// positions each cycle, so edits are heard in real time.
 //
 // Self-contained bezier math — no dependency on external Bezier lib.
 // ===================================================================
@@ -34,18 +32,19 @@ var _ctx        = null;   // AudioContext
 var _master     = null;   // master gain
 var _voices     = [];     // active voice objects
 var _playing    = false;
+var _loopState  = null;   // { mode, contours, segmentGroups, panValues }
+
 var _settings   = {
 	// Pitch mapping
 	minFreq:      80,       // Hz — lowest curvature maps here
 	maxFreq:      2000,     // Hz — highest curvature maps here
-	baseFreq:     440,      // Hz — zero curvature baseline
 
 	// Timing
 	duration:     2.0,      // seconds per contour playback
 	sampleCount:  256,      // curvature samples along curve
 
 	// Timbre
-	waveform:     'sine',   // 'sine', 'triangle', 'cello', 'sawtooth'
+	waveform:     'sine',   // see _WAVEFORMS for list
 	roughness:    0.5,      // 0-1: how much dK/dt adds distortion
 
 	// Amplitude
@@ -62,13 +61,6 @@ var _settings   = {
 	stereoSpread: 0.8,      // 0-1: how far voices are panned
 
 	// Sweep direction — aligns opposing contours for comparison.
-	// Walks the path normally but reverses playback when the contour
-	// flows against the chosen direction.
-	// 'path'        : native contour direction (no reversal)
-	// 'bottom-top'  : reverse if contour flows downward  (stem comparison)
-	// 'top-bottom'  : reverse if contour flows upward
-	// 'left-right'  : reverse if contour flows rightward (crossbar comparison)
-	// 'right-left'  : reverse if contour flows leftward
 	sweepDirection: 'bottom-top',
 
 	// Looping
@@ -91,6 +83,85 @@ FontRig.CurveSonifier.isPlaying = function() {
 };
 
 // ===================================================================
+// Waveform registry
+// ===================================================================
+// Each waveform is a function(phase, harmonicPhases) -> sample.
+// harmonicPhases is an array of [phase*2, phase*3, ...] for timbres
+// that need pre-computed harmonic phases.
+var _WAVEFORMS = {
+	'sine': function(ph) {
+		return Math.sin(ph);
+	},
+	'triangle': function(ph) {
+		return 2 * Math.abs(2 * (ph / (2 * Math.PI)) - 1) - 1;
+	},
+	'sawtooth': function(ph) {
+		return 2 * (ph / (2 * Math.PI)) - 1;
+	},
+	'cello': function(ph) {
+		return 0.50 * Math.sin(ph) +
+			   0.25 * Math.sin(2 * ph) +
+			   0.12 * Math.sin(3 * ph) +
+			   0.06 * Math.sin(4 * ph) +
+			   0.03 * Math.sin(5 * ph);
+	},
+	// -- Vocal "ah" — three formant peaks (F1=800, F2=1200, F3=2500)
+	// approximated as weighted harmonics with a spectral tilt
+	'voice': function(ph) {
+		var f = 0;
+		// Fundamental + harmonics with 1/n rolloff shaped by formants
+		for (var n = 1; n <= 12; n++) {
+			// Spectral tilt: -6dB/octave base
+			var amp = 1.0 / n;
+			// Boost near formant ratios (relative to fundamental)
+			// F1~2nd-3rd, F2~4th-5th, F3~8th-10th
+			if (n >= 2 && n <= 3)  amp *= 2.5;
+			if (n >= 4 && n <= 5)  amp *= 1.8;
+			if (n >= 8 && n <= 10) amp *= 1.2;
+			f += amp * Math.sin(n * ph);
+		}
+		return f * 0.3;
+	},
+	// -- Flute: breathy sine with odd harmonics
+	'flute': function(ph) {
+		return 0.60 * Math.sin(ph) +
+			   0.15 * Math.sin(3 * ph) +
+			   0.05 * Math.sin(5 * ph) +
+			   0.10 * (Math.random() * 2 - 1) * 0.2;  // breath noise
+	},
+	// -- Pad: detuned unison — warm and slow
+	'pad': function(ph) {
+		return 0.25 * Math.sin(ph) +
+			   0.25 * Math.sin(ph * 1.003) +
+			   0.25 * Math.sin(ph * 0.997) +
+			   0.15 * Math.sin(ph * 2.001) +
+			   0.10 * Math.sin(ph * 0.5);
+	},
+	// -- Glass: FM bell-like tone
+	'glass': function(ph) {
+		var mod = Math.sin(ph * 3.5) * 0.7;
+		return Math.sin(ph + mod) * 0.6 +
+			   Math.sin(ph * 2 + mod * 0.5) * 0.25 +
+			   Math.sin(ph * 5.43) * 0.08;
+	},
+	// -- Bowed string: bright sawtooth softened by body resonance
+	'bowed': function(ph) {
+		var saw = 0;
+		for (var n = 1; n <= 8; n++) {
+			var sign = (n % 2 === 0) ? -1 : 1;
+			saw += sign * Math.sin(n * ph) / n;
+		}
+		// Soften with a low-pass approximation (weighted average)
+		return saw * 0.45;
+	},
+};
+
+// Get list of waveform names for UI
+FontRig.CurveSonifier.getWaveformNames = function() {
+	return Object.keys(_WAVEFORMS);
+};
+
+// ===================================================================
 // AudioContext management
 // ===================================================================
 function _ensureContext() {
@@ -110,10 +181,6 @@ function _ensureContext() {
 // ===================================================================
 // Self-contained Bezier math
 // ===================================================================
-// Segment representation: { type: 'cubic'|'quadratic'|'line', pts: [{x,y},...] }
-// Cubic: 4 points, Quadratic: 3 points, Line: 2 points
-
-// Evaluate cubic bezier at parameter t
 function _cubicPoint(pts, t) {
 	var t2 = t * t, t3 = t2 * t;
 	var mt = 1 - t, mt2 = mt * mt, mt3 = mt2 * mt;
@@ -123,7 +190,6 @@ function _cubicPoint(pts, t) {
 	};
 }
 
-// First derivative of cubic bezier
 function _cubicDeriv(pts, t) {
 	var mt = 1 - t;
 	return {
@@ -132,7 +198,6 @@ function _cubicDeriv(pts, t) {
 	};
 }
 
-// Second derivative of cubic bezier
 function _cubicDeriv2(pts, t) {
 	var mt = 1 - t;
 	return {
@@ -141,7 +206,6 @@ function _cubicDeriv2(pts, t) {
 	};
 }
 
-// Evaluate quadratic bezier at parameter t
 function _quadPoint(pts, t) {
 	var mt = 1 - t;
 	return {
@@ -150,7 +214,6 @@ function _quadPoint(pts, t) {
 	};
 }
 
-// First derivative of quadratic bezier
 function _quadDeriv(pts, t) {
 	var mt = 1 - t;
 	return {
@@ -159,7 +222,6 @@ function _quadDeriv(pts, t) {
 	};
 }
 
-// Second derivative of quadratic bezier (constant)
 function _quadDeriv2(pts) {
 	return {
 		x: 2 * (pts[2].x - 2 * pts[1].x + pts[0].x),
@@ -167,10 +229,8 @@ function _quadDeriv2(pts) {
 	};
 }
 
-// Compute signed curvature: kappa = (x'*y'' - y'*x'') / (x'^2 + y'^2)^(3/2)
 function _curvatureAt(seg, t) {
 	var d1, d2;
-
 	if (seg.type === 'cubic') {
 		d1 = _cubicDeriv(seg.pts, t);
 		d2 = _cubicDeriv2(seg.pts, t);
@@ -178,20 +238,15 @@ function _curvatureAt(seg, t) {
 		d1 = _quadDeriv(seg.pts, t);
 		d2 = _quadDeriv2(seg.pts);
 	} else {
-		// Line — zero curvature
 		return 0;
 	}
-
 	var cross = d1.x * d2.y - d1.y * d2.x;
 	var speed2 = d1.x * d1.x + d1.y * d1.y;
 	var speed = Math.sqrt(speed2);
-
 	if (speed < 1e-8) return 0;
-
 	return cross / (speed2 * speed);
 }
 
-// Speed (magnitude of first derivative) at parameter t
 function _speedAt(seg, t) {
 	var d1;
 	if (seg.type === 'cubic') {
@@ -199,7 +254,6 @@ function _speedAt(seg, t) {
 	} else if (seg.type === 'quadratic') {
 		d1 = _quadDeriv(seg.pts, t);
 	} else {
-		// Line: constant speed
 		var dx = seg.pts[1].x - seg.pts[0].x;
 		var dy = seg.pts[1].y - seg.pts[0].y;
 		return Math.sqrt(dx * dx + dy * dy);
@@ -207,30 +261,21 @@ function _speedAt(seg, t) {
 	return Math.sqrt(d1.x * d1.x + d1.y * d1.y);
 }
 
-// Evaluate position on any segment type at parameter t
 function _pointOnSegment(seg, t) {
-	if (seg.type === 'cubic') {
-		return _cubicPoint(seg.pts, t);
-	} else if (seg.type === 'quadratic') {
-		return _quadPoint(seg.pts, t);
-	} else {
-		// Line: lerp
-		return {
-			x: seg.pts[0].x + t * (seg.pts[1].x - seg.pts[0].x),
-			y: seg.pts[0].y + t * (seg.pts[1].y - seg.pts[0].y),
-		};
-	}
+	if (seg.type === 'cubic') return _cubicPoint(seg.pts, t);
+	if (seg.type === 'quadratic') return _quadPoint(seg.pts, t);
+	return {
+		x: seg.pts[0].x + t * (seg.pts[1].x - seg.pts[0].x),
+		y: seg.pts[0].y + t * (seg.pts[1].y - seg.pts[0].y),
+	};
 }
 
-// Approximate arc length of a segment via Gauss-Legendre quadrature (5-point)
 function _segmentLength(seg) {
 	if (seg.type === 'line') {
 		var dx = seg.pts[1].x - seg.pts[0].x;
 		var dy = seg.pts[1].y - seg.pts[0].y;
 		return Math.sqrt(dx * dx + dy * dy);
 	}
-
-	// 5-point Gauss-Legendre on [0,1]
 	var nodes = [0.04691008, 0.23076534, 0.5, 0.76923466, 0.95308992];
 	var weights = [0.11846345, 0.23931434, 0.28444444, 0.23931434, 0.11846345];
 	var len = 0;
@@ -243,21 +288,12 @@ function _segmentLength(seg) {
 // ===================================================================
 // Bezier segment extraction from contour
 // ===================================================================
-// Walks contour nodes and returns an array of segment objects
-// with self-contained point data.
-//
-// Each segment also carries `nodeIndices`: the contour node indices
-// that define it, so callers can filter by selection.
-// A segment is considered "selected" when any of its on-curve
-// anchor nodes is in the selection set.
 function _extractSegments(contour) {
 	var nodes = contour.nodes;
 	var n = nodes.length;
 	if (n < 2) return [];
 
 	var segments = [];
-
-	// Find first on-curve
 	var firstOn = 0;
 	for (var j = 0; j < n; j++) {
 		if (nodes[j].type === 'on') { firstOn = j; break; }
@@ -273,7 +309,6 @@ function _extractSegments(contour) {
 		var nextNode = nodes[next_i];
 
 		if (curr.type === 'on' && nextNode.type === 'on') {
-			// Line segment
 			segments.push({
 				type: 'line',
 				pts: [ {x: curr.x, y: curr.y}, {x: nextNode.x, y: nextNode.y} ],
@@ -281,72 +316,44 @@ function _extractSegments(contour) {
 			});
 			i = next_i;
 			count++;
-
 		} else if (nextNode.type === 'curve') {
-			// Cubic: on -> curve -> curve -> on
-			var ci1 = next_i;
-			var ci2 = (i + 2) % n;
-			var oi  = (i + 3) % n;
-			var b1 = nextNode;
-			var b2 = nodes[ci2];
-			var on = nodes[oi];
+			var ci1 = next_i, ci2 = (i + 2) % n, oi = (i + 3) % n;
+			var b1 = nextNode, b2 = nodes[ci2], on = nodes[oi];
 			segments.push({
 				type: 'cubic',
-				pts: [
-					{x: curr.x, y: curr.y},
-					{x: b1.x,   y: b1.y},
-					{x: b2.x,   y: b2.y},
-					{x: on.x,   y: on.y}
-				],
+				pts: [{x: curr.x, y: curr.y}, {x: b1.x, y: b1.y},
+					  {x: b2.x, y: b2.y}, {x: on.x, y: on.y}],
 				nodeIndices: [i, ci1, ci2, oi],
 			});
 			i = oi;
 			count += 3;
-
 		} else if (nextNode.type === 'off') {
-			// Quadratic: on -> off -> on
-			var qi  = next_i;
-			var oi2 = (i + 2) % n;
-			var off = nextNode;
-			var on2 = nodes[oi2];
+			var qi = next_i, oi2 = (i + 2) % n;
+			var off = nextNode, on2 = nodes[oi2];
 			segments.push({
 				type: 'quadratic',
-				pts: [
-					{x: curr.x, y: curr.y},
-					{x: off.x,  y: off.y},
-					{x: on2.x,  y: on2.y}
-				],
+				pts: [{x: curr.x, y: curr.y}, {x: off.x, y: off.y},
+					  {x: on2.x, y: on2.y}],
 				nodeIndices: [i, qi, oi2],
 			});
 			i = oi2;
 			count += 2;
-
 		} else {
 			i = next_i;
 			count++;
 		}
 	}
-
 	return segments;
 }
 
 // ===================================================================
 // Curvature analysis
 // ===================================================================
-// Returns { kappa[], dKappa[], arcT[], inflections[],
-//           totalLength, reversed }
-//
-// Walk along the path at uniform arc-length (smooth, no artefacts).
-// If sweepDirection is not 'path', check the net direction of the
-// segment run and REVERSE the arrays when the contour flows against
-// the desired direction.  This keeps the smooth walk intact — just
-// plays it backwards so opposing contour sides are aligned in time.
 function _analyzeCurvature(segments, sampleCount) {
 	var empty = { kappa: [], dKappa: [], arcT: [], inflections: [],
 				  totalLength: 0, reversed: false };
 	if (segments.length === 0) return empty;
 
-	// Compute total arc length
 	var segLengths = [];
 	var totalLength = 0;
 	for (var s = 0; s < segments.length; s++) {
@@ -356,23 +363,14 @@ function _analyzeCurvature(segments, sampleCount) {
 	}
 	if (totalLength === 0) return empty;
 
-	// ------------------------------------------------------------------
-	// Sample curvature at uniform arc-length intervals
-	// ------------------------------------------------------------------
 	var kappa = [];
 	var arcT  = [];
-
-	// We also need start and end positions to decide reversal
 	var startPos = null;
 	var endPos   = null;
 
 	for (var i = 0; i < sampleCount; i++) {
 		var targetDist = (i / (sampleCount - 1)) * totalLength;
-
-		// Find which segment this falls in
-		var cumDist = 0;
-		var segIdx = 0;
-		var localDist = targetDist;
+		var cumDist = 0, segIdx = 0, localDist = targetDist;
 
 		for (var s = 0; s < segments.length; s++) {
 			if (cumDist + segLengths[s] >= targetDist || s === segments.length - 1) {
@@ -392,53 +390,30 @@ function _analyzeCurvature(segments, sampleCount) {
 		kappa.push(k);
 		arcT.push(i / (sampleCount - 1));
 
-		// Capture endpoints for direction check
 		if (i === 0) startPos = _pointOnSegment(segments[segIdx], localT);
 		if (i === sampleCount - 1) endPos = _pointOnSegment(segments[segIdx], localT);
 	}
 
-	// ------------------------------------------------------------------
-	// Direction alignment: reverse if contour flows against sweep
-	// ------------------------------------------------------------------
+	// Direction alignment
 	var reversed = false;
 	var dir = _settings.sweepDirection;
-
 	if (dir && dir !== 'path' && startPos && endPos) {
 		var needsReverse = false;
-
 		switch (dir) {
-			case 'bottom-top':
-				needsReverse = (endPos.y < startPos.y);  // contour runs top→bottom
-				break;
-			case 'top-bottom':
-				needsReverse = (endPos.y > startPos.y);  // contour runs bottom→top
-				break;
-			case 'left-right':
-				needsReverse = (endPos.x < startPos.x);  // contour runs right→left
-				break;
-			case 'right-left':
-				needsReverse = (endPos.x > startPos.x);  // contour runs left→right
-				break;
+			case 'bottom-top':  needsReverse = (endPos.y < startPos.y); break;
+			case 'top-bottom':  needsReverse = (endPos.y > startPos.y); break;
+			case 'left-right':  needsReverse = (endPos.x < startPos.x); break;
+			case 'right-left':  needsReverse = (endPos.x > startPos.x); break;
 		}
-
-		if (needsReverse) {
-			kappa.reverse();
-			reversed = true;
-		}
+		if (needsReverse) { kappa.reverse(); reversed = true; }
 	}
 
-	// ------------------------------------------------------------------
-	// Compute dKappa and inflections on the (possibly reversed) data
-	// ------------------------------------------------------------------
+	// dKappa and inflections
 	var dKappa = [];
 	for (var i = 0; i < kappa.length; i++) {
-		if (i === 0) {
-			dKappa.push(kappa[1] - kappa[0]);
-		} else if (i === kappa.length - 1) {
-			dKappa.push(kappa[i] - kappa[i - 1]);
-		} else {
-			dKappa.push((kappa[i + 1] - kappa[i - 1]) / 2);
-		}
+		if (i === 0) dKappa.push(kappa[1] - kappa[0]);
+		else if (i === kappa.length - 1) dKappa.push(kappa[i] - kappa[i - 1]);
+		else dKappa.push((kappa[i + 1] - kappa[i - 1]) / 2);
 	}
 
 	var inflections = [];
@@ -449,14 +424,8 @@ function _analyzeCurvature(segments, sampleCount) {
 		}
 	}
 
-	return {
-		kappa:       kappa,
-		dKappa:      dKappa,
-		arcT:        arcT,
-		inflections: inflections,
-		totalLength: totalLength,
-		reversed:    reversed,
-	};
+	return { kappa: kappa, dKappa: dKappa, arcT: arcT, inflections: inflections,
+			 totalLength: totalLength, reversed: reversed };
 }
 
 // ===================================================================
@@ -464,117 +433,85 @@ function _analyzeCurvature(segments, sampleCount) {
 // ===================================================================
 function _kappaToFreq(k, kappaRange) {
 	var absK = Math.abs(k);
-	var norm;  // normalized 0..1
-
+	var norm;
 	var maxK = kappaRange.max || 1;
 
 	switch (_settings.curvatureScale) {
-		case 'log':
-			norm = Math.log(1 + absK) / Math.log(1 + maxK);
-			break;
-		case 'sqrt':
-			norm = Math.sqrt(absK / maxK);
-			break;
-		default: // linear
-			norm = absK / maxK;
+		case 'log':  norm = Math.log(1 + absK) / Math.log(1 + maxK); break;
+		case 'sqrt': norm = Math.sqrt(absK / maxK); break;
+		default:     norm = absK / maxK;
 	}
-
 	norm = Math.max(0, Math.min(1, norm));
-
-	// Map to frequency range
 	return _settings.minFreq + norm * (_settings.maxFreq - _settings.minFreq);
 }
 
 // ===================================================================
-// Voice: generate and play audio for one contour
+// Voice: render audio buffer for one contour/segment group
 // ===================================================================
-function _createVoice(analysis, panValue, voiceIndex) {
+function _renderBuffer(analysis) {
 	var ctx = _ctx;
 	var dur = _settings.duration;
 	var sr = ctx.sampleRate;
 	var totalSamples = Math.floor(sr * dur);
 
-	// Compute curvature range for normalization
+	// Curvature range for normalization
 	var kappaRange = { min: 0, max: 0.001 };
 	for (var i = 0; i < analysis.kappa.length; i++) {
 		var absK = Math.abs(analysis.kappa[i]);
 		if (absK > kappaRange.max) kappaRange.max = absK;
 	}
-	// Also compute dKappa range
 	var dKappaMax = 0.001;
 	for (var i = 0; i < analysis.dKappa.length; i++) {
 		var absD = Math.abs(analysis.dKappa[i]);
 		if (absD > dKappaMax) dKappaMax = absD;
 	}
 
-	// Create audio buffer
 	var buffer = ctx.createBuffer(1, totalSamples, sr);
 	var data = buffer.getChannelData(0);
 
 	var phase = 0;
 	var sampleCount = analysis.kappa.length;
+	var waveformFn = _WAVEFORMS[_settings.waveform] || _WAVEFORMS['sine'];
 
 	for (var s = 0; s < totalSamples; s++) {
 		var t = s / totalSamples;
 
-		// Interpolate curvature at this time position
+		// Interpolate curvature
 		var floatIdx = t * (sampleCount - 1);
 		var idx0 = Math.floor(floatIdx);
 		var idx1 = Math.min(idx0 + 1, sampleCount - 1);
 		var frac = floatIdx - idx0;
 
-		var k = analysis.kappa[idx0] * (1 - frac) + analysis.kappa[idx1] * frac;
+		var k  = analysis.kappa[idx0]  * (1 - frac) + analysis.kappa[idx1]  * frac;
 		var dk = analysis.dKappa[idx0] * (1 - frac) + analysis.dKappa[idx1] * frac;
 
-		// Frequency from curvature
 		var freq = _kappaToFreq(k, kappaRange);
 
-		// Phase accumulation for the oscillator
 		phase += (2 * Math.PI * freq) / sr;
 		if (phase > 2 * Math.PI) phase -= 2 * Math.PI;
 
-		// Base waveform
-		var sample = 0;
-		switch (_settings.waveform) {
-			case 'triangle':
-				sample = 2 * Math.abs(2 * (phase / (2 * Math.PI)) - 1) - 1;
-				break;
-			case 'sawtooth':
-				sample = 2 * (phase / (2 * Math.PI)) - 1;
-				break;
-			case 'cello':
-				// Approximate cello timbre: fundamental + harmonics
-				sample = 0.5 * Math.sin(phase) +
-						 0.25 * Math.sin(2 * phase) +
-						 0.12 * Math.sin(3 * phase) +
-						 0.06 * Math.sin(4 * phase) +
-						 0.03 * Math.sin(5 * phase);
-				break;
-			default: // sine
-				sample = Math.sin(phase);
-		}
+		var sample = waveformFn(phase);
 
-		// Apply roughness from curvature derivative
+		// Roughness from curvature derivative
 		var roughAmount = _settings.roughness * Math.abs(dk) / dKappaMax;
 		roughAmount = Math.min(roughAmount, 0.8);
 		if (roughAmount > 0.01) {
-			// Add harmonics proportional to dK/dt — tanh waveshaping
 			sample = sample * (1 - roughAmount) +
 					 roughAmount * Math.tanh(sample * (1 + roughAmount * 4));
 		}
 
-		// Amplitude envelope (fade in/out)
+		// Fade in/out envelope
 		var env = 1.0;
-		var fadeLen = 0.02; // 20ms fade
+		var fadeLen = 0.015;
 		if (t < fadeLen) env = t / fadeLen;
 		if (t > 1 - fadeLen) env = (1 - t) / fadeLen;
 
 		data[s] = sample * env * 0.5;
 	}
 
-	// Add inflection clicks
+	// Inflection clicks
 	if (_settings.clickEnabled && analysis.inflections.length > 0) {
-		var clickLen = Math.floor(sr * 0.003); // 3ms click
+		var clickLen = Math.floor(sr * 0.003);
 		for (var ci = 0; ci < analysis.inflections.length; ci++) {
 			var clickPos = Math.floor(analysis.inflections[ci] * totalSamples);
 			for (var cs = 0; cs < clickLen && (clickPos + cs) < totalSamples; cs++) {
@@ -585,116 +522,119 @@ function _createVoice(analysis, panValue, voiceIndex) {
 		}
 	}
 
-	// Create source and panner
-	var source = ctx.createBufferSource();
-	source.buffer = buffer;
-
-	var panner = ctx.createStereoPanner();
-	panner.pan.value = panValue;
-
-	var gain = ctx.createGain();
-	gain.gain.value = _settings.volume;
-
-	source.connect(gain);
-	gain.connect(panner);
-	panner.connect(_master);
-
-	return {
-		source:   source,
-		gain:     gain,
-		panner:   panner,
-		analysis: analysis,
-		index:    voiceIndex,
-	};
+	return buffer;
 }
 
 // ===================================================================
-// Public API: Play contours
+// Live loop: schedule next cycle by re-reading contours
 // ===================================================================
+// _loopState holds:
+//   mode: 'contours' | 'segmentGroups'
+//   contours: array of live contour references   (mode=contours)
+//   segmentGroups: array of segment arrays        (mode=segmentGroups)
+//       — for segmentGroups we store contour refs + selByContour
+//         so we can re-extract fresh segments each cycle
+//   contourRefs: [{contour, selNodes}]            (mode=segmentGroups)
+//   panValues: array of pan values per voice
 
-// Stop all active playback
-FontRig.CurveSonifier.stop = function() {
-	for (var i = 0; i < _voices.length; i++) {
-		try { _voices[i].source.stop(); } catch (e) {}
-	}
-	_voices = [];
-	_playing = false;
+function _scheduleNextCycle() {
+	if (!_playing || !_loopState) return;
 
-	// Notify listeners
-	if (FontRig.CurveSonifier.onPlayStateChange) {
-		FontRig.CurveSonifier.onPlayStateChange(false);
-	}
-};
-
-// Play a single contour
-FontRig.CurveSonifier.playContour = function(contour) {
-	FontRig.CurveSonifier.stop();
-
-	var ctx = _ensureContext();
-	if (!ctx) return null;
-
-	if (ctx.state === 'suspended') ctx.resume();
-
-	var segments = _extractSegments(contour);
-	if (segments.length === 0) return null;
-
-	var analysis = _analyzeCurvature(segments, _settings.sampleCount);
-	var voice = _createVoice(analysis, 0, 0); // center pan
-
-	voice.source.start(ctx.currentTime);
-	voice.source.onended = function() {
-		_playing = false;
-		_voices = [];
-		if (FontRig.CurveSonifier.onPlayStateChange) {
-			FontRig.CurveSonifier.onPlayStateChange(false);
-		}
-	};
-
-	_voices = [voice];
-	_playing = true;
-
-	if (FontRig.CurveSonifier.onPlayStateChange) {
-		FontRig.CurveSonifier.onPlayStateChange(true);
-	}
-
-	return analysis;
-};
-
-// Play multiple contours as separate voices (stereo spread)
-FontRig.CurveSonifier.playContours = function(contours) {
-	FontRig.CurveSonifier.stop();
-
-	var ctx = _ensureContext();
-	if (!ctx) return null;
-
-	if (ctx.state === 'suspended') ctx.resume();
-
+	var ls = _loopState;
 	var analyses = [];
-	var newVoices = [];
-	var nContours = contours.length;
+	var panValues = ls.panValues;
 
-	for (var c = 0; c < nContours; c++) {
-		var segments = _extractSegments(contours[c]);
-		if (segments.length === 0) continue;
+	if (ls.mode === 'contours') {
+		// Re-extract segments from live contour references
+		for (var c = 0; c < ls.contours.length; c++) {
+			var segments = _extractSegments(ls.contours[c]);
+			if (segments.length === 0) {
+				analyses.push(null);
+				continue;
+			}
+			analyses.push(_analyzeCurvature(segments, _settings.sampleCount));
+		}
+	} else if (ls.mode === 'segmentGroups') {
+		// Re-extract and re-filter segments from contour refs
+		var groups = [];
+		for (var r = 0; r < ls.contourRefs.length; r++) {
+			var ref = ls.contourRefs[r];
+			var segments = _extractSegments(ref.contour);
+			if (segments.length === 0) continue;
 
-		var analysis = _analyzeCurvature(segments, _settings.sampleCount);
-		analyses.push(analysis);
-
-		// Stereo spread: distribute voices across stereo field
-		var pan = 0;
-		if (nContours > 1) {
-			pan = -_settings.stereoSpread +
-				  (2 * _settings.stereoSpread * c / (nContours - 1));
+			if (!ref.selNodes) {
+				// Whole contour
+				groups.push(segments);
+			} else {
+				// Filter by selected node indices
+				var currentRun = [];
+				for (var s = 0; s < segments.length; s++) {
+					var indices = segments[s].nodeIndices;
+					var startNode = indices[0];
+					var endNode   = indices[indices.length - 1];
+					if (ref.selNodes.has(startNode) || ref.selNodes.has(endNode)) {
+						currentRun.push(segments[s]);
+					} else {
+						if (currentRun.length > 0) { groups.push(currentRun); currentRun = []; }
+					}
+				}
+				if (currentRun.length > 0) groups.push(currentRun);
+			}
 		}
 
-		var voice = _createVoice(analysis, pan, c);
-		newVoices.push(voice);
+		// Recompute pan values if group count changed
+		var nGroups = groups.length;
+		panValues = [];
+		for (var g = 0; g < nGroups; g++) {
+			if (nGroups <= 1) panValues.push(0);
+			else panValues.push(-_settings.stereoSpread + (2 * _settings.stereoSpread * g / (nGroups - 1)));
+		}
+
+		for (var g = 0; g < groups.length; g++) {
+			analyses.push(_analyzeCurvature(groups[g], _settings.sampleCount));
+		}
 	}
 
-	if (newVoices.length === 0) return null;
+	// Build and start new voices
+	_stopVoices();
+	var newVoices = [];
 
-	// Start all voices simultaneously
-	var startTime = ctx.currentTime + 0.01;
+	for (var v = 0; v < analyses.length; v++) {
+		if (!analyses[v] || analyses[v].kappa.length === 0) continue;
+
+		var buf = _renderBuffer(analyses[v]);
+		var source = _ctx.createBufferSource();
+		source.buffer = buf;
+
+		var panner = _ctx.createStereoPanner();
+		panner.pan.value = panValues[v] || 0;
+
+		var gain = _ctx.createGain();
+		gain.gain.value = _settings.volume;
+
+		source.connect(gain);
+		gain.connect(panner);
+		panner.connect(_master);
+
+		newVoices.push({ source: source, gain: gain, panner: panner,
+						 analysis: analyses[v], index: v });
+	}
+
+	if (newVoices.length === 0) {
+		if (_settings.loop) {
+			// Keep trying — user might add nodes back
+			setTimeout(function() { _scheduleNextCycle(); }, 500);
+		} else {
+			_playing = false;
+			_loopState = null;
+			if (FontRig.CurveSonifier.onPlayStateChange)
+				FontRig.CurveSonifier.onPlayStateChange(false);
+		}
+		return;
+	}
+
+	// Start all voices
+	var startTime = _ctx.currentTime + 0.01;
 	var endCount = 0;
 
 	for (var v = 0; v < newVoices.length; v++) {
@@ -702,26 +642,86 @@ FontRig.CurveSonifier.playContours = function(contours) {
 		newVoices[v].source.onended = function() {
 			endCount++;
 			if (endCount >= newVoices.length) {
-				_playing = false;
-				_voices = [];
-				if (FontRig.CurveSonifier.onPlayStateChange) {
-					FontRig.CurveSonifier.onPlayStateChange(false);
+				if (_settings.loop && _playing && _loopState) {
+					// Re-read contour data and schedule next cycle
+					_scheduleNextCycle();
+				} else {
+					_playing = false;
+					_loopState = null;
+					_voices = [];
+					if (FontRig.CurveSonifier.onPlayStateChange)
+						FontRig.CurveSonifier.onPlayStateChange(false);
 				}
 			}
 		};
 	}
 
 	_voices = newVoices;
-	_playing = true;
 
+	// Notify with latest analyses for visualization
+	var validAnalyses = [];
+	for (var v = 0; v < analyses.length; v++) {
+		if (analyses[v] && analyses[v].kappa.length > 0) validAnalyses.push(analyses[v]);
+	}
+	if (FontRig.CurveSonifier.onAnalysisUpdate) {
+		FontRig.CurveSonifier.onAnalysisUpdate(validAnalyses);
+	}
+}
+
+// Stop only the audio source nodes (not the loop state)
+function _stopVoices() {
+	for (var i = 0; i < _voices.length; i++) {
+		try { _voices[i].source.onended = null; } catch (e) {}
+		try { _voices[i].source.stop(); } catch (e) {}
+	}
+	_voices = [];
+}
+
+// ===================================================================
+// Public API
+// ===================================================================
+
+// Stop everything
+FontRig.CurveSonifier.stop = function() {
+	_stopVoices();
+	_loopState = null;
+	_playing = false;
+	if (FontRig.CurveSonifier.onPlayStateChange) {
+		FontRig.CurveSonifier.onPlayStateChange(false);
+	}
+};
+
+// Play full contours (stores live references for loop re-read)
+FontRig.CurveSonifier.playContours = function(contours) {
+	FontRig.CurveSonifier.stop();
+
+	var ctx = _ensureContext();
+	if (!ctx) return null;
+	if (ctx.state === 'suspended') ctx.resume();
+
+	// Compute pan values
+	var panValues = [];
+	for (var c = 0; c < contours.length; c++) {
+		if (contours.length <= 1) panValues.push(0);
+		else panValues.push(-_settings.stereoSpread +
+			(2 * _settings.stereoSpread * c / (contours.length - 1)));
+	}
+
+	_loopState = {
+		mode:      'contours',
+		contours:  contours,     // LIVE references — re-read each cycle
+		panValues: panValues,
+	};
+
+	_playing = true;
 	if (FontRig.CurveSonifier.onPlayStateChange) {
 		FontRig.CurveSonifier.onPlayStateChange(true);
 	}
 
-	return analyses;
+	_scheduleNextCycle();
 };
 
-// Play the active glyph's contours from the active layer
+// Play active glyph's contours
 FontRig.CurveSonifier.playActiveGlyph = function() {
 	var layer = FontRig.getActiveLayer();
 	if (!layer) return null;
@@ -735,30 +735,22 @@ FontRig.CurveSonifier.playActiveGlyph = function() {
 			}
 		}
 	}
-
 	if (contours.length === 0) return null;
-
-	return FontRig.CurveSonifier.playContours(contours);
+	FontRig.CurveSonifier.playContours(contours);
 };
 
-// Play only the segments touching selected nodes.
-// Each run of consecutive selected segments becomes a separate voice.
-// A segment is "selected" if any of its on-curve anchor nodes is
-// in the current selection set.
+// Play selected segments (stores contour refs + selection for re-read)
 FontRig.CurveSonifier.playSelectedSegments = function() {
 	var layer = FontRig.getActiveLayer();
 	if (!layer) return null;
 
 	var selectedIds = FontRig.state.selectedNodeIds;
 	if (!selectedIds || selectedIds.size === 0) {
-		// Fall back to all contours
 		return FontRig.CurveSonifier.playActiveGlyph();
 	}
 
-	// Build a set of selected node indices per contour index.
-	// selectedIds are in "c{ci}_n{ni}" format.
+	// Build per-contour selection map
 	var allNodes = FontRig.getAllNodes(layer);
-	// Map: contourIdx -> Set of node indices within that contour
 	var selByContour = {};
 	selectedIds.forEach(function(id) {
 		for (var i = 0; i < allNodes.length; i++) {
@@ -772,10 +764,8 @@ FontRig.CurveSonifier.playSelectedSegments = function() {
 		}
 	});
 
-	// Walk each contour, extract segments, filter by selection,
-	// group consecutive selected segments into runs (voices).
-	var segmentGroups = [];  // each entry is an array of segments
-
+	// Build contour refs with selection info
+	var contourRefs = [];
 	var ci = 0;
 	for (var si = 0; si < layer.shapes.length; si++) {
 		var shape = layer.shapes[si];
@@ -783,105 +773,31 @@ FontRig.CurveSonifier.playSelectedSegments = function() {
 			var contour = shape.contours[ki];
 			var selNodes = selByContour[ci];
 			ci++;
-
 			if (!selNodes || contour.nodes.length < 2) continue;
-
-			var segments = _extractSegments(contour);
-			if (segments.length === 0) continue;
-
-			// Mark each segment as selected if any of its on-curve
-			// nodes (first and last in nodeIndices) is selected
-			var currentRun = [];
-			for (var s = 0; s < segments.length; s++) {
-				var seg = segments[s];
-				var indices = seg.nodeIndices;
-				// On-curve anchors are first and last in nodeIndices
-				var startNode = indices[0];
-				var endNode   = indices[indices.length - 1];
-				var isSelected = selNodes.has(startNode) || selNodes.has(endNode);
-
-				if (isSelected) {
-					currentRun.push(seg);
-				} else {
-					// Flush current run
-					if (currentRun.length > 0) {
-						segmentGroups.push(currentRun);
-						currentRun = [];
-					}
-				}
-			}
-			// Flush trailing run
-			if (currentRun.length > 0) {
-				segmentGroups.push(currentRun);
-			}
+			contourRefs.push({ contour: contour, selNodes: selNodes });
 		}
 	}
 
-	if (segmentGroups.length === 0) return null;
+	if (contourRefs.length === 0) return null;
 
-	return FontRig.CurveSonifier.playSegmentGroups(segmentGroups);
-};
-
-// Play pre-extracted segment groups as separate voices.
-// Each group is an array of segment objects (already extracted).
-FontRig.CurveSonifier.playSegmentGroups = function(segmentGroups) {
 	FontRig.CurveSonifier.stop();
 
 	var ctx = _ensureContext();
 	if (!ctx) return null;
-
 	if (ctx.state === 'suspended') ctx.resume();
 
-	var analyses = [];
-	var newVoices = [];
-	var nGroups = segmentGroups.length;
+	_loopState = {
+		mode:        'segmentGroups',
+		contourRefs: contourRefs,   // LIVE references
+		panValues:   [],            // computed in _scheduleNextCycle
+	};
 
-	for (var g = 0; g < nGroups; g++) {
-		var segments = segmentGroups[g];
-		if (segments.length === 0) continue;
-
-		var analysis = _analyzeCurvature(segments, _settings.sampleCount);
-		analyses.push(analysis);
-
-		// Stereo spread
-		var pan = 0;
-		if (nGroups > 1) {
-			pan = -_settings.stereoSpread +
-				  (2 * _settings.stereoSpread * g / (nGroups - 1));
-		}
-
-		var voice = _createVoice(analysis, pan, g);
-		newVoices.push(voice);
-	}
-
-	if (newVoices.length === 0) return null;
-
-	// Start all voices simultaneously
-	var startTime = ctx.currentTime + 0.01;
-	var endCount = 0;
-
-	for (var v = 0; v < newVoices.length; v++) {
-		newVoices[v].source.start(startTime);
-		newVoices[v].source.onended = function() {
-			endCount++;
-			if (endCount >= newVoices.length) {
-				_playing = false;
-				_voices = [];
-				if (FontRig.CurveSonifier.onPlayStateChange) {
-					FontRig.CurveSonifier.onPlayStateChange(false);
-				}
-			}
-		};
-	}
-
-	_voices = newVoices;
 	_playing = true;
-
 	if (FontRig.CurveSonifier.onPlayStateChange) {
 		FontRig.CurveSonifier.onPlayStateChange(true);
 	}
 
-	return analyses;
+	_scheduleNextCycle();
 };
 
 // ===================================================================
@@ -894,8 +810,9 @@ FontRig.CurveSonifier.analyzeContour = function(contour) {
 };
 
 // ===================================================================
-// Callbacks (set by panel or other consumers)
+// Callbacks
 // ===================================================================
 FontRig.CurveSonifier.onPlayStateChange = null;
+FontRig.CurveSonifier.onAnalysisUpdate  = null;   // called each loop cycle
 
 })();

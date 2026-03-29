@@ -2,18 +2,6 @@
 // FontRig — Sonification Panel (Multi-Instance Sidebar Widget)
 // ===================================================================
 // UI panel for the Curve Sonification engine.
-// Allows users to "hear" bezier curve quality by mapping curvature
-// data to audio parameters.
-//
-// Features:
-//   - Play/stop controls for active glyph or selected contours
-//   - Waveform selection (sine, triangle, sawtooth, cello)
-//   - Curvature-to-pitch mapping controls
-//   - Roughness (dK/dt distortion) slider
-//   - Duration and sample count
-//   - Stereo spread for multi-voice mode
-//   - Real-time curvature visualization (mini canvas)
-//   - Inflection point click toggle
 // ===================================================================
 'use strict';
 
@@ -24,7 +12,7 @@ if (typeof FontRig === 'undefined') return;
 FontRig.SonificationPanel = {};
 
 // ===================================================================
-// Mount: create a Sonification panel instance
+// Mount
 // ===================================================================
 FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	if (!containerEl) return null;
@@ -46,40 +34,29 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	var settings = sonifier.getSettings();
 
 	// =================================================================
-	// 1. TRANSPORT CONTROLS
+	// 1. TRANSPORT
 	// =================================================================
 	var grpTransport = FRWidget.GroupBox('Transport');
 
-	// Play All button
 	var btnPlayAll = FRWidget.Button('Play All', {
 		tooltip: 'Sonify all contours in active layer',
 		onClick: function() {
-			if (sonifier.isPlaying()) {
-				sonifier.stop();
-			} else {
-				var analyses = sonifier.playActiveGlyph();
-				if (analyses) _drawCurvature(inst, analyses);
-			}
+			if (sonifier.isPlaying()) { sonifier.stop(); }
+			else { sonifier.playActiveGlyph(); }
 		}
 	});
 	btnPlayAll.style.marginRight = '4px';
 	grpTransport.addWidget(btnPlayAll);
 
-	// Play Selected button
 	var btnPlaySel = FRWidget.Button('Play Selected', {
 		tooltip: 'Sonify only the segments touching selected nodes',
 		onClick: function() {
-			if (sonifier.isPlaying()) {
-				sonifier.stop();
-			} else {
-				var analyses = sonifier.playSelectedSegments();
-				if (analyses) _drawCurvature(inst, analyses);
-			}
+			if (sonifier.isPlaying()) { sonifier.stop(); }
+			else { sonifier.playSelectedSegments(); }
 		}
 	});
 	grpTransport.addWidget(btnPlaySel);
 
-	// Stop button
 	var btnStop = FRWidget.Button('Stop', {
 		tooltip: 'Stop playback',
 		onClick: function() { sonifier.stop(); }
@@ -87,15 +64,40 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	btnStop.style.marginLeft = '4px';
 	grpTransport.addWidget(btnStop);
 
+	// Loop toggle
+	var loopRow = document.createElement('div');
+	loopRow.style.display = 'flex';
+	loopRow.style.alignItems = 'center';
+	loopRow.style.gap = '6px';
+	loopRow.style.marginTop = '6px';
+
+	var chkLoop = document.createElement('input');
+	chkLoop.type = 'checkbox';
+	chkLoop.checked = settings.loop;
+	chkLoop.style.accentColor = '#6fcf6f';
+	chkLoop.addEventListener('change', function() {
+		sonifier.setSetting('loop', chkLoop.checked);
+	});
+	loopRow.appendChild(chkLoop);
+	loopRow.appendChild(FRWidget.Label('Loop (live re-read on each cycle)', { dim: true }));
+	grpTransport.addWidget(loopRow);
+
 	// Play state indicator
 	var lblState = FRWidget.Label('Ready', { mono: true, dim: true });
-	lblState.style.marginLeft = '8px';
+	lblState.style.display = 'block';
+	lblState.style.marginTop = '4px';
 	grpTransport.addWidget(lblState);
 
-	// Listen for play state changes
 	sonifier.onPlayStateChange = function(playing) {
-		lblState.textContent = playing ? 'Playing...' : 'Ready';
+		lblState.textContent = playing
+			? (settings.loop || sonifier.getSettings().loop ? 'Looping...' : 'Playing...')
+			: 'Ready';
 		lblState.style.color = playing ? '#6fcf6f' : '';
+	};
+
+	// Live visualization on each loop cycle
+	sonifier.onAnalysisUpdate = function(analyses) {
+		if (analyses) _drawCurvature(inst, analyses);
 	};
 
 	content.appendChild(grpTransport);
@@ -140,7 +142,7 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	content.appendChild(grpSweep);
 
 	// =================================================================
-	// 2. CURVATURE DISPLAY (mini canvas)
+	// 2. CURVATURE DISPLAY
 	// =================================================================
 	var grpViz = FRWidget.GroupBox('Curvature Profile');
 
@@ -156,8 +158,6 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 
 	inst._canvas = canvas;
 	inst._canvasCtx = canvas.getContext('2d');
-
-	// Draw empty state
 	_drawEmpty(inst);
 
 	grpViz.addWidget(canvas);
@@ -168,29 +168,15 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	// =================================================================
 	var grpPitch = FRWidget.GroupBox('Pitch Mapping');
 
-	// Min frequency
-	var sldMinFreq = FRWidget.SliderCtrl({
-		label: 'Min Hz',
-		min: 20,
-		max: 500,
-		value: settings.minFreq,
-		step: 10,
+	grpPitch.addWidget(FRWidget.SliderCtrl({
+		label: 'Min Hz', min: 20, max: 500, value: settings.minFreq, step: 10,
 		onChange: function(v) { sonifier.setSetting('minFreq', v); }
-	});
-	grpPitch.addWidget(sldMinFreq);
-
-	// Max frequency
-	var sldMaxFreq = FRWidget.SliderCtrl({
-		label: 'Max Hz',
-		min: 200,
-		max: 5000,
-		value: settings.maxFreq,
-		step: 50,
+	}));
+	grpPitch.addWidget(FRWidget.SliderCtrl({
+		label: 'Max Hz', min: 200, max: 5000, value: settings.maxFreq, step: 50,
 		onChange: function(v) { sonifier.setSetting('maxFreq', v); }
-	});
-	grpPitch.addWidget(sldMaxFreq);
+	}));
 
-	// Curvature scale
 	var cmbScale = FRWidget.ComboBox({
 		items: [
 			{ value: 'log',    label: 'Logarithmic' },
@@ -212,17 +198,21 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	content.appendChild(grpPitch);
 
 	// =================================================================
-	// 4. TIMBRE & ROUGHNESS
+	// 4. TIMBRE
 	// =================================================================
 	var grpTimbre = FRWidget.GroupBox('Timbre');
 
-	// Waveform selector
 	var cmbWave = FRWidget.ComboBox({
 		items: [
 			{ value: 'sine',     label: 'Sine (pure)' },
 			{ value: 'triangle', label: 'Triangle' },
 			{ value: 'sawtooth', label: 'Sawtooth' },
-			{ value: 'cello',    label: 'Cello (harmonic)' },
+			{ value: 'cello',    label: 'Cello' },
+			{ value: 'voice',    label: 'Voice (formant)' },
+			{ value: 'flute',    label: 'Flute (breathy)' },
+			{ value: 'pad',      label: 'Pad (warm)' },
+			{ value: 'glass',    label: 'Glass (FM bell)' },
+			{ value: 'bowed',    label: 'Bowed string' },
 		],
 		value: settings.waveform,
 		onChange: function(v) { sonifier.setSetting('waveform', v); }
@@ -235,16 +225,11 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	waveRow.appendChild(cmbWave);
 	grpTimbre.addWidget(waveRow);
 
-	// Roughness (dK/dt -> distortion)
-	var sldRough = FRWidget.SliderCtrl({
-		label: 'Roughness',
-		min: 0,
-		max: 100,
-		value: Math.round(settings.roughness * 100),
-		step: 1,
+	grpTimbre.addWidget(FRWidget.SliderCtrl({
+		label: 'Roughness', min: 0, max: 100,
+		value: Math.round(settings.roughness * 100), step: 1,
 		onChange: function(v) { sonifier.setSetting('roughness', v / 100); }
-	});
-	grpTimbre.addWidget(sldRough);
+	}));
 
 	content.appendChild(grpTimbre);
 
@@ -253,39 +238,21 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	// =================================================================
 	var grpPlay = FRWidget.GroupBox('Playback');
 
-	// Duration
-	var sldDur = FRWidget.SliderCtrl({
-		label: 'Duration (s)',
-		min: 5,
-		max: 100,
-		value: Math.round(settings.duration * 10),
-		step: 1,
-		decimals: 1,
+	grpPlay.addWidget(FRWidget.SliderCtrl({
+		label: 'Duration (s)', min: 5, max: 100,
+		value: Math.round(settings.duration * 10), step: 1, decimals: 1,
 		onChange: function(v) { sonifier.setSetting('duration', v / 10); }
-	});
-	grpPlay.addWidget(sldDur);
-
-	// Volume
-	var sldVol = FRWidget.SliderCtrl({
-		label: 'Volume',
-		min: 0,
-		max: 100,
-		value: Math.round(settings.volume * 100),
-		step: 1,
+	}));
+	grpPlay.addWidget(FRWidget.SliderCtrl({
+		label: 'Volume', min: 0, max: 100,
+		value: Math.round(settings.volume * 100), step: 1,
 		onChange: function(v) { sonifier.setSetting('volume', v / 100); }
-	});
-	grpPlay.addWidget(sldVol);
-
-	// Sample count
-	var sldSamples = FRWidget.SliderCtrl({
-		label: 'Resolution',
-		min: 64,
-		max: 1024,
-		value: settings.sampleCount,
-		step: 64,
+	}));
+	grpPlay.addWidget(FRWidget.SliderCtrl({
+		label: 'Resolution', min: 64, max: 1024,
+		value: settings.sampleCount, step: 64,
 		onChange: function(v) { sonifier.setSetting('sampleCount', v); }
-	});
-	grpPlay.addWidget(sldSamples);
+	}));
 
 	content.appendChild(grpPlay);
 
@@ -294,18 +261,12 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	// =================================================================
 	var grpStereo = FRWidget.GroupBox('Multi-Voice');
 
-	// Stereo spread
-	var sldSpread = FRWidget.SliderCtrl({
-		label: 'Stereo Spread',
-		min: 0,
-		max: 100,
-		value: Math.round(settings.stereoSpread * 100),
-		step: 5,
+	grpStereo.addWidget(FRWidget.SliderCtrl({
+		label: 'Stereo Spread', min: 0, max: 100,
+		value: Math.round(settings.stereoSpread * 100), step: 5,
 		onChange: function(v) { sonifier.setSetting('stereoSpread', v / 100); }
-	});
-	grpStereo.addWidget(sldSpread);
+	}));
 
-	// Inflection clicks toggle
 	var clickRow = document.createElement('div');
 	clickRow.style.display = 'flex';
 	clickRow.style.alignItems = 'center';
@@ -323,21 +284,16 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 	clickRow.appendChild(FRWidget.Label('Inflection clicks', { dim: true }));
 	grpStereo.addWidget(clickRow);
 
-	// Click volume
-	var sldClickVol = FRWidget.SliderCtrl({
-		label: 'Click Volume',
-		min: 0,
-		max: 100,
-		value: Math.round(settings.clickVolume * 100),
-		step: 5,
+	grpStereo.addWidget(FRWidget.SliderCtrl({
+		label: 'Click Volume', min: 0, max: 100,
+		value: Math.round(settings.clickVolume * 100), step: 5,
 		onChange: function(v) { sonifier.setSetting('clickVolume', v / 100); }
-	});
-	grpStereo.addWidget(sldClickVol);
+	}));
 
 	content.appendChild(grpStereo);
 
 	// =================================================================
-	// 7. INFO DISPLAY
+	// 7. INFO
 	// =================================================================
 	var grpInfo = FRWidget.GroupBox('Analysis Info');
 	var lblInfo = FRWidget.Label('Load a glyph and press Play', { mono: true, dim: true });
@@ -350,16 +306,12 @@ FontRig.SonificationPanel.mount = function(containerEl, ctx) {
 
 	content.appendChild(grpInfo);
 
-	// =================================================================
-	// Assemble
-	// =================================================================
 	containerEl.appendChild(content);
-
 	return inst;
 };
 
 // ===================================================================
-// Curvature visualization helpers
+// Curvature visualization
 // ===================================================================
 
 function _drawEmpty(inst) {
@@ -371,7 +323,6 @@ function _drawEmpty(inst) {
 	ctx.fillStyle = '#1a1a2e';
 	ctx.fillRect(0, 0, w, h);
 
-	// Center line
 	ctx.strokeStyle = '#333355';
 	ctx.lineWidth = 1;
 	ctx.beginPath();
@@ -379,7 +330,6 @@ function _drawEmpty(inst) {
 	ctx.lineTo(w, h / 2);
 	ctx.stroke();
 
-	// Label
 	ctx.fillStyle = '#555577';
 	ctx.font = '11px monospace';
 	ctx.textAlign = 'center';
@@ -397,17 +347,8 @@ function _drawCurvature(inst, analyses) {
 	ctx.fillStyle = '#1a1a2e';
 	ctx.fillRect(0, 0, w, h);
 
-	// Colors for different voices
-	var colors = [
-		'#6fcf6f', // green
-		'#cf6f6f', // red
-		'#6f9fcf', // blue
-		'#cfcf6f', // yellow
-		'#cf6fcf', // magenta
-		'#6fcfcf', // cyan
-	];
+	var colors = ['#6fcf6f','#cf6f6f','#6f9fcf','#cfcf6f','#cf6fcf','#6fcfcf'];
 
-	// Find global curvature range across all analyses
 	var globalMax = 0.001;
 	for (var a = 0; a < analyses.length; a++) {
 		for (var i = 0; i < analyses[a].kappa.length; i++) {
@@ -416,7 +357,6 @@ function _drawCurvature(inst, analyses) {
 		}
 	}
 
-	// Center line
 	ctx.strokeStyle = '#333355';
 	ctx.lineWidth = 1;
 	ctx.beginPath();
@@ -424,7 +364,6 @@ function _drawCurvature(inst, analyses) {
 	ctx.lineTo(w, h / 2);
 	ctx.stroke();
 
-	// Draw each voice's curvature
 	for (var a = 0; a < analyses.length; a++) {
 		var kappa = analyses[a].kappa;
 		var color = colors[a % colors.length];
@@ -439,13 +378,11 @@ function _drawCurvature(inst, analyses) {
 			var normK = kappa[i] / globalMax;
 			var y = h / 2 - normK * (h / 2 - 4);
 			y = Math.max(2, Math.min(h - 2, y));
-
 			if (i === 0) ctx.moveTo(x, y);
 			else ctx.lineTo(x, y);
 		}
 		ctx.stroke();
 
-		// Draw inflection markers
 		ctx.globalAlpha = 0.9;
 		for (var inf = 0; inf < analyses[a].inflections.length; inf++) {
 			var ix = analyses[a].inflections[inf] * w;
@@ -460,7 +397,6 @@ function _drawCurvature(inst, analyses) {
 
 	ctx.globalAlpha = 1.0;
 
-	// Update info label
 	if (inst._lblInfo) {
 		var lines = [];
 		for (var a = 0; a < analyses.length; a++) {
@@ -473,7 +409,7 @@ function _drawCurvature(inst, analyses) {
 			}
 			lines.push(
 				'Voice ' + (a + 1) +
-				(an.reversed ? ' \u21C4' : '') +    // ⇄ arrow when reversed
+				(an.reversed ? ' \u21C4' : '') +
 				': len=' + Math.round(an.totalLength) +
 				'  K=[' + minK.toFixed(4) + ', ' + maxK.toFixed(4) + ']' +
 				'  infl=' + an.inflections.length
@@ -486,12 +422,12 @@ function _drawCurvature(inst, analyses) {
 }
 
 // ===================================================================
-// Register as sidebar widget
+// Register
 // ===================================================================
 FontRig.SidebarConfig.registerWidget({
 	id:    'sonification',
 	label: 'Sonification',
-	icon:  'wave',  // TypeRig Icons ligature — fallback handled
+	icon:  'wave',
 	mount: FontRig.SonificationPanel.mount,
 	update: null,
 	unmount: function(inst) {
