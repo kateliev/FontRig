@@ -111,7 +111,7 @@ SBC.registerWidget({
 SBC.registerWidget({
 	id:    'ai-agent',
 	label: 'AI Agent',
-	icon:  'node_target',
+	icon:  'spark',
 	mount: function(containerEl, ctx) {
 		return FontRig.AiAgentPanel.mount(containerEl, ctx);
 	},
