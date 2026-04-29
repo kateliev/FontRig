@@ -54,14 +54,15 @@ FontRig.pyBridge = {
 
 		// Core actions
 		'typerig/core/actions/node-actions.py',
+		'typerig/core/actions/node-panel-actions.py',
 	],
 
 	// -- Local modules: editor-specific Python files served from FontRig --
 	// These are fetched relative to the editor root, not from GitHub.
-	// Installed into the same Pyodide site-packages tree.
-	localModules: [
-		{ src: 'python/node-panel-actions.py', dest: 'typerig/core/actions/node-panel-actions.py' },
-	],
+	// (Currently empty — node-panel-actions.py was lifted into TypeRig core
+	//  and is now fetched from the GitHub manifest above. Keep this list as
+	//  the extension point for any genuinely editor-only Python.)
+	localModules: [],
 
 	// -- Stub __init__.py contents -----------------------------------------
 	// We stub these to avoid importing proxy/FL-dependent subpackages
