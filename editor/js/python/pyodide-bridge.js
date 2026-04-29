@@ -55,6 +55,7 @@ FontRig.pyBridge = {
 		// Core actions
 		'typerig/core/actions/node-actions.py',
 		'typerig/core/actions/node-panel-actions.py',
+		'typerig/core/actions/curve-actions.py',
 	],
 
 	// -- Local modules: editor-specific Python files served from FontRig --
