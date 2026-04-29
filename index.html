@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FontRig — Web Type Design Editor</title>
+<meta name="description" content="Browser-based type design editor built on the TypeRig core. Load UFO/OTF/TTF fonts, inspect outlines, edit glyphs, and export — no installation required.">
+<link rel="icon" type="image/svg+xml" href="editor/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* -- Variables ------------------------------------------- */
+:root {
+	--bg-primary: #1a1a1e;
+	--bg-secondary: #222226;
+	--bg-tertiary: #2a2a2e;
+	--bg-hover: #333338;
+	--border: #3a3a40;
+	--border-subtle: #2e2e34;
+	--text-primary: #e8e8ec;
+	--text-secondary: #9898a0;
+	--text-dim: #686870;
+	--accent: #5b9def;
+	--accent-dim: #3a6fb0;
+	--accent-bg: rgba(91,157,239,0.08);
+	--font-sans: 'DM Sans', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+/* -- Reset ----------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+	scroll-behavior: smooth;
+	scrollbar-color: #3a3a40 transparent;
+}
+
+body {
+	font-family: var(--font-sans);
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	-webkit-font-smoothing: antialiased;
+	line-height: 1.6;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3a40; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4a4a50; }
+
+a { color: var(--accent); text-decoration: none; transition: color 0.15s; }
+a:hover { color: var(--text-primary); }
+
+/* -- Layout ---------------------------------------------- */
+.wrap {
+	max-width: 960px;
+	margin: 0 auto;
+	padding: 0 24px;
+}
+
+/* -- Header ---------------------------------------------- */
+header {
+	position: sticky;
+	top: 0;
+	z-index: 20;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-secondary);
+}
+
+.header-inner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 48px;
+}
+
+.logo {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 13px;
+	color: var(--accent);
+	letter-spacing: 0.5px;
+}
+
+.logo span { color: var(--text-dim); }
+
+nav { display: flex; gap: 4px; }
+
+nav a {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 10px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	color: var(--text-secondary);
+	font-size: 12px;
+	font-family: var(--font-sans);
+	transition: all 0.15s;
+}
+
+nav a:hover {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+	border-color: var(--border);
+}
+
+nav a svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* -- Hero ------------------------------------------------ */
+.hero {
+	padding: 80px 0 56px;
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.hero .wrap {
+	position: relative;
+}
+
+.hero-logo {
+	position: absolute;
+	right: calc(100% + 24px);
+	top: 0;
+	width: 200px;
+	height: 200px;
+}
+
+.hero-logo img {
+	width: 100%;
+	height: 100%;
+	display: block;
+}
+
+.hero h1 {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 40px;
+	letter-spacing: -0.5px;
+	line-height: 1.1;
+	margin-bottom: 16px;
+}
+
+.hero h1 .accent { color: var(--accent); }
+
+.hero .lead {
+	font-size: 16px;
+	color: var(--text-secondary);
+	max-width: 640px;
+	line-height: 1.65;
+	margin-bottom: 12px;
+}
+
+.hero .sub {
+	font-size: 14px;
+	color: var(--text-dim);
+	max-width: 640px;
+	line-height: 1.6;
+	margin-bottom: 32px;
+}
+
+.hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 16px;
+	border-radius: 5px;
+	font-family: var(--font-sans);
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s;
+	border: 1px solid transparent;
+}
+
+.btn-primary {
+	background: var(--accent);
+	color: #0d0d10;
+}
+
+.btn-primary:hover {
+	background: #6daaff;
+	color: #0d0d10;
+}
+
+.btn-secondary {
+	background: transparent;
+	color: var(--text-secondary);
+	border-color: var(--border);
+}
+
+.btn-secondary:hover {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}
+
+.btn svg { width: 14px; height: 14px; }
+
+.badges {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	margin-top: 24px;
+	flex-wrap: wrap;
+}
+
+.badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--text-dim);
+	padding: 3px 8px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 3px;
+	background: var(--bg-secondary);
+}
+
+.badge .dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+
+.badge .dot.js  { background: #f1e05a; }
+.badge .dot.wip { background: #e08f5b; }
+
+/* -- Section shared -------------------------------------- */
+.section {
+	padding: 48px 0;
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.section-label {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-dim);
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	margin-bottom: 20px;
+}
+
+.section-desc {
+	font-size: 14px;
+	color: var(--text-secondary);
+	max-width: 640px;
+	line-height: 1.6;
+	margin-bottom: 24px;
+}
+
+/* -- Grid cells ------------------------------------------ */
+.grid-3 {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	gap: 1px;
+	background: var(--border-subtle);
+	border: 1px solid var(--border-subtle);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.grid-2 {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1px;
+	background: var(--border-subtle);
+	border: 1px solid var(--border-subtle);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.cell {
+	background: var(--bg-secondary);
+	padding: 20px;
+}
+
+.cell h3 {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--accent);
+	margin-bottom: 6px;
+}
+
+.cell p {
+	font-size: 13px;
+	color: var(--text-secondary);
+	line-height: 1.55;
+}
+
+/* -- Launch strip ---------------------------------------- */
+.launch-strip {
+	padding: 48px 0;
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.launch-inner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 24px;
+	background: var(--bg-secondary);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 28px 32px;
+	flex-wrap: wrap;
+}
+
+.launch-text h2 {
+	font-family: var(--font-mono);
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--text-primary);
+	margin-bottom: 6px;
+}
+
+.launch-text p {
+	font-size: 13px;
+	color: var(--text-secondary);
+}
+
+.launch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* -- Footer ---------------------------------------------- */
+footer {
+	padding: 32px 0;
+	text-align: center;
+}
+
+footer p {
+	font-size: 12px;
+	color: var(--text-dim);
+	line-height: 1.8;
+}
+
+footer a { color: var(--text-secondary); }
+
+/* -- Responsive ------------------------------------------ */
+@media (max-width: 640px) {
+	.hero h1 { font-size: 28px; }
+	.hero-logo {
+		position: static;
+		width: 80px;
+		height: 80px;
+		margin-bottom: 16px;
+	}
+	.grid-3 { grid-template-columns: 1fr; }
+	.grid-2 { grid-template-columns: 1fr; }
+	.badges { flex-wrap: wrap; }
+	nav { gap: 2px; }
+	nav a { padding: 5px 6px; font-size: 11px; }
+	.launch-inner { flex-direction: column; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+	<div class="wrap header-inner">
+		<a href="#" class="logo">FR<span>:</span>FONTRIG</a>
+		<nav>
+			<a href="https://github.com/kateliev/FontRig" target="_blank" rel="noopener">
+				<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+				Source
+			</a>
+			<a href="editor/index.html">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+				Launch Editor
+			</a>
+			<a href="https://github.com/kateliev/TypeRig" target="_blank" rel="noopener">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+				TypeRig
+			</a>
+		</nav>
+	</div>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+	<div class="wrap">
+		<div class="hero-logo">
+			<img src="editor/assets/image/typerig-logo-blue.svg" alt="FontRig logo">
+		</div>
+		<h1>Font<span class="accent">Rig</span></h1>
+		<p class="lead">
+			A browser-based type design editor built on the TypeRig core.
+			Open a font, inspect contours, tweak outlines, and save &mdash;
+			no installation, no plugins, no FontLab required.
+		</p>
+		<p class="sub">
+			Powered by the same geometry engine that drives TypeRig inside FontLab.
+			Runs entirely client-side: your font data never leaves the browser.
+			Experimental and evolving.
+		</p>
+		<div class="hero-actions">
+			<a class="btn btn-primary" href="editor/index.html">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+				Launch Editor
+			</a>
+			<a class="btn btn-secondary" href="https://github.com/kateliev/FontRig" target="_blank" rel="noopener">
+				<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+				View on GitHub
+			</a>
+			<a class="btn btn-secondary" href="https://github.com/kateliev/TypeRig" target="_blank" rel="noopener">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+				TypeRig
+			</a>
+		</div>
+		<div class="badges">
+			<span class="badge"><span class="dot js"></span>JavaScript</span>
+			<span class="badge"><span class="dot"></span>Client-side only</span>
+			<span class="badge"><span class="dot wip"></span>Work in progress</span>
+		</div>
+	</div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+	<div class="wrap">
+		<div class="section-label">What's inside</div>
+		<p class="section-desc">
+			A lightweight editor for inspecting and modifying font files directly in the browser.
+			Built around the object model of TypeRig.
+		</p>
+		<div class="grid-3">
+			<div class="cell">
+				<h3>The TypeRig object model </h3>
+				<p>Open TypeRig font (*.trfont) or glyph (*.trglyph) files</p>
+			</div>
+			<div class="cell">
+				<h3>Simultaneous multi-master editing</h3>
+				<p>A powerful tool set allowing you to work on all masters in parallel</p>
+			</div>
+			<div class="cell">
+				<h3>TypeRig Core Functionality</h3>
+				<p>Geometry, interpolation, and delta-machine math from TypeRig.</p>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- Launch strip -->
+<section class="launch-strip">
+	<div class="wrap">
+		<div class="launch-inner">
+			<div class="launch-text">
+				<h2>Ready to open a font?</h2>
+				<p>No sign-up, no install &mdash; just drag a font file onto the canvas.</p>
+			</div>
+			<div class="launch-actions">
+				<a class="btn btn-primary" href="editor/index.html">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+					Launch Editor
+				</a>
+				<a class="btn btn-secondary" href="https://github.com/kateliev/TypeRig" target="_blank" rel="noopener">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+					Back to TypeRig
+				</a>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- Footer -->
+<footer>
+	<div class="wrap">
+		<p>No warranties. By using this you agree that you use it at your own risk.</p>
+		<p>&copy; <a href="https://www.kateliev.com">Vassil Kateliev</a> &middot; <a href="https://www.karandash.eu">Karandash Type Foundry</a> &middot; <a href="https://github.com/kateliev/TypeRig">typerig.com</a></p>
+	</div>
+</footer>
+
+</body>
+</html>
