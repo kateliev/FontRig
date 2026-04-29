@@ -127,7 +127,91 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 	content.appendChild(grpCorner);
 
 	// =================================================================
-	// 3. ALIGN TOOLS
+	// 3. CURVE TOOLS
+	// =================================================================
+	var grpCurve = FRWidget.GroupBox('Curve');
+
+	// Convert line → curve / curve → line
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'line_to_curve', tooltip: 'Convert selected segment to curve',
+		onClick: function() { _runNpa('npa("npa_segment_convert", True)'); }
+	}));
+
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_to_line', tooltip: 'Convert selected segment to line',
+		onClick: function() { _runNpa('npa("npa_segment_convert", False)'); }
+	}));
+
+	// Tunni
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_tunni', tooltip: 'Optimize curve: Tunni',
+		onClick: function() { _runNpa('npa("npa_curve_optimize", "tunni")'); }
+	}));
+
+	// Hobby presets
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_hobby_1', tooltip: 'Hobby curvature = 1.0',
+		onClick: function() { _runNpa('npa("npa_curve_optimize", "hobby", (1., 1.))'); }
+	}));
+
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_hobby_95', tooltip: 'Hobby curvature = 0.95',
+		onClick: function() { _runNpa('npa("npa_curve_optimize", "hobby", (.95, .95))'); }
+	}));
+
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_hobby_90', tooltip: 'Hobby curvature = 0.90',
+		onClick: function() { _runNpa('npa("npa_curve_optimize", "hobby", (.90, .90))'); }
+	}));
+
+	// Hobby copy (toggle) + paste (with Alt = swap)
+	var btnHobbyCopy = FRWidget.ToggleButton(null, {
+		icon: 'curve_hobby_copy', tooltip: 'Copy Hobby curvature from selection',
+		onChange: function(active) {
+			if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return;
+			if (active) {
+				FontRig.pyBridge.syncToPython();
+				try {
+					FontRig.pyBridge.pyodide.runPython('npa("npa_hobby_copy")');
+				} catch (e) {
+					console.warn('[NodePanel] hobby copy failed:', e);
+				}
+			} else {
+				// Deactivating: clear the bank on the Python side
+				try { FontRig.pyBridge.pyodide.runPython('npa("npa_hobby_copy")'); } catch(_) {}
+			}
+		}
+	});
+	grpCurve.addWidget(btnHobbyCopy);
+
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_hobby_paste', tooltip: 'Paste Hobby curvature\n+Alt: swap alpha/beta',
+		onClick: function(e) {
+			var swap = (e && e.altKey) ? 'True' : 'False';
+			_runNpa('npa("npa_hobby_paste", ' + swap + ')');
+		}
+	}));
+
+	// Proportional presets
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_prop_30', tooltip: 'Set handle proportion to 30%',
+		onClick: function() { _runNpa('npa("npa_curve_optimize", "proportional", (1., 1.), (.3, .3))'); }
+	}));
+
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_prop_50', tooltip: 'Set handle proportion to 50%',
+		onClick: function() { _runNpa('npa("npa_curve_optimize", "proportional", (1., 1.), (.5, .5))'); }
+	}));
+
+	grpCurve.addWidget(FRWidget.Button(null, {
+		icon: 'curve_retract_alt', tooltip: 'Retract handles (proportion 0%)',
+		onClick: function() { _runNpa('npa("npa_curve_optimize", "proportional", (1., 1.), (0., 0.))'); }
+	}));
+
+	content.appendChild(grpCurve);
+
+	// =================================================================
+	// 4. ALIGN TOOLS
 	// =================================================================
 	var grpAlign = FRWidget.GroupBox('Align');
 
@@ -194,7 +278,7 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 	content.appendChild(grpAlign);
 
 	// =================================================================
-	// 4. SLOPE TOOLS
+	// 5. SLOPE TOOLS
 	// =================================================================
 	var grpSlope = FRWidget.GroupBox('Slope');
 
@@ -239,7 +323,7 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 	content.appendChild(grpSlope);
 
 	// =================================================================
-	// 5. MOVE TOOLS
+	// 6. MOVE TOOLS
 	// =================================================================
 	var grpMove = FRWidget.GroupBox('Move');
 
