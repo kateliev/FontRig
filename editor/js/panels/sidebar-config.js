@@ -157,6 +157,7 @@ FontRig.SidebarConfig.defaults = {
 		widgets: [
 			{ id: 'layer',      active: true },
 			{ id: 'node',       active: true },
+			{ id: 'contour',    active: true },
 			{ id: 'xml',        active: true },
 			{ id: 'python',     active: true },
 			{ id: 'sonification', active: true },

@@ -157,7 +157,7 @@ FontRig.pyBridge = {
 				log('Fetching TypeRig core (' + this.manifest.length + ' files)\u2026');
 
 				var fetches = this.manifest.map(function(filePath) {
-					return fetch(FontRig.pyBridge._rawUrl(filePath))
+					return fetch(FontRig.pyBridge._rawUrl(filePath), { cache: 'no-store' })
 						.then(function(r) {
 							if (!r.ok) throw new Error(filePath + ': ' + r.status);
 							return r.text();

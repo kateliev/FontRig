@@ -107,6 +107,19 @@ SBC.registerWidget({
 	}
 });
 
+// -- Contour Widget -------------------------------------------------
+SBC.registerWidget({
+	id:    'contour',
+	label: 'Contour',
+	icon:  'contour_close',
+	mount: function(containerEl, ctx) {
+		return FontRig.ContourPanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.update();
+	}
+});
+
 // -- AI Agent Widget -----------------------------------------------
 SBC.registerWidget({
 	id:    'ai-agent',
