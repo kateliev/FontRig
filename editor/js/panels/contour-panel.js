@@ -3,7 +3,7 @@
 // ===================================================================
 // Contour manipulation panel based on TypeRig GUI Contour panel.
 // Uses FRWidget factories for all UI elements.
-// Python logic lives in node-panel-actions.py; JS calls actions by
+// Python logic lives in node_panel_actions.py; JS calls actions by
 // name via the `npa("action_name", ...)` bridge dispatcher.
 //
 // Sections:
