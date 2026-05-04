@@ -2,5 +2,6 @@ _*
 .pyc
 .backup
 .DS_Store
+.claude
 venv
 
