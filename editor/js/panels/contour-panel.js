@@ -166,6 +166,43 @@ FontRig.ContourPanel.mount = function(containerEl, ctx) {
 	content.appendChild(grp3);
 
 	// =================================================================
+	// 3.5 CUT / STROKE SEPARATE / MEDIAL AXIS
+	// =================================================================
+	var grpCut = FRWidget.GroupBox('Cut');
+
+	grpCut.addWidget(FRWidget.Button(null, {
+		icon: 'contour_cut',
+		tooltip: 'Slice selected contours.',
+		onClick: function() { _runNpa('npa("npa_contour_slice")'); }
+	}));
+
+	grpCut.addWidget(FRWidget.Button(null, {
+		icon: 'cut_stem_overlap',
+		tooltip: 'Cut contour, then auto overlap align both neighbor pairs at the cut junction.',
+		onClick: function() { _runNpa('npa("npa_contour_slice_align")'); }
+	}));
+
+	grpCut.addWidget(FRWidget.Button(null, {
+		icon: 'auto_stem_overlap',
+		tooltip: 'Auto overlap align — select 4 nodes (2 neighbor pairs) at a cut junction.',
+		onClick: function() { _runNpa('npa("npa_contour_auto_align")'); }
+	}));
+
+	grpCut.addWidget(FRWidget.Button(null, {
+		icon: 'cutter_auto',
+		tooltip: 'Stroke Separate (V3) — split stroke glyph into components via MAT analysis.',
+		onClick: function() { _runNpa('npa("npa_stroke_separate")'); }
+	}));
+
+	grpCut.addWidget(FRWidget.Button(null, {
+		icon: 'centerline',
+		tooltip: 'Medial Axis Extract — emit a clean medial-axis skeleton as a new shape.',
+		onClick: function() { _runNpa('npa("npa_mat_extract")'); }
+	}));
+
+	content.appendChild(grpCut);
+
+	// =================================================================
 	// 4. DRAWING TOOLS
 	// =================================================================
 	var grpDraw = FRWidget.GroupBox('Drawing');
