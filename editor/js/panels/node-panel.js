@@ -211,6 +211,52 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 	content.appendChild(grpCurve);
 
 	// =================================================================
+	// 3.5 CAP TOOLS
+	// =================================================================
+	// Selection model:
+	//   cap_butt / cap_round : select the two stem-corner on-curves (A, B).
+	//   cap_rebuild          : select any contiguous range inside the cap;
+	//                          dispatcher infers A, B from first/last on-curves.
+	//   make_collinear       : select the four nodes of each of two parallel-stem
+	//                          curve segments (8 nodes total).
+	// Icon tokens kept verbatim from FL panel per porting guide §10.8:
+	//   cap_normal (= butt), cap_round, cap_square (= rebuild), curve_collinear.
+	var grpCap = FRWidget.GroupBox('Cap');
+
+	grpCap.addWidget(FRWidget.Button(null, {
+		icon: 'cap_normal',
+		tooltip: 'Butt cap — perpendicular flat cut between two stem corners',
+		onClick: function() { _runNpa('npa("npa_cap_butt")'); }
+	}));
+
+	grpCap.addWidget(FRWidget.Button(null, {
+		icon: 'cap_round',
+		tooltip: 'Round cap — italic-aware circular cap between two stem corners\n+Alt: keep overall path length (cap fits inside stems)',
+		onClick: function(e) {
+			var keep = (e && e.altKey) ? 'True' : 'False';
+			_runNpa('npa("npa_cap_round", 1.0, ' + keep + ')');
+		}
+	}));
+
+	grpCap.addWidget(FRWidget.Button(null, {
+		icon: 'cap_restore',
+		tooltip: 'Rebuild cap — flatten any existing cap to a butt cut',
+		onClick: function() { _runNpa('npa("npa_cap_rebuild")'); }
+	}));
+
+	grpCap.addWidget(FRWidget.Button(null, {
+		icon: 'curve_collinear',
+		tooltip: 'Make two selected curve segments collinear\n+Alt: also equalize stem width\n+Shift: lock to first selected curve',
+		onClick: function(e) {
+			var mode = (e && e.shiftKey) ? '0' : '-1';
+			var equalize = (e && e.altKey) ? 'True' : 'False';
+			_runNpa('npa("npa_make_collinear", ' + mode + ', ' + equalize + ')');
+		}
+	}));
+
+	content.appendChild(grpCap);
+
+	// =================================================================
 	// 4. ALIGN TOOLS
 	// =================================================================
 	var grpAlign = FRWidget.GroupBox('Align');

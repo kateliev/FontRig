@@ -42,6 +42,7 @@ FontRig.pyBridge = {
 		'typerig/core/objects/glyph.py',
 		'typerig/core/objects/delta.py',
 		'typerig/core/objects/hobbyspline.py',
+		'typerig/core/objects/metapen.py',
 
 		// Core functions
 		'typerig/core/func/math.py',
