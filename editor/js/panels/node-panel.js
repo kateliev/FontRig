@@ -254,6 +254,15 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 		}
 	}));
 
+	grpCap.addWidget(FRWidget.Button(null, {
+		icon: 'channel_process',
+		tooltip: 'Make two selected curve segments monoline (truly parallel offsets of a shared median skeleton)\n+Alt: preserve per-end taper instead of uniform width',
+		onClick: function(e) {
+			var preserveTaper = (e && e.altKey) ? 'True' : 'False';
+			_runNpa('npa("npa_make_monoline", None, ' + preserveTaper + ')');
+		}
+	}));
+
 	content.appendChild(grpCap);
 
 	// =================================================================
