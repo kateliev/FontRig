@@ -32,8 +32,23 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 		_containerEl: containerEl,
 		_slopeBank: 0,
 		_moveMethod: 'SMART',
-		_targetSet: false,
+		// Align section modifier state (mirror FL popup-node-align toggles).
+		_alignSmart:       true,   // radio: true=smart_shift, false=dumb
+		_alignKeepDim:     false,
+		_alignLerp:        false,
+		_alignIntercept:   false,
+		_alignExtrapolate: false,
+		_alignUseTarget:   false,  // toggle: while true, aligns redirect to stored target
 	};
+
+	function _alignKwargs() {
+		return ', smart_shift='    + (inst._alignSmart       ? 'True' : 'False')
+		     + ', keep_relations=' + (inst._alignKeepDim     ? 'True' : 'False')
+		     + ', lerp_shift='     + (inst._alignLerp        ? 'True' : 'False')
+		     + ', intercept='      + (inst._alignIntercept   ? 'True' : 'False')
+		     + ', extrapolate='    + (inst._alignExtrapolate ? 'True' : 'False')
+		     + ', use_target='     + (inst._alignUseTarget   ? 'True' : 'False');
+	}
 
 	containerEl.innerHTML = '';
 
@@ -270,22 +285,82 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 	// =================================================================
 	var grpAlign = FRWidget.GroupBox('Align');
 
-	// Pick target
-	var btnTarget = FRWidget.ToggleButton(null, {
-		icon: 'node_target', tooltip: 'Pick target node for alignment',
+	// -- Modifier toggles (mirror FL popup-node-align) --------------------
+	// Keep relations (rigid group shift)
+	grpAlign.addWidget(FRWidget.ToggleButton(null, {
+		icon: 'shift_keep_dimension',
+		tooltip: 'Keep relations between selected nodes (rigid group shift)',
+		onChange: function(active) { inst._alignKeepDim = !!active; }
+	}));
+
+	// Dumb / Smart radio
+	grpAlign.addWidget(FRWidget.ToggleButton(null, {
+		icon: 'shift_dumb',
+		tooltip: 'Simple shift: move only selected nodes (off-curves stay put)',
+		group: 'align-shift',
+		active: !inst._alignSmart,
+		onChange: function(active) { if (active) inst._alignSmart = false; }
+	}));
+
+	grpAlign.addWidget(FRWidget.ToggleButton(null, {
+		icon: 'shift_smart',
+		tooltip: 'Smart shift: move on-curves together with their off-curve handles',
+		group: 'align-shift',
+		active: inst._alignSmart,
+		onChange: function(active) { if (active) inst._alignSmart = true; }
+	}));
+
+	// Interpolated nudge
+	grpAlign.addWidget(FRWidget.ToggleButton(null, {
+		icon: 'shift_interpolate',
+		tooltip: 'Interpolated shift (Interpolated Nudge)',
+		onChange: function(active) { inst._alignLerp = !!active; }
+	}));
+
+	// Intercept
+	grpAlign.addWidget(FRWidget.ToggleButton(null, {
+		icon: 'shift_intercept',
+		tooltip: 'Intercept: project X onto the line through prev/next on-curve neighbours',
+		onChange: function(active) { inst._alignIntercept = !!active; }
+	}));
+
+	// Extrapolate
+	grpAlign.addWidget(FRWidget.ToggleButton(null, {
+		icon: 'extrapolate',
+		tooltip: 'Extrapolate: slide on-curve nodes along their bezier curve/extension instead of direct coordinate assignment',
+		onChange: function(active) { inst._alignExtrapolate = !!active; }
+	}));
+
+	// Target lock — toggle: ON acquires centroid+safe-distance and routes
+	// subsequent align actions through it; OFF clears the stored target.
+	var btnTarget;
+	btnTarget = FRWidget.ToggleButton(null, {
+		icon: 'node_target',
+		tooltip: 'Toggle target lock: acquire centroid of selection (offset by safe distance) and redirect align actions to it',
 		onChange: function(active) {
 			if (active) {
-				if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return;
+				if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
+					btnTarget.setValue(false);
+					inst._alignUseTarget = false;
+					return;
+				}
 				FontRig.pyBridge.syncToPython();
+				var safe = spnSafeDist.getValue() || 0;
+				var ok = false;
 				try {
-					var ok = FontRig.pyBridge.pyodide.runPython('npa("npa_target_set")');
-					inst._targetSet = !!ok;
+					ok = !!FontRig.pyBridge.pyodide.runPython(
+						'npa("npa_target_set", safe_distance=' + safe + ')');
 				} catch (e) {
 					console.warn('[NodePanel] target set failed:', e);
-					inst._targetSet = false;
 				}
+				if (!ok) {
+					btnTarget.setValue(false);
+					inst._alignUseTarget = false;
+					return;
+				}
+				inst._alignUseTarget = true;
 			} else {
-				inst._targetSet = false;
+				inst._alignUseTarget = false;
 				if (FontRig.pyBridge && FontRig.pyBridge.ready) {
 					try { FontRig.pyBridge.pyodide.runPython('npa("npa_target_clear")'); } catch(_) {}
 				}
@@ -294,16 +369,14 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 	});
 	grpAlign.addWidget(btnTarget);
 
-	// Collapse to target
-	grpAlign.addWidget(FRWidget.Button(null, {
-		icon: 'node_target_collapse', tooltip: 'Collapse selected nodes to target',
-		onClick: function() {
-			if (!inst._targetSet) return;
-			_runNpa('npa("npa_collapse_to_target")');
-		}
-	}));
+	// Safe-distance spinbox (offsets target on each axis at acquisition time)
+	var spnSafeDist = FRWidget.SpinBox({
+		min: -100, max: 100, value: 0, step: 5,
+		tooltip: 'Safe distance: offset added to acquired target on each axis'
+	});
+	grpAlign.addWidget(spnSafeDist);
 
-	// Align mode buttons
+	// -- Align mode buttons ------------------------------------------------
 	var alignModes = [
 		['node_align_left',        'L',            'Align left'],
 		['node_align_right',       'R',            'Align right'],
@@ -324,11 +397,20 @@ FontRig.NodePanel.mount = function(containerEl, ctx) {
 			grpAlign.addWidget(FRWidget.Button(null, {
 				icon: icon, tooltip: tip,
 				onClick: function() {
-					_runNpa('npa("npa_align", "' + mode + '")');
+					_runNpa('npa("npa_align", "' + mode + '"' + _alignKwargs() + ')');
 				}
 			}));
 		})(alignModes[i][0], alignModes[i][1], alignModes[i][2]);
 	}
+
+	// Collapse to target — works whenever a target is locked
+	grpAlign.addWidget(FRWidget.Button(null, {
+		icon: 'node_target_collapse', tooltip: 'Collapse selected nodes to stored target',
+		onClick: function() {
+			if (!inst._alignUseTarget) return;
+			_runNpa('npa("npa_collapse_to_target")');
+		}
+	}));
 
 	content.appendChild(grpAlign);
 
