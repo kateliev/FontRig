@@ -61,6 +61,15 @@ FontRig.handleCanvasDrag = async function(stream, initialEvent) {
 		return;
 	}
 
+	// -- Active drawing tool wins over default selection
+	if (FontRig.drawTool && typeof FontRig.drawTool.tryDispatch === 'function') {
+		// Use the same coord transform the rest of the function uses.
+		var _coords = FontRig._interactionCoords(absSx, absSy);
+		if (FontRig.drawTool.tryDispatch(stream, initialEvent, _coords.sx, _coords.sy)) {
+			return;
+		}
+	}
+
 	// -- Glyph strip: switch glyph/cell
 	if (state.glyphViewMode && FontRig.font) {
 		var stripHit = FontRig.getStripSlotAt(absSx, absSy);
@@ -601,6 +610,11 @@ FontRig.handleCanvasHover = function(event) {
 
 	// Track cursor for preview/stem
 	state.previewMouse = { x: event.absSx, y: event.absSy };
+
+	// Active draw tool: update between-click cursor preview.
+	if (FontRig.drawTool && typeof FontRig.drawTool.handleHover === 'function') {
+		FontRig.drawTool.handleHover(event);
+	}
 
 	// Cursor position in glyph coords
 	var coords = FontRig._interactionCoords(event.absSx, event.absSy);

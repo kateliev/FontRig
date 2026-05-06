@@ -107,6 +107,19 @@ SBC.registerWidget({
 	}
 });
 
+// -- Draw Widget ---------------------------------------------------
+SBC.registerWidget({
+	id:    'draw',
+	label: 'Draw',
+	icon:  'draw_line',
+	mount: function(containerEl, ctx) {
+		return FontRig.DrawPanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.update();
+	}
+});
+
 // -- Contour Widget -------------------------------------------------
 SBC.registerWidget({
 	id:    'contour',

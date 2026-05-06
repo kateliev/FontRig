@@ -143,6 +143,7 @@ FontRig.SidebarConfig.defaults = {
 		widgets: [
 			{ id: 'glyphs',    active: true },
 			{ id: 'font-info', active: true },
+			{ id: 'draw',      active: true },
 		],
 		defaultTab: 'glyphs',
 	},

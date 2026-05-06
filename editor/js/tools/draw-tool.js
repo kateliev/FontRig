@@ -1,0 +1,264 @@
+// ===================================================================
+// FontRig — Drawing Tools (shared session + commit)
+// ===================================================================
+// Owns the "what tool is active and what is being drawn right now"
+// state for all interactive drawing tools (line, polyline, bezier,
+// hobby, rectangle, ellipse, primitives).
+//
+// All tool-specific math/interaction lives in sibling files
+// (draw-primitives.js, draw-bezier.js, draw-hobby.js). This module
+// provides the shared bits:
+//   - session state read by the preview viz layer
+//   - scope-aware commit helper (mirrors to all in-scope masters)
+//   - small Contour/Shape/Node builder helpers (no Python required)
+//   - the preview viz layer itself (zIndex 950)
+//
+// TODO v2: snapping (nodes, grid, extrema) — currently disabled.
+// ===================================================================
+'use strict';
+
+FontRig.drawTool = {};
+
+// -- Active tool -----------------------------------------------------
+// 'select' = no draw tool active (default selection behaviour wins)
+// Other values: 'line', 'polyline', 'bezier', 'hobby',
+//               'rectDrag', 'ellipseDrag'
+// One-shot primitives don't set activeDrawTool — they commit
+// immediately on button press.
+FontRig.state.activeDrawTool = 'select';
+
+// -- Per-tool options (read by tool implementations) ----------------
+FontRig.drawTool.options = {
+	hobbyTension: 1.0,
+	hobbyClosed: false,
+	polygonSides: 5,
+	starSides: 5,
+	starRatio: 0.5,
+	squircleExp: 5.0,
+	primitiveSize: 250,   // default insert size for one-shot primitives
+};
+
+// -- Session: what is being drawn right now -------------------------
+// Tool implementations write into this; the viz layer reads it.
+//
+// Conventions:
+//   tool       : 'line' | 'polyline' | 'bezier' | 'hobby' |
+//                'rectDrag' | 'ellipseDrag' | null
+//   points     : list of committed glyph-space points
+//                  - line/polyline: [{x,y}]
+//                  - bezier: [{x,y,handleOut:{x,y}|null,handleIn:{x,y}|null,smooth}]
+//                  - hobby:  [{x,y,dir_out:radians|null,segment:'hobby'|'line'}]
+//   cursor     : current glyph-space cursor (for live segment to mouse)
+//   anchor     : drag anchor (rect/ellipse start corner) in glyph coords
+//   active     : true when a session is in progress
+FontRig.drawTool.session = {
+	tool: null,
+	points: [],
+	cursor: null,
+	anchor: null,
+	active: false,
+};
+
+FontRig.drawTool.resetSession = function() {
+	FontRig.drawTool.session.tool = null;
+	FontRig.drawTool.session.points = [];
+	FontRig.drawTool.session.cursor = null;
+	FontRig.drawTool.session.anchor = null;
+	FontRig.drawTool.session.active = false;
+};
+
+// ===================================================================
+// Builders — plain JS objects matching the FontRig data model
+// ===================================================================
+
+FontRig.drawTool.makeNode = function(x, y, type, smooth) {
+	return {
+		x: +x,
+		y: +y,
+		type: type || 'on',
+		smooth: !!smooth,
+	};
+};
+
+FontRig.drawTool.makeContour = function(nodes, closed) {
+	return {
+		name: '',
+		identifier: '',
+		closed: !!closed,
+		clockwise: null,
+		nodes: nodes || [],
+		lib: {},
+	};
+};
+
+FontRig.drawTool.makeShape = function(contours) {
+	return {
+		name: '',
+		identifier: '',
+		contours: contours || [],
+		transform: null,
+		lib: {},
+	};
+};
+
+// Deep-clone a contour (so the same shape can be appended to multiple
+// layers without aliasing).
+FontRig.drawTool.cloneContour = function(contour) {
+	var nodes = [];
+	for (var i = 0; i < contour.nodes.length; i++) {
+		var n = contour.nodes[i];
+		nodes.push(FontRig.drawTool.makeNode(n.x, n.y, n.type, n.smooth));
+	}
+	return {
+		name: contour.name || '',
+		identifier: '',
+		closed: !!contour.closed,
+		clockwise: contour.clockwise == null ? null : contour.clockwise,
+		nodes: nodes,
+		lib: {},
+	};
+};
+
+// ===================================================================
+// Scope-aware commit
+// ===================================================================
+// Resolves the layer scope (Active / Masters / Selected) and appends
+// the contour to each scoped layer. One undo snapshot, one redraw.
+//
+// Contract per dev guide §10: each layer gets a Shape wrapping a
+// single-element contour list.
+//
+// Returns the number of layers committed to (0 = nothing happened,
+// no undo entry pushed).
+// ===================================================================
+FontRig.drawTool.commitContour = function(contour) {
+	if (!contour || !contour.nodes || contour.nodes.length === 0) return 0;
+
+	var glyph = FontRig.state.glyphData;
+	if (!glyph) return 0;
+
+	// Resolve scope. FontRig.scope is the canonical resolver used by
+	// the rest of the editor; falls back to active layer if unavailable.
+	var layerNames = [];
+	if (FontRig.scope && typeof FontRig.scope.getLayers === 'function') {
+		layerNames = FontRig.scope.getLayers();
+	}
+	if (!layerNames || layerNames.length === 0) {
+		if (FontRig.state.activeLayer) layerNames = [FontRig.state.activeLayer];
+	}
+	if (layerNames.length === 0) return 0;
+
+	if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
+
+	var committed = 0;
+	for (var i = 0; i < layerNames.length; i++) {
+		var lyr = FontRig.getLayerByName(glyph, layerNames[i]);
+		if (!lyr) continue;
+		if (!lyr.shapes) lyr.shapes = [];
+		var shape = FontRig.drawTool.makeShape([
+			FontRig.drawTool.cloneContour(contour),
+		]);
+		lyr.shapes.push(shape);
+		if (typeof FontRig.invalidatePathCache === 'function') {
+			FontRig.invalidatePathCache(lyr);
+		}
+		committed++;
+	}
+
+	if (committed > 0) {
+		FontRig.drawTool.resetSession();
+		FontRig.draw();
+	}
+	return committed;
+};
+
+// Convenience: commit a list of glyph-space points as a contour.
+// types is optional (parallel array of 'on'|'off'|'curve'); defaults
+// to all 'on'.
+FontRig.drawTool.commitPoints = function(points, closed, types) {
+	if (!points || points.length === 0) return 0;
+	var nodes = [];
+	for (var i = 0; i < points.length; i++) {
+		var t = types ? (types[i] || 'on') : 'on';
+		nodes.push(FontRig.drawTool.makeNode(points[i].x, points[i].y, t, false));
+	}
+	return FontRig.drawTool.commitContour(
+		FontRig.drawTool.makeContour(nodes, !!closed)
+	);
+};
+
+// ===================================================================
+// Tool activation
+// ===================================================================
+// Switching tools cancels any in-progress session.
+FontRig.drawTool.setActiveTool = function(name) {
+	if (FontRig.state.activeDrawTool === name) return;
+	FontRig.drawTool.cancelSession();
+	FontRig.state.activeDrawTool = name || 'select';
+	FontRig.draw();
+};
+
+FontRig.drawTool.cancelSession = function() {
+	if (FontRig.drawTool.session.active) {
+		FontRig.drawTool.resetSession();
+		FontRig.draw();
+	}
+};
+
+// ===================================================================
+// Preview visualization layer
+// ===================================================================
+// One layer renders all in-progress draw tool feedback. Each tool
+// writes into FontRig.drawTool.session and calls FontRig.draw();
+// the layer's draw fn dispatches by session.tool.
+// ===================================================================
+
+// Enable by default (tools rely on it being on).
+FontRig.state.vizLayers.drawPreview = true;
+
+FontRig.registerVizLayer({
+	identifier: 'drawPreview',
+	name: 'Drawing Preview',
+	zIndex: 950,
+	enabledKey: 'drawPreview',
+	previewMode: 'skip',
+	draw: function(ctx, layer, opts) {
+		var s = FontRig.drawTool.session;
+		if (!s.active || !s.tool) return;
+
+		// Canvas ctx is in screen-space (DPR transform only). Preview
+		// renderers receive a `g2s(x, y)` helper that converts glyph
+		// coords to screen pixels — must be called for every point.
+		var fn = FontRig.drawTool._previewDispatch[s.tool];
+		if (!fn) return;
+
+		ctx.save();
+		ctx.lineWidth = 1.5;
+		ctx.strokeStyle = '#ff7a00';   // orange — distinct from selection blue
+		ctx.fillStyle   = '#ff7a00';
+		ctx.setLineDash([]);
+
+		fn(ctx, s, FontRig.glyphToScreen);
+
+		ctx.restore();
+	},
+});
+
+// Per-tool preview renderers register themselves into this dispatch
+// table from their own files (draw-primitives.js, draw-bezier.js, etc).
+FontRig.drawTool._previewDispatch = {};
+
+FontRig.drawTool.registerPreview = function(toolName, fn) {
+	FontRig.drawTool._previewDispatch[toolName] = fn;
+};
+
+// Small marker helper shared by preview renderers. Coords are SCREEN
+// pixels (already converted by the caller via glyphToScreen).
+FontRig.drawTool.drawKnotMarker = function(ctx, sx, sy) {
+	var r = 3;
+	ctx.save();
+	ctx.beginPath();
+	ctx.rect(sx - r, sy - r, r * 2, r * 2);
+	ctx.fill();
+	ctx.restore();
+};
