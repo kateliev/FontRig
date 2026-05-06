@@ -188,17 +188,17 @@ FontRig.DrawPanel.mount = function(containerEl, ctx) {
 
 	grpOpts.addSeparator();
 
-	// Hobby tension — icon: draw_hobby
-	grpOpts.content.appendChild(optionRow(
-		'draw_hobby',
-		FRWidget.DoubleSpinBox({
-			min: 0.1, max: 5, value: FontRig.drawTool.options.hobbyTension, step: 0.1,
-			decimals: 2,
-			tooltip: 'Hobby tool tension (1.0 = default METAFONT)',
-			onChange: function(v) { FontRig.drawTool.options.hobbyTension = v; },
-		}),
-		'Hobby tool tension'
-	));
+	// Hobby tension — icon: draw_hobby. Also exposed globally so the
+	// scroll-wheel handler in draw-handlers can keep the spinner in
+	// sync when the user adjusts tension live with Alt+scroll.
+	var tensionSpin = FRWidget.DoubleSpinBox({
+		min: 0.1, max: 5, value: FontRig.drawTool.options.hobbyTension, step: 0.1,
+		decimals: 2,
+		tooltip: 'Hobby tool tension (1.0 = default METAFONT). Press [ / ] while drawing to adjust live (use { / } for coarse).',
+		onChange: function(v) { FontRig.drawTool.options.hobbyTension = v; },
+	});
+	FontRig.drawTool._tensionSpinner = tensionSpin;
+	grpOpts.content.appendChild(optionRow('draw_hobby', tensionSpin, 'Hobby tool tension'));
 
 	content.appendChild(grpOpts);
 

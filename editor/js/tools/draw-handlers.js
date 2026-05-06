@@ -28,6 +28,33 @@ FontRig.drawTool._cursorGlyph = function(sx, sy) {
 	return gp;
 };
 
+// CTRL constrains placement to fixed angle increments relative to the
+// session's anchor knot (last for chain tools, first for line). Step
+// is 15° (drawing-app standard); use 10° if you prefer finer.
+var DRAW_ANGLE_SNAP_DEG = 15;
+
+// What counts as the "anchor" depends on the tool: line snaps from
+// the first point, chain tools from the last committed knot.
+FontRig.drawTool._anchorForSnap = function() {
+	var s = FontRig.drawTool.session;
+	if (!s.active || !s.points || s.points.length === 0) return null;
+	if (s.tool === 'line') return s.points[0];
+	if (s.tool === 'polyline' || s.tool === 'bezier' || s.tool === 'hobby') {
+		return s.points[s.points.length - 1];
+	}
+	return null;
+};
+
+// If CTRL is held, snap p to the nearest DRAW_ANGLE_SNAP_DEG ray from
+// the current anchor. Returns p unchanged otherwise (or if no anchor
+// is available, e.g. on the very first click of a session).
+FontRig.drawTool._maybeSnapAngle = function(p, ev) {
+	if (!ev || !(ev.ctrlKey || ev.metaKey)) return p;
+	var anchor = FontRig.drawTool._anchorForSnap();
+	if (!anchor) return p;
+	return FontRig.drawTool._snapAngle(anchor, p, DRAW_ANGLE_SNAP_DEG);
+};
+
 // ===================================================================
 // Dispatch from handleCanvasDrag
 // ===================================================================
@@ -58,6 +85,8 @@ FontRig.drawTool.handleHover = function(event) {
 		tool !== 'bezier' && tool !== 'hobby') return false;
 
 	s.cursor = FontRig.drawTool._cursorGlyph(event.absSx, event.absSy);
+	// CTRL pre-snap: constrain to angular increments from the anchor.
+	s.cursor = FontRig.drawTool._maybeSnapAngle(s.cursor, event);
 
 	// Hobby: re-solve including the cursor as a virtual last knot
 	// (rAF-throttled). Solve is small (3-15 knots, ~1-2ms typical)
@@ -80,6 +109,7 @@ FontRig.drawTool.handleHover = function(event) {
 FontRig.drawTool._dragHandlers['line'] = async function(stream, initialEvent, sx, sy) {
 	var s = FontRig.drawTool.session;
 	var gp = FontRig.drawTool._cursorGlyph(initialEvent.absSx, initialEvent.absSy);
+	gp = FontRig.drawTool._maybeSnapAngle(gp, initialEvent);
 
 	if (!s.active) {
 		// First click — anchor first point and begin session.
@@ -93,7 +123,8 @@ FontRig.drawTool._dragHandlers['line'] = async function(stream, initialEvent, sx
 		// release; the second mousedown commits.
 		for await (var ev of stream) {
 			if (ev.sx === undefined) continue;
-			s.cursor = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
+			var c = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
+			s.cursor = FontRig.drawTool._maybeSnapAngle(c, ev);
 			FontRig.draw();
 		}
 		FontRig.draw();
@@ -104,7 +135,8 @@ FontRig.drawTool._dragHandlers['line'] = async function(stream, initialEvent, sx
 	var finalCursor = gp;
 	for await (var ev2 of stream) {
 		if (ev2.sx === undefined) continue;
-		finalCursor = FontRig.drawTool._cursorGlyph(ev2.absSx, ev2.absSy);
+		var c2 = FontRig.drawTool._cursorGlyph(ev2.absSx, ev2.absSy);
+		finalCursor = FontRig.drawTool._maybeSnapAngle(c2, ev2);
 	}
 	var p1 = s.points[0];
 	if (Math.abs(finalCursor.x - p1.x) < 0.5 && Math.abs(finalCursor.y - p1.y) < 0.5) {
@@ -245,6 +277,7 @@ var POLYLINE_CLOSE_HIT_PX = 8;
 FontRig.drawTool._dragHandlers['polyline'] = async function(stream, initialEvent, sx, sy) {
 	var s = FontRig.drawTool.session;
 	var gp = FontRig.drawTool._cursorGlyph(initialEvent.absSx, initialEvent.absSy);
+	gp = FontRig.drawTool._maybeSnapAngle(gp, initialEvent);
 
 	// First click: start the session.
 	if (!s.active) {
@@ -435,6 +468,7 @@ var BEZIER_SHIFT_STEP_DEG = 15;
 FontRig.drawTool._dragHandlers['bezier'] = async function(stream, initialEvent, sx, sy) {
 	var s = FontRig.drawTool.session;
 	var gp = FontRig.drawTool._cursorGlyph(initialEvent.absSx, initialEvent.absSy);
+	gp = FontRig.drawTool._maybeSnapAngle(gp, initialEvent);
 
 	// Initialize session on first click.
 	if (!s.active) {
@@ -697,7 +731,10 @@ FontRig.drawTool._hobbySolveImmediate = function(includeCursor, cursorSegment) {
 	if (knots.length < 2) { s.solvedNodes = null; return; }
 
 	var pyo = FontRig.pyBridge.pyodide;
-	var json = JSON.stringify(FontRig.drawTool._buildHobbyKnotJSON(knots));
+	// Live preview is always rendered open (we add the cursor as the
+	// virtual final knot). Closed-path constraints only kick in on
+	// the committed call.
+	var json = JSON.stringify(FontRig.drawTool._buildHobbyKnotJSON(knots, false));
 	var tension = +FontRig.drawTool.options.hobbyTension || 1.0;
 
 	try {
@@ -745,14 +782,23 @@ FontRig.drawTool._hobbyResolve = function() {
 // to TypeRig's HobbySpline convention (segment describes OUTGOING).
 // Concretely: if knot[i].segment === 'line' (user said "I arrived
 // here on a line"), then knot[i-1].segment_type = LINE in the spline.
-FontRig.drawTool._buildHobbyKnotJSON = function(points) {
+//
+// For closed paths the last knot's outgoing segment wraps around to
+// knot[0]'s incoming preference — that's how you make the closing
+// segment straight (e.g. the flat side of a D).
+FontRig.drawTool._buildHobbyKnotJSON = function(points, closed) {
 	var out = [];
 	for (var i = 0; i < points.length; i++) {
-		// This knot's outgoing segment type is governed by NEXT knot's
-		// incoming preference. The very last knot has no outgoing
-		// segment, so its segment is irrelevant (defaults to hobby).
 		var outgoing = 'hobby';
-		if (i + 1 < points.length && points[i + 1].segment === 'line') {
+		var nextIdx;
+		if (i + 1 < points.length) {
+			nextIdx = i + 1;
+		} else if (closed) {
+			nextIdx = 0;   // wrap for closed paths
+		} else {
+			nextIdx = -1;  // open path: last knot has no outgoing
+		}
+		if (nextIdx >= 0 && points[nextIdx].segment === 'line') {
 			outgoing = 'line';
 		}
 		out.push({ position: [points[i].x, points[i].y], segment: outgoing });
@@ -763,7 +809,8 @@ FontRig.drawTool._buildHobbyKnotJSON = function(points) {
 FontRig.drawTool._dragHandlers['hobby'] = async function(stream, initialEvent, sx, sy) {
 	var s = FontRig.drawTool.session;
 	var gp = FontRig.drawTool._cursorGlyph(initialEvent.absSx, initialEvent.absSy);
-	// Shift held at click → segment leaving this knot is straight.
+	gp = FontRig.drawTool._maybeSnapAngle(gp, initialEvent);
+	// Shift held at click → incoming segment is a straight line.
 	var seg = initialEvent.shiftKey ? 'line' : 'hobby';
 
 	// Initialize.
@@ -793,13 +840,18 @@ FontRig.drawTool._dragHandlers['hobby'] = async function(stream, initialEvent, s
 		return;
 	}
 
-	// Close-hit on first knot.
+	// Close-hit on first knot. Shift held during close marks the
+	// first knot's incoming segment as a line constraint — the
+	// closing segment from last knot back to first becomes straight.
 	if (s.points.length >= 2) {
 		var first = s.points[0];
 		var firstS = FontRig.glyphToScreen(first.x, first.y);
 		var dxC = firstS.x - initialEvent.absSx;
 		var dyC = firstS.y - initialEvent.absSy;
 		if (dxC * dxC + dyC * dyC <= HOBBY_CLOSE_HIT_PX * HOBBY_CLOSE_HIT_PX) {
+			if (initialEvent.shiftKey) {
+				s.points[0].segment = 'line';
+			}
 			FontRig.drawTool._commitHobby(true);
 			for await (var evC of stream) { if (evC.sx === undefined) continue; }
 			return;
@@ -837,8 +889,10 @@ FontRig.drawTool._commitHobby = function(closed) {
 	if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
 
 	var pyo = FontRig.pyBridge.pyodide;
-	// Translate UX-incoming-segment to TypeRig outgoing-segment.
-	var json = JSON.stringify(FontRig.drawTool._buildHobbyKnotJSON(s.points));
+	// Translate UX-incoming-segment to TypeRig outgoing-segment, with
+	// wrap-around for closed paths so the closing segment honors the
+	// first knot's "incoming" constraint flag.
+	var json = JSON.stringify(FontRig.drawTool._buildHobbyKnotJSON(s.points, !!closed));
 	var tension = +FontRig.drawTool.options.hobbyTension || 1.0;
 
 	pyo.globals.set('_hobby_knots', json);
@@ -932,12 +986,30 @@ FontRig.drawTool.registerPreview('hobby', function(ctx, s, g2s) {
 	}
 });
 
+// (keydown handlers wired below for Esc / Enter / Backspace)
 // ===================================================================
-// Esc / Enter handling
+// Hobby tension — live adjust with [ and ] while session is active
 // ===================================================================
-// Esc cancels any in-progress draw session. Wired at module load
-// time (window-level). Enter is reserved for polyline / hobby commit
-// (added with those tools).
+// Drawing-app standard. Avoids the wheel-zoom conflict.
+//   [    tension -= step
+//   ]    tension += step
+//   {    tension -= 5*step (Shift modifier on US keyboards)
+//   }    tension += 5*step
+FontRig.drawTool._adjustTension = function(delta) {
+	var step = 0.05;
+	var cur = +FontRig.drawTool.options.hobbyTension || 1.0;
+	var next = Math.max(0.1, Math.min(5, cur + delta * step));
+	next = +next.toFixed(2);
+	if (next === cur) return;
+	FontRig.drawTool.options.hobbyTension = next;
+	var spin = FontRig.drawTool._tensionSpinner;
+	if (spin && typeof spin.setValue === 'function') spin.setValue(next);
+	FontRig.drawTool._hobbyResolveLive(true, 'hobby');
+};
+
+// ===================================================================
+// Esc / Enter / Backspace + Hobby tension keys
+// ===================================================================
 window.addEventListener('keydown', function(e) {
 	var s = FontRig.drawTool.session;
 	if (!s.active) return;
@@ -970,6 +1042,14 @@ window.addEventListener('keydown', function(e) {
 			e.preventDefault();
 			return;
 		}
+	}
+
+	// Hobby tension: [ / ] for fine adjust, { / } for coarse (×5).
+	if (s.tool === 'hobby') {
+		if (e.key === '[') { FontRig.drawTool._adjustTension(-1); e.preventDefault(); return; }
+		if (e.key === ']') { FontRig.drawTool._adjustTension(+1); e.preventDefault(); return; }
+		if (e.key === '{') { FontRig.drawTool._adjustTension(-5); e.preventDefault(); return; }
+		if (e.key === '}') { FontRig.drawTool._adjustTension(+5); e.preventDefault(); return; }
 	}
 
 	// Backspace pops last vertex (polyline / bezier / hobby). If only

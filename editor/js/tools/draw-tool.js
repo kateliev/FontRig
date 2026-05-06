@@ -214,10 +214,10 @@ FontRig.drawTool.cancelSession = function() {
 // whenever any draw tool is active.
 FontRig.drawTool._statusHints = {
 	'select':      null,   // hide the slot
-	'line':        'Click two points to draw a line. Esc cancels.',
-	'polyline':    'Click to add vertices. Double-click or Enter to commit. Click first vertex to close. Backspace pops last. Esc cancels.',
-	'bezier':      'Click for corner; click+drag for smooth handles. Alt = asymmetric, Shift = 15° snap. Click first node to close. Enter / dblclick commits open.',
-	'hobby':       'Click to drop knots — curve smooths in real time. Shift+Click marks the incoming segment as a tangent-pinned constraint (curve passes through more rigidly). Click first knot to close. Enter / dblclick commits open. Backspace pops last.',
+	'line':        'Click two points. Ctrl = constrain to 15° angle. Esc cancels.',
+	'polyline':    'Click to add vertices. Ctrl = constrain to 15° angle. Double-click / Enter to commit. Click first vertex to close. Backspace pops last. Esc cancels.',
+	'bezier':      'Click for corner; click+drag for smooth handles. Ctrl = constrain placement to 15°, Shift = constrain handle to 15°, Alt = asymmetric handle. Click first node to close. Enter / dblclick commits open.',
+	'hobby':       'Click to drop knots. Ctrl = constrain to 15°, Shift+Click = straight incoming segment, [ / ] = adjust tension live ({ / } coarser). Click first knot to close (Shift+Click closes with straight closing segment). Enter / dblclick commits open. Backspace pops last.',
 	'rectDrag':    'Drag to draw a rectangle. Shift = square, Alt = anchor is center. Esc cancels.',
 	'ellipseDrag': 'Drag to draw an ellipse. Shift = circle, Alt = anchor is center. Esc cancels.',
 };
