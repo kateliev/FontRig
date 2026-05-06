@@ -81,7 +81,12 @@ FontRig.pyBridge = {
 	// (Currently empty — node_panel_actions.py was lifted into TypeRig core
 	//  and is now fetched from the GitHub manifest above. Keep this list as
 	//  the extension point for any genuinely editor-only Python.)
-	localModules: [],
+	localModules: [
+		// Draw panel dispatchers — local during development; graduate
+		// to TypeRig core once stable.
+		{ src: 'python/draw_panel_actions.py',
+		  dest: 'typerig/core/actions/draw_panel_actions.py' },
+	],
 
 	// -- Stub __init__.py contents -----------------------------------------
 	// We stub these to avoid importing proxy/FL-dependent subpackages
@@ -316,6 +321,8 @@ FontRig.pyBridge = {
 				'DrawActions = None',
 				'_npa = None',
 				'_cut_npa = None',
+				'_draw_npa = None',
+				'hobby_preview_solve = None',
 				'try:',
 				'    from typerig.core.actions.node_actions       import NodeActions',
 				'    from typerig.core.actions.curve_actions      import CurveActions',
@@ -328,6 +335,11 @@ FontRig.pyBridge = {
 				'    from typerig.core.actions import cut_panel_actions as _cut_npa',
 				'except Exception as _e:',
 				'    print("Warning: cut_panel_actions not loaded:", _e)',
+				'try:',
+				'    from typerig.core.actions import draw_panel_actions as _draw_npa',
+				'    from typerig.core.actions.draw_panel_actions import hobby_preview_solve',
+				'except Exception as _e:',
+				'    print("Warning: draw_panel_actions not loaded:", _e)',
 				'',
 				'# Dispatcher: injects (glyph, scope_layers, NodeActions) for all npa_* functions.',
 				'# Actions that need a 4th class (CurveActions, ContourActions, DrawActions) declare',
@@ -344,6 +356,8 @@ FontRig.pyBridge = {
 				'    fn = getattr(_npa, name, None) if _npa else None',
 				'    if fn is None and _cut_npa is not None:',
 				'        fn = getattr(_cut_npa, name, None)',
+				'    if fn is None and _draw_npa is not None:',
+				'        fn = getattr(_draw_npa, name, None)',
 				'    if fn is None: raise RuntimeError("Unknown action: " + name)',
 				'    params = list(_inspect.signature(fn).parameters.keys())',
 				'    if len(params) > 3 and params[3] in _action_classes:',

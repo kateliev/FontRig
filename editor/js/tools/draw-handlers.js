@@ -58,6 +58,15 @@ FontRig.drawTool.handleHover = function(event) {
 		tool !== 'bezier' && tool !== 'hobby') return false;
 
 	s.cursor = FontRig.drawTool._cursorGlyph(event.absSx, event.absSy);
+
+	// Hobby: re-solve including the cursor as a virtual last knot
+	// (rAF-throttled). Solve is small (3-15 knots, ~1-2ms typical)
+	// but coalescing keeps us at one solve per frame max.
+	if (tool === 'hobby' && s.points.length >= 1) {
+		FontRig.drawTool._hobbyResolveLive(true);
+		return true;
+	}
+
 	FontRig.draw();
 	return true;
 };
@@ -633,6 +642,255 @@ FontRig.drawTool.registerPreview('bezier', function(ctx, s, g2s) {
 });
 
 // ===================================================================
+// HOBBY tool — knot picker with smooth solve
+// ===================================================================
+// Interaction:
+//   Click               : add knot (re-solves preview via Python)
+//   Hover               : live chord-to-cursor segment (JS only)
+//   Click on first knot : close & commit (orange ring)
+//   Enter / dblclick    : commit as open path
+//   Backspace           : pop last knot
+//   Esc                 : cancel
+//
+// Preview strategy (hybrid per FONTRIG_DEV_GUIDE plan):
+//   - Knot positions live in session.points as {x,y}.
+//   - After every knot click we ask Python to solve the curve
+//     (hobby_preview_solve, no glyph round-trip) and cache the
+//     resulting flat node list in session.solvedNodes for the
+//     preview viz layer to render.
+//   - Mousemove draws a straight chord from the last knot to the
+//     cursor — JS only, 60fps.
+//   - On commit we invoke npa_draw_hobby through the standard
+//     _runNpa path; that mirrors the contour to all in-scope
+//     master layers via the dispatcher's scope_layers.
+// ===================================================================
+var HOBBY_CLOSE_HIT_PX = 8;
+
+// Live preview state — separate from the committed knots so we can
+// include the cursor as a virtual final knot for real-time feedback.
+//   includeCursor : true while user is between clicks; cursor is
+//                   appended as a virtual final knot before solving.
+FontRig.drawTool._hobbySolveImmediate = function(includeCursor) {
+	var s = FontRig.drawTool.session;
+	if (!s.points || s.points.length < 1) { s.solvedNodes = null; return; }
+	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return;
+
+	// Build the knot list to solve.
+	var knots = s.points.slice();
+	if (includeCursor && s.cursor) {
+		// Don't append a duplicate of the last knot.
+		var last = knots[knots.length - 1];
+		if (!last || Math.abs(last.x - s.cursor.x) > 0.5 ||
+			Math.abs(last.y - s.cursor.y) > 0.5) {
+			knots.push(s.cursor);
+		}
+	}
+	if (knots.length < 2) { s.solvedNodes = null; return; }
+
+	var pyo = FontRig.pyBridge.pyodide;
+	var json = JSON.stringify(knots.map(function(p) { return [p.x, p.y]; }));
+	var tension = +FontRig.drawTool.options.hobbyTension || 1.0;
+
+	try {
+		pyo.globals.set('_hobby_knots', json);
+		pyo.globals.set('_hobby_closed', false);
+		pyo.globals.set('_hobby_tension', tension);
+		var resJson = pyo.runPython(
+			'hobby_preview_solve(_hobby_knots, _hobby_closed, _hobby_tension) ' +
+			'if hobby_preview_solve else "[]"'
+		);
+		s.solvedNodes = JSON.parse(resJson || '[]');
+		s.solvedIncludesCursor = !!includeCursor;
+	} catch (e) {
+		console.warn('[hobby] preview solve failed:', e);
+		s.solvedNodes = null;
+	}
+};
+
+// rAF-throttled re-solve. Multiple calls within one frame coalesce.
+FontRig.drawTool._hobbyResolveRAF = null;
+FontRig.drawTool._hobbyResolveLive = function(includeCursor) {
+	if (FontRig.drawTool._hobbyResolveRAF) return;
+	FontRig.drawTool._hobbyResolveRAF = requestAnimationFrame(function() {
+		FontRig.drawTool._hobbyResolveRAF = null;
+		FontRig.drawTool._hobbySolveImmediate(includeCursor);
+		FontRig.draw();
+	});
+};
+
+// Public entry — kept for compatibility with existing callers
+// (commit/backspace). Always solves committed knots only, sync.
+FontRig.drawTool._hobbyResolve = function() {
+	FontRig.drawTool._hobbySolveImmediate(false);
+};
+
+FontRig.drawTool._dragHandlers['hobby'] = async function(stream, initialEvent, sx, sy) {
+	var s = FontRig.drawTool.session;
+	var gp = FontRig.drawTool._cursorGlyph(initialEvent.absSx, initialEvent.absSy);
+
+	// Initialize.
+	if (!s.active) {
+		s.tool = 'hobby';
+		s.points = [gp];
+		s.cursor = gp;
+		s.solvedNodes = null;
+		s.active = true;
+		// Drain (single-knot solve isn't useful, just track cursor).
+		for await (var ev of stream) {
+			if (ev.sx === undefined) continue;
+			s.cursor = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
+			FontRig.draw();
+		}
+		FontRig.draw();
+		return;
+	}
+
+	// Double-click → commit open. Pop the duplicate first knot.
+	if (initialEvent.detail >= 2 && s.points.length > 0) {
+		var lastN = s.points[s.points.length - 1];
+		if (Math.abs(lastN.x - gp.x) < 0.5 && Math.abs(lastN.y - gp.y) < 0.5) {
+			s.points.pop();
+		}
+		FontRig.drawTool._commitHobby(false);
+		return;
+	}
+
+	// Close-hit on first knot.
+	if (s.points.length >= 2) {
+		var first = s.points[0];
+		var firstS = FontRig.glyphToScreen(first.x, first.y);
+		var dxC = firstS.x - initialEvent.absSx;
+		var dyC = firstS.y - initialEvent.absSy;
+		if (dxC * dxC + dyC * dyC <= HOBBY_CLOSE_HIT_PX * HOBBY_CLOSE_HIT_PX) {
+			FontRig.drawTool._commitHobby(true);
+			for await (var evC of stream) { if (evC.sx === undefined) continue; }
+			return;
+		}
+	}
+
+	// Add knot, re-solve.
+	s.points.push(gp);
+	s.cursor = gp;
+	FontRig.drawTool._hobbyResolve();
+	FontRig.draw();
+
+	// Drain drag stream — keep cursor preview live in case the user
+	// moves before releasing.
+	for await (var ev2 of stream) {
+		if (ev2.sx === undefined) continue;
+		s.cursor = FontRig.drawTool._cursorGlyph(ev2.absSx, ev2.absSy);
+		FontRig.draw();
+	}
+	FontRig.draw();
+};
+
+FontRig.drawTool._commitHobby = function(closed) {
+	var s = FontRig.drawTool.session;
+	if (!s.points || s.points.length < 2) {
+		FontRig.drawTool.resetSession();
+		FontRig.draw();
+		return;
+	}
+	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
+		console.warn('[hobby] Python not ready; cannot commit');
+		return;
+	}
+
+	if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
+
+	var pyo = FontRig.pyBridge.pyodide;
+	var json = JSON.stringify(s.points.map(function(p) { return [p.x, p.y]; }));
+	var tension = +FontRig.drawTool.options.hobbyTension || 1.0;
+
+	pyo.globals.set('_hobby_knots', json);
+	pyo.globals.set('_hobby_closed', !!closed);
+	pyo.globals.set('_hobby_tension', tension);
+
+	// Standard committed call — bridge handles syncToPython /
+	// syncFromPython and scope_layers injection.
+	FontRig.pyBridge.run(
+		'npa("npa_draw_hobby", _hobby_knots, _hobby_closed, _hobby_tension)'
+	);
+
+	// Bridge already redrew. Just clear the session.
+	FontRig.drawTool.resetSession();
+	FontRig.draw();
+};
+
+FontRig.drawTool.registerPreview('hobby', function(ctx, s, g2s) {
+	var pts = s.points || [];
+	if (pts.length === 0) return;
+
+	// 1. Solved curve (cached from last click) — render as polyline
+	//    walking through on/off-curve nodes (HobbySpline.to_contour
+	//    returns a node list that, traced as a polyline, approximates
+	//    the smooth curve well enough for preview).
+	if (s.solvedNodes && s.solvedNodes.length >= 2) {
+		ctx.save();
+		ctx.lineWidth = 1.5;
+		ctx.beginPath();
+		// Bezier-aware tracing: when we encounter on-curve, on-curve we
+		// draw a line; on-curve, curve, curve, on-curve we draw a cubic.
+		var sn = s.solvedNodes;
+		var prev = sn[0];
+		var p0 = g2s(prev[0], prev[1]);
+		ctx.moveTo(p0.x, p0.y);
+		var i = 1;
+		while (i < sn.length) {
+			var cur = sn[i];
+			if (cur[2] === 'curve' && i + 2 < sn.length) {
+				var c1 = g2s(cur[0], cur[1]);
+				var c2node = sn[i + 1];
+				var c2 = g2s(c2node[0], c2node[1]);
+				var endNode = sn[i + 2];
+				var endP = g2s(endNode[0], endNode[1]);
+				ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, endP.x, endP.y);
+				i += 3;
+			} else {
+				var lp = g2s(cur[0], cur[1]);
+				ctx.lineTo(lp.x, lp.y);
+				i += 1;
+			}
+		}
+		ctx.stroke();
+		ctx.restore();
+	}
+
+	// 2. Live chord from last knot to cursor — only when the solved
+	//    curve doesn't already reach the cursor.
+	if (s.cursor && !s.solvedIncludesCursor) {
+		var last = pts[pts.length - 1];
+		var ls = g2s(last.x, last.y);
+		var cs = g2s(s.cursor.x, s.cursor.y);
+		ctx.save();
+		ctx.lineWidth = 1;
+		ctx.setLineDash([4, 3]);
+		ctx.beginPath();
+		ctx.moveTo(ls.x, ls.y);
+		ctx.lineTo(cs.x, cs.y);
+		ctx.stroke();
+		ctx.restore();
+	}
+
+	// 3. Knot markers.
+	for (var k = 0; k < pts.length; k++) {
+		var ks = g2s(pts[k].x, pts[k].y);
+		FontRig.drawTool.drawKnotMarker(ctx, ks.x, ks.y);
+	}
+
+	// 4. Close-hit ring on first knot when 2+ knots.
+	if (pts.length >= 2) {
+		var f = g2s(pts[0].x, pts[0].y);
+		ctx.save();
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		ctx.arc(f.x, f.y, HOBBY_CLOSE_HIT_PX, 0, Math.PI * 2);
+		ctx.stroke();
+		ctx.restore();
+	}
+});
+
+// ===================================================================
 // Esc / Enter handling
 // ===================================================================
 // Esc cancels any in-progress draw session. Wired at module load
@@ -653,7 +911,7 @@ window.addEventListener('keydown', function(e) {
 		return;
 	}
 
-	// Enter commits polyline / bezier as open path.
+	// Enter commits polyline / bezier / hobby as open path.
 	if (e.key === 'Enter') {
 		if (s.tool === 'polyline') {
 			FontRig.drawTool._commitPolyline(false);
@@ -665,13 +923,20 @@ window.addEventListener('keydown', function(e) {
 			e.preventDefault();
 			return;
 		}
+		if (s.tool === 'hobby') {
+			FontRig.drawTool._commitHobby(false);
+			e.preventDefault();
+			return;
+		}
 	}
 
-	// Backspace pops last vertex (polyline / bezier). If only first
-	// remains, cancel the session.
-	if (e.key === 'Backspace' && (s.tool === 'polyline' || s.tool === 'bezier')) {
+	// Backspace pops last vertex (polyline / bezier / hobby). If only
+	// the first knot remains, cancel the session.
+	if (e.key === 'Backspace' &&
+		(s.tool === 'polyline' || s.tool === 'bezier' || s.tool === 'hobby')) {
 		if (s.points.length > 1) {
 			s.points.pop();
+			if (s.tool === 'hobby') FontRig.drawTool._hobbyResolve();
 			FontRig.draw();
 		} else {
 			FontRig.drawTool.cancelSession();

@@ -195,6 +195,8 @@ FontRig.drawTool.setActiveTool = function(name) {
 	if (FontRig.state.activeDrawTool === name) return;
 	FontRig.drawTool.cancelSession();
 	FontRig.state.activeDrawTool = name || 'select';
+	FontRig.drawTool._updateStatusHint();
+	FontRig.drawTool._updateCursor();
 	FontRig.draw();
 };
 
@@ -204,6 +206,52 @@ FontRig.drawTool.cancelSession = function() {
 		FontRig.draw();
 	}
 };
+
+// ===================================================================
+// Status hint + cursor
+// ===================================================================
+// Status bar message describing how the active tool works. Shown
+// whenever any draw tool is active.
+FontRig.drawTool._statusHints = {
+	'select':      null,   // hide the slot
+	'line':        'Click two points to draw a line. Esc cancels.',
+	'polyline':    'Click to add vertices. Double-click or Enter to commit. Click first vertex to close. Backspace pops last. Esc cancels.',
+	'bezier':      'Click for corner; click+drag for smooth handles. Alt = asymmetric, Shift = 15° snap. Click first node to close. Enter / dblclick commits open.',
+	'hobby':       'Click to drop knots — curve smooths in real time. Click first knot to close. Enter / dblclick commits open. Backspace pops last.',
+	'rectDrag':    'Drag to draw a rectangle. Shift = square, Alt = anchor is center. Esc cancels.',
+	'ellipseDrag': 'Drag to draw an ellipse. Shift = circle, Alt = anchor is center. Esc cancels.',
+};
+
+FontRig.drawTool._updateStatusHint = function() {
+	var wrap = document.getElementById('status-draw-hint-wrap');
+	var text = document.getElementById('status-draw-hint');
+	if (!wrap || !text) return;
+	var tool = FontRig.state.activeDrawTool;
+	var hint = FontRig.drawTool._statusHints[tool];
+	if (!hint) {
+		wrap.style.display = 'none';
+		return;
+	}
+	wrap.style.display = '';
+	text.textContent = hint;
+};
+
+// Crosshair cursor on the canvas while any draw tool is active.
+// Defers to FontRig.updateCanvasCursor (interaction.js) so spaceDown
+// and other states get the right precedence.
+FontRig.drawTool._updateCursor = function() {
+	if (typeof FontRig.updateCanvasCursor === 'function') {
+		FontRig.updateCanvasCursor();
+	}
+};
+
+// Apply once on load (in case some other code already set state).
+if (typeof window !== 'undefined') {
+	window.addEventListener('DOMContentLoaded', function() {
+		FontRig.drawTool._updateStatusHint();
+		FontRig.drawTool._updateCursor();
+	});
+}
 
 // ===================================================================
 // Preview visualization layer

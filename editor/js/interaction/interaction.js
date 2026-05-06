@@ -2769,6 +2769,9 @@ FontRig.updateCanvasCursor = function() {
 	const state = FontRig.state;
 	if (state.spaceDown) {
 		wrap.style.cursor = 'grab';
+	} else if (state.activeDrawTool && state.activeDrawTool !== 'select') {
+		// Drawing mode wins over default arrow.
+		wrap.style.cursor = 'crosshair';
 	} else {
 		wrap.style.cursor = 'default';
 	}
