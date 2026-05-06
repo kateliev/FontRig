@@ -40,9 +40,12 @@ def _iter_scope_layers(glyph, scope_layers):
 
 
 def _normalize_knots(raw):
-	'''Accept either a JSON string or a Python list of either
-	[x, y] pairs or {"position": [x, y], ...} dicts. Return a flat
-	list of (x, y) tuples.'''
+	'''Accept either a JSON string or a Python list. Each knot may be
+	either an [x, y] pair (defaults to hobby segment) or a
+	{"position": [x, y], "segment": "hobby"|"line", ...} dict.
+	Returns a list of dicts with at least 'position' set, preserving
+	any per-knot fields (segment, alpha, beta, etc.) for hobby_path_mixed.
+	'''
 	if isinstance(raw, str):
 		raw = json.loads(raw)
 
@@ -50,22 +53,44 @@ def _normalize_knots(raw):
 	for k in raw:
 		if isinstance(k, dict):
 			pos = k.get('position') or k.get('pos')
-			if pos and len(pos) >= 2:
-				out.append((float(pos[0]), float(pos[1])))
+			if not pos or len(pos) < 2:
+				continue
+			entry = {'position': (float(pos[0]), float(pos[1]))}
+			for key in ('segment', 'alpha', 'beta', 'bcp_out', 'bcp_in',
+			            'dir_out', 'dir_in'):
+				if key in k:
+					entry[key] = k[key]
+			out.append(entry)
 		elif hasattr(k, '__len__') and len(k) >= 2:
-			out.append((float(k[0]), float(k[1])))
+			out.append({'position': (float(k[0]), float(k[1]))})
 	return out
 
 
-def _solve_hobby_contour(knot_positions, closed=False, tension=1.0):
-	'''Build a HobbySpline from positions and convert to a Contour.
-	Returns the Contour or None on failure.'''
-	if len(knot_positions) < 2:
+def _has_per_knot_data(knots):
+	'''True if any knot carries metadata beyond position — meaning we
+	need hobby_path_mixed instead of the simpler hobby_path.'''
+	for k in knots:
+		if len(k) > 1:  # more than just 'position'
+			return True
+	return False
+
+
+def _solve_hobby_contour(knots, closed=False, tension=1.0):
+	'''Build a HobbySpline from normalized knot dicts and convert to
+	a Contour. Returns the Contour or None on failure.'''
+	if len(knots) < 2:
 		return None
 
-	spline = HobbyDrawActions.hobby_path(
-		knot_positions, closed=bool(closed), tension=float(tension)
-	)
+	if _has_per_knot_data(knots):
+		spline = HobbyDrawActions.hobby_path_mixed(
+			knots, closed=bool(closed), tension=float(tension)
+		)
+	else:
+		positions = [k['position'] for k in knots]
+		spline = HobbyDrawActions.hobby_path(
+			positions, closed=bool(closed), tension=float(tension)
+		)
+
 	if spline is None:
 		return None
 
@@ -87,8 +112,8 @@ def npa_draw_hobby(glyph, scope_layers, NodeActions, knots_json,
 	Returns:
 		bool: True if at least one layer was committed to.
 	'''
-	knot_positions = _normalize_knots(knots_json)
-	contour = _solve_hobby_contour(knot_positions, closed=closed, tension=tension)
+	knots = _normalize_knots(knots_json)
+	contour = _solve_hobby_contour(knots, closed=closed, tension=tension)
 	if contour is None:
 		return False
 
@@ -115,8 +140,8 @@ def hobby_preview_solve(knots_json, closed=False, tension=1.0):
 		str: JSON-encoded list of [x, y, type] triples. Empty list
 			"[]" on failure / fewer than 2 knots.
 	'''
-	knot_positions = _normalize_knots(knots_json)
-	contour = _solve_hobby_contour(knot_positions, closed=closed, tension=tension)
+	knots = _normalize_knots(knots_json)
+	contour = _solve_hobby_contour(knots, closed=closed, tension=tension)
 	if contour is None:
 		return '[]'
 

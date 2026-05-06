@@ -62,8 +62,11 @@ FontRig.drawTool.handleHover = function(event) {
 	// Hobby: re-solve including the cursor as a virtual last knot
 	// (rAF-throttled). Solve is small (3-15 knots, ~1-2ms typical)
 	// but coalescing keeps us at one solve per frame max.
+	// Cursor's segment type tracks the Shift modifier so the user
+	// previews the actual segment that will be added on next click.
 	if (tool === 'hobby' && s.points.length >= 1) {
-		FontRig.drawTool._hobbyResolveLive(true);
+		var cursorSeg = event.shiftKey ? 'line' : 'hobby';
+		FontRig.drawTool._hobbyResolveLive(true, cursorSeg);
 		return true;
 	}
 
@@ -670,25 +673,31 @@ var HOBBY_CLOSE_HIT_PX = 8;
 // include the cursor as a virtual final knot for real-time feedback.
 //   includeCursor : true while user is between clicks; cursor is
 //                   appended as a virtual final knot before solving.
-FontRig.drawTool._hobbySolveImmediate = function(includeCursor) {
+//   cursorSegment : 'hobby' | 'line' — segment type for the virtual
+//                   knot at the cursor (controlled by Shift state).
+FontRig.drawTool._hobbySolveImmediate = function(includeCursor, cursorSegment) {
 	var s = FontRig.drawTool.session;
 	if (!s.points || s.points.length < 1) { s.solvedNodes = null; return; }
 	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return;
 
-	// Build the knot list to solve.
+	// Build the knot list to solve. Each point carries {x, y, segment}
+	// where segment describes the INCOMING segment (more natural UX).
+	// We translate to TypeRig's outgoing-segment convention here.
 	var knots = s.points.slice();
 	if (includeCursor && s.cursor) {
-		// Don't append a duplicate of the last knot.
 		var last = knots[knots.length - 1];
 		if (!last || Math.abs(last.x - s.cursor.x) > 0.5 ||
 			Math.abs(last.y - s.cursor.y) > 0.5) {
-			knots.push(s.cursor);
+			knots.push({
+				x: s.cursor.x, y: s.cursor.y,
+				segment: cursorSegment || 'hobby'
+			});
 		}
 	}
 	if (knots.length < 2) { s.solvedNodes = null; return; }
 
 	var pyo = FontRig.pyBridge.pyodide;
-	var json = JSON.stringify(knots.map(function(p) { return [p.x, p.y]; }));
+	var json = JSON.stringify(FontRig.drawTool._buildHobbyKnotJSON(knots));
 	var tension = +FontRig.drawTool.options.hobbyTension || 1.0;
 
 	try {
@@ -708,12 +717,20 @@ FontRig.drawTool._hobbySolveImmediate = function(includeCursor) {
 };
 
 // rAF-throttled re-solve. Multiple calls within one frame coalesce.
+// Latest call wins — args (includeCursor, cursorSegment) are stashed.
 FontRig.drawTool._hobbyResolveRAF = null;
-FontRig.drawTool._hobbyResolveLive = function(includeCursor) {
+FontRig.drawTool._hobbyResolvePending = null;
+FontRig.drawTool._hobbyResolveLive = function(includeCursor, cursorSegment) {
+	FontRig.drawTool._hobbyResolvePending = {
+		includeCursor: includeCursor,
+		cursorSegment: cursorSegment,
+	};
 	if (FontRig.drawTool._hobbyResolveRAF) return;
 	FontRig.drawTool._hobbyResolveRAF = requestAnimationFrame(function() {
 		FontRig.drawTool._hobbyResolveRAF = null;
-		FontRig.drawTool._hobbySolveImmediate(includeCursor);
+		var p = FontRig.drawTool._hobbyResolvePending || {};
+		FontRig.drawTool._hobbyResolvePending = null;
+		FontRig.drawTool._hobbySolveImmediate(p.includeCursor, p.cursorSegment);
 		FontRig.draw();
 	});
 };
@@ -721,17 +738,38 @@ FontRig.drawTool._hobbyResolveLive = function(includeCursor) {
 // Public entry — kept for compatibility with existing callers
 // (commit/backspace). Always solves committed knots only, sync.
 FontRig.drawTool._hobbyResolve = function() {
-	FontRig.drawTool._hobbySolveImmediate(false);
+	FontRig.drawTool._hobbySolveImmediate(false, null);
+};
+
+// Translate UX-flavoured knots (segment describes INCOMING segment)
+// to TypeRig's HobbySpline convention (segment describes OUTGOING).
+// Concretely: if knot[i].segment === 'line' (user said "I arrived
+// here on a line"), then knot[i-1].segment_type = LINE in the spline.
+FontRig.drawTool._buildHobbyKnotJSON = function(points) {
+	var out = [];
+	for (var i = 0; i < points.length; i++) {
+		// This knot's outgoing segment type is governed by NEXT knot's
+		// incoming preference. The very last knot has no outgoing
+		// segment, so its segment is irrelevant (defaults to hobby).
+		var outgoing = 'hobby';
+		if (i + 1 < points.length && points[i + 1].segment === 'line') {
+			outgoing = 'line';
+		}
+		out.push({ position: [points[i].x, points[i].y], segment: outgoing });
+	}
+	return out;
 };
 
 FontRig.drawTool._dragHandlers['hobby'] = async function(stream, initialEvent, sx, sy) {
 	var s = FontRig.drawTool.session;
 	var gp = FontRig.drawTool._cursorGlyph(initialEvent.absSx, initialEvent.absSy);
+	// Shift held at click → segment leaving this knot is straight.
+	var seg = initialEvent.shiftKey ? 'line' : 'hobby';
 
 	// Initialize.
 	if (!s.active) {
 		s.tool = 'hobby';
-		s.points = [gp];
+		s.points = [{ x: gp.x, y: gp.y, segment: seg }];
 		s.cursor = gp;
 		s.solvedNodes = null;
 		s.active = true;
@@ -769,7 +807,7 @@ FontRig.drawTool._dragHandlers['hobby'] = async function(stream, initialEvent, s
 	}
 
 	// Add knot, re-solve.
-	s.points.push(gp);
+	s.points.push({ x: gp.x, y: gp.y, segment: seg });
 	s.cursor = gp;
 	FontRig.drawTool._hobbyResolve();
 	FontRig.draw();
@@ -799,7 +837,8 @@ FontRig.drawTool._commitHobby = function(closed) {
 	if (typeof FontRig.pushUndo === 'function') FontRig.pushUndo();
 
 	var pyo = FontRig.pyBridge.pyodide;
-	var json = JSON.stringify(s.points.map(function(p) { return [p.x, p.y]; }));
+	// Translate UX-incoming-segment to TypeRig outgoing-segment.
+	var json = JSON.stringify(FontRig.drawTool._buildHobbyKnotJSON(s.points));
 	var tension = +FontRig.drawTool.options.hobbyTension || 1.0;
 
 	pyo.globals.set('_hobby_knots', json);
@@ -872,10 +911,13 @@ FontRig.drawTool.registerPreview('hobby', function(ctx, s, g2s) {
 		ctx.restore();
 	}
 
-	// 3. Knot markers.
+	// 3. Knot markers — pentagons. Filled = hobby (default), hollow
+	//    outline = line knot ("arrived on a straight segment", acts
+	//    as a directional constraint).
 	for (var k = 0; k < pts.length; k++) {
-		var ks = g2s(pts[k].x, pts[k].y);
-		FontRig.drawTool.drawKnotMarker(ctx, ks.x, ks.y);
+		var pk = pts[k];
+		var ks = g2s(pk.x, pk.y);
+		FontRig.drawTool._drawPentagon(ctx, ks.x, ks.y, 5, pk.segment === 'line');
 	}
 
 	// 4. Close-hit ring on first knot when 2+ knots.

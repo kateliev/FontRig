@@ -217,7 +217,7 @@ FontRig.drawTool._statusHints = {
 	'line':        'Click two points to draw a line. Esc cancels.',
 	'polyline':    'Click to add vertices. Double-click or Enter to commit. Click first vertex to close. Backspace pops last. Esc cancels.',
 	'bezier':      'Click for corner; click+drag for smooth handles. Alt = asymmetric, Shift = 15° snap. Click first node to close. Enter / dblclick commits open.',
-	'hobby':       'Click to drop knots — curve smooths in real time. Click first knot to close. Enter / dblclick commits open. Backspace pops last.',
+	'hobby':       'Click to drop knots — curve smooths in real time. Shift+Click marks the incoming segment as a tangent-pinned constraint (curve passes through more rigidly). Click first knot to close. Enter / dblclick commits open. Backspace pops last.',
 	'rectDrag':    'Drag to draw a rectangle. Shift = square, Alt = anchor is center. Esc cancels.',
 	'ellipseDrag': 'Drag to draw an ellipse. Shift = circle, Alt = anchor is center. Esc cancels.',
 };
@@ -308,5 +308,27 @@ FontRig.drawTool.drawKnotMarker = function(ctx, sx, sy) {
 	ctx.beginPath();
 	ctx.rect(sx - r, sy - r, r * 2, r * 2);
 	ctx.fill();
+	ctx.restore();
+};
+
+// Pentagon marker — used by the Hobby tool. Filled = "hobby" knot,
+// hollow outline = "line" knot (incoming segment is straight).
+// Apex points up.
+FontRig.drawTool._drawPentagon = function(ctx, sx, sy, radius, hollow) {
+	ctx.save();
+	ctx.beginPath();
+	for (var i = 0; i < 5; i++) {
+		var a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+		var x = sx + radius * Math.cos(a);
+		var y = sy + radius * Math.sin(a);
+		if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+	}
+	ctx.closePath();
+	if (hollow) {
+		ctx.lineWidth = 1.5;
+		ctx.stroke();
+	} else {
+		ctx.fill();
+	}
 	ctx.restore();
 };
