@@ -717,15 +717,33 @@ FontRig.drawTool._hobbySolveImmediate = function(includeCursor, cursorSegment) {
 	// Build the knot list to solve. Each point carries {x, y, segment}
 	// where segment describes the INCOMING segment (more natural UX).
 	// We translate to TypeRig's outgoing-segment convention here.
+	//
+	// Smart endpoint (Option A): pin the virtual cursor knot's dir_in
+	// to the chord from the last committed knot. This kills the
+	// METAFONT default-curl spiral so the live preview is WYSIWYG —
+	// what the user sees while moving is what the algorithm is asked
+	// to produce up to that point.
 	var knots = s.points.slice();
 	if (includeCursor && s.cursor) {
 		var last = knots[knots.length - 1];
 		if (!last || Math.abs(last.x - s.cursor.x) > 0.5 ||
 			Math.abs(last.y - s.cursor.y) > 0.5) {
-			knots.push({
+			var entry = {
 				x: s.cursor.x, y: s.cursor.y,
 				segment: cursorSegment || 'hobby'
-			});
+			};
+			// --- SMART ENDPOINT (active) -----------------------------
+			if (last) {
+				entry.dir_in = Math.atan2(s.cursor.y - last.y, s.cursor.x - last.x);
+			}
+			// --- PURE HOBBY FALLBACK (rollback) ----------------------
+			// Replace the block above with the line below to revert to
+			// the unpinned cursor. Curve will exhibit METAFONT default-
+			// curl spiral at the live end, but the committed result is
+			// the algorithm's free choice (no chord pin).
+			//   (no extra fields — entry is just position + segment)
+			// ---------------------------------------------------------
+			knots.push(entry);
 		}
 	}
 	if (knots.length < 2) { s.solvedNodes = null; return; }
@@ -801,7 +819,11 @@ FontRig.drawTool._buildHobbyKnotJSON = function(points, closed) {
 		if (nextIdx >= 0 && points[nextIdx].segment === 'line') {
 			outgoing = 'line';
 		}
-		out.push({ position: [points[i].x, points[i].y], segment: outgoing });
+		var entry = { position: [points[i].x, points[i].y], segment: outgoing };
+		// Pass through optional direction pins (Smart endpoint, etc.).
+		if (points[i].dir_in != null)  entry.dir_in  = points[i].dir_in;
+		if (points[i].dir_out != null) entry.dir_out = points[i].dir_out;
+		out.push(entry);
 	}
 	return out;
 };
