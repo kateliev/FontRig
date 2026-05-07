@@ -877,14 +877,13 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	// a property panel.
 	if (hasKnot) {
 		var seg = knotInfo.knot.segment_type || 'hobby';
-		var mark = function(item, value, label, icon) {
+		var mark = function(item, value, label) {
 			if (!item) return;
-			var prefix = (seg === value) ? '✓ ' : '';
-			item.innerHTML = '<span class="tri">' + icon + '</span>' + prefix + label;
+			item.textContent = (seg === value ? '✓ ' : '   ') + label;
 		};
-		mark(knotSegHobby, 'hobby', 'Segment: Hobby',  'contour');
-		mark(knotSegLine,  'line',  'Segment: Line',   'curve_to_line');
-		mark(knotSegFixed, 'fixed', 'Segment: Fixed',  'curve_set');
+		mark(knotSegHobby, 'hobby', 'Segment: Hobby');
+		mark(knotSegLine,  'line',  'Segment: Line');
+		mark(knotSegFixed, 'fixed', 'Segment: Fixed');
 
 		// Stash for the click handler so it doesn't have to re-resolve.
 		ctxMenu._pendingKnotNodeId = nodeHit.id;
@@ -979,16 +978,16 @@ if (ctxMenu) {
 			ctxMenu._pendingKnotNodeId = null;
 		} else if (action === 'knotTensionLooser') {
 			var nidL = ctxMenu._pendingKnotNodeId;
-			if (nidL && typeof FontRig.adjustKnotTension === 'function') {
+			if (nidL && typeof FontRig.adjustKnotTensionDelta === 'function') {
 				FontRig.pushUndo();
-				FontRig.adjustKnotTension(nidL, 1 / 1.25);
+				FontRig.adjustKnotTensionDelta(nidL, -0.05);
 			}
 			ctxMenu._pendingKnotNodeId = null;
 		} else if (action === 'knotTensionTighter') {
 			var nidT = ctxMenu._pendingKnotNodeId;
-			if (nidT && typeof FontRig.adjustKnotTension === 'function') {
+			if (nidT && typeof FontRig.adjustKnotTensionDelta === 'function') {
 				FontRig.pushUndo();
-				FontRig.adjustKnotTension(nidT, 1.25);
+				FontRig.adjustKnotTensionDelta(nidT, +0.05);
 			}
 			ctxMenu._pendingKnotNodeId = null;
 		} else if (action === 'knotTensionReset') {

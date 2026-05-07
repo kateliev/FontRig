@@ -541,6 +541,43 @@ FontRig.adjustKnotTension = function(nodeId, factor, opts) {
 	return true;
 };
 
+// Adjust per-knot tension by an additive delta (drawing-tool style:
+// the [ ] { } keys use steps of 0.05 / 0.25). Affects the knot at
+// the given node id; for batches use _withSelectedKnots + this fn
+// or adjustSelectedKnotsTensionDelta below.
+FontRig.adjustKnotTensionDelta = function(nodeId, delta, opts) {
+	var info = FontRig._resolveKnotByNodeId(nodeId);
+	if (!info) return false;
+	opts = opts || {};
+	var k = info.knot;
+	var clamp = function(v) {
+		return Math.max(FontRig.HOBBY_TENSION_MIN,
+		                Math.min(FontRig.HOBBY_TENSION_MAX, v));
+	};
+	if (!opts.betaOnly)  k.alpha = +clamp((k.alpha || 1.0) + delta).toFixed(3);
+	if (!opts.alphaOnly) k.beta  = +clamp((k.beta  || 1.0) + delta).toFixed(3);
+
+	FontRig.solveHobbyContour(info.contour);
+	if (info.layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(info.layer);
+	if (FontRig.draw) FontRig.draw();
+	return true;
+};
+
+// Apply an additive tension delta to every selected hobby knot in
+// one batch (single undo, single re-solve per touched contour).
+FontRig.adjustSelectedKnotsTensionDelta = function(delta, opts) {
+	opts = opts || {};
+	var clamp = function(v) {
+		return Math.max(FontRig.HOBBY_TENSION_MIN,
+		                Math.min(FontRig.HOBBY_TENSION_MAX, v));
+	};
+	return FontRig._withSelectedKnots(function(info) {
+		var k = info.knot;
+		if (!opts.betaOnly)  k.alpha = +clamp((k.alpha || 1.0) + delta).toFixed(3);
+		if (!opts.alphaOnly) k.beta  = +clamp((k.beta  || 1.0) + delta).toFixed(3);
+	});
+};
+
 // Reset both tensions to 1.0.
 FontRig.resetKnotTension = function(nodeId) {
 	var info = FontRig._resolveKnotByNodeId(nodeId);
@@ -583,6 +620,55 @@ FontRig._withSelectedKnots = function(fn) {
 	if (FontRig.draw) FontRig.draw();
 	return infos.length;
 };
+
+
+// Wire tension keys: [ / ] for fine adjust, { / } for coarse (×5).
+// Mirrors the drawing-tool's hobby-tension keys so the muscle memory
+// carries over from "drawing a hobby curve" to "editing one".
+//
+// Step 0.05 matches FontRig.drawTool._adjustTension.
+//
+// Skipped when:
+//   - The drawing tool is in an active session (it owns these keys).
+//   - Focus is on an input/textarea/contenteditable.
+//   - The selection contains no hobby knots.
+//
+// Selection-wide: every selected hobby knot is adjusted in one batch.
+(function() {
+	var TENSION_STEP = 0.05;
+	window.addEventListener('keydown', function(e) {
+		if (e.ctrlKey || e.altKey || e.metaKey) return;
+		var k = e.key;
+		if (k !== '[' && k !== ']' && k !== '{' && k !== '}') return;
+
+		// Don't fight the drawing tool — it consumes these during a session.
+		if (FontRig.drawTool && FontRig.drawTool.session && FontRig.drawTool.session.active) return;
+
+		// Don't fight text fields.
+		var t = e.target;
+		var tag = t && t.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
+
+		// Need at least one selected hobby knot.
+		if (!FontRig.state || !FontRig.state.selectedNodeIds || FontRig.state.selectedNodeIds.size === 0) return;
+
+		var hasHobby = false;
+		FontRig.state.selectedNodeIds.forEach(function(id) {
+			if (!hasHobby && FontRig._resolveKnotByNodeId && FontRig._resolveKnotByNodeId(id)) hasHobby = true;
+		});
+		if (!hasHobby) return;
+
+		var delta;
+		if      (k === '[') delta = -TENSION_STEP;
+		else if (k === ']') delta = +TENSION_STEP;
+		else if (k === '{') delta = -TENSION_STEP * 5;
+		else                delta = +TENSION_STEP * 5;
+
+		e.preventDefault();
+		if (FontRig.pushUndo) FontRig.pushUndo();
+		FontRig.adjustSelectedKnotsTensionDelta(delta);
+	});
+})();
 
 
 // Walk a glyph and solve every hobby contour. Used right after parse
