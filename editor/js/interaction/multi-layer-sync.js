@@ -332,13 +332,85 @@ FontRig._insertNodeOnContour = function(hit) {
 
 // -- Synchronized: Delete node ---------------------------------------
 // Deletes the same node (by ID) across all compatible layers.
+// When the selection fully covers one or more contours (every on-curve
+// of a contour is selected), those contours are removed entirely
+// instead — this is what the user expects when they "select a contour
+// and press backspace".
 FontRig.sync_deleteNode = function() {
 	var sel = FontRig.state.selectedNodeIds;
+	if (sel.size === 0) return;
+
+	var layers = FontRig.getSyncLayers();
+	var activeLayer = FontRig.getActiveLayer && FontRig.getActiveLayer();
+
+	// Group selected node-indices by contour-index in the active layer.
+	var byContour = {};  // ci -> Set of ni
+	sel.forEach(function(id) {
+		var m = id.match(/^c(\d+)_n(\d+)$/);
+		if (!m) return;
+		var ci = parseInt(m[1], 10);
+		var ni = parseInt(m[2], 10);
+		(byContour[ci] = byContour[ci] || new Set()).add(ni);
+	});
+
+	// Identify fully-selected contours (every on-curve in the selection).
+	// For hobby contours we count knots — bezier-shadow off-curves aren't
+	// in selectedNodeIds anyway.
+	var fullCis = [];
+	if (activeLayer) {
+		var ci = 0;
+		for (var si = 0; si < activeLayer.shapes.length; si++) {
+			var shape = activeLayer.shapes[si];
+			for (var ki = 0; ki < shape.contours.length; ki++) {
+				var contour = shape.contours[ki];
+				var picked = byContour[ci];
+				if (picked) {
+					var requiredCount = 0;
+					var allFound = true;
+					if (contour.kind === 'hobby') {
+						// Each on-curve in contour.nodes maps to a knot.
+						for (var ni = 0; ni < contour.nodes.length; ni++) {
+							if (contour.nodes[ni].type !== 'on') continue;
+							requiredCount++;
+							if (!picked.has(ni)) { allFound = false; break; }
+						}
+					} else {
+						for (var ni = 0; ni < contour.nodes.length; ni++) {
+							if (contour.nodes[ni].type !== 'on') continue;
+							requiredCount++;
+							if (!picked.has(ni)) { allFound = false; break; }
+						}
+					}
+					if (allFound && requiredCount > 0) fullCis.push(ci);
+				}
+				ci++;
+			}
+		}
+	}
+
+	if (fullCis.length > 0) {
+		// Remove the fully-selected contours from every sync layer.
+		// Splice from highest ci to lowest so earlier indices stay valid.
+		fullCis.sort(function(a, b) { return b - a; });
+		for (var li = 0; li < layers.length; li++) {
+			var layer = layers[li];
+			for (var fi = 0; fi < fullCis.length; fi++) {
+				FontRig._removeContourByGlobalIndex(layer, fullCis[fi]);
+			}
+			FontRig.invalidatePathCache(layer);
+		}
+		sel.clear();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
+		if (FontRig.syncXmlFromData) FontRig.syncXmlFromData();
+		return;
+	}
+
+	// Multi-node delete (without a fully-selected contour) isn't
+	// supported yet — fall back to single-node delete.
 	if (sel.size !== 1) return;
 
 	var nodeId = sel.values().next().value;
-	var layers = FontRig.getSyncLayers();
-
 	for (var li = 0; li < layers.length; li++) {
 		var layer = layers[li];
 		FontRig._deleteNodeInLayer(layer, nodeId);
@@ -348,6 +420,27 @@ FontRig.sync_deleteNode = function() {
 	sel.clear();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
+};
+
+// Remove the contour at a given global index (cumulative across shapes)
+// from a layer. Drops the parent shape if it ends up empty.
+FontRig._removeContourByGlobalIndex = function(layer, targetCi) {
+	if (!layer || !layer.shapes) return false;
+	var ci = 0;
+	for (var si = 0; si < layer.shapes.length; si++) {
+		var shape = layer.shapes[si];
+		for (var ki = 0; ki < shape.contours.length; ki++) {
+			if (ci === targetCi) {
+				shape.contours.splice(ki, 1);
+				if (shape.contours.length === 0) {
+					layer.shapes.splice(si, 1);
+				}
+				return true;
+			}
+			ci++;
+		}
+	}
+	return false;
 };
 
 // Low-level delete on a specific layer.
