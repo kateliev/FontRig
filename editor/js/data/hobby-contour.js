@@ -217,54 +217,45 @@ FontRig._findContourByIndex = function(ci) {
 	return null;
 };
 
-// Convert a hobby contour to bezier in place. The solver has already
-// produced the bezier shadow on contour.nodes; we just promote it
-// to the source of truth and drop the knot data. Irreversible
-// without undo.
-FontRig.convertContourToBezier = function(ci) {
-	var ref = FontRig._findContourByIndex(ci);
-	if (!ref || ref.contour.kind !== 'hobby') return false;
+// Layer-agnostic core: hobby → bezier on a specific contour. The
+// solver has already produced the bezier shadow on contour.nodes;
+// we promote it to the source of truth and drop the knot data.
+// No undo, no draw — caller batches.
+FontRig.applyConvertContourToBezier = function(contour, layer) {
+	if (!contour || contour.kind !== 'hobby') return false;
 
-	var c = ref.contour;
-	if (!c.nodes || c.nodes.length === 0) {
-		// Solver hasn't produced nodes yet — try once.
-		FontRig.solveHobbyContour(c);
+	if (!contour.nodes || contour.nodes.length === 0) {
+		FontRig.solveHobbyContour(contour);
 	}
-	if (!c.nodes || c.nodes.length === 0) {
+	if (!contour.nodes || contour.nodes.length === 0) {
 		console.warn('[hobby] convert to bezier: no solved nodes available');
 		return false;
 	}
 
-	if (FontRig.pushUndo) FontRig.pushUndo();
-
-	// Snapshot solved nodes as the new persistent bezier nodes.
-	c.nodes = c.nodes.map(function(n) {
+	contour.nodes = contour.nodes.map(function(n) {
 		return { x: n.x, y: n.y, type: n.type, smooth: false };
 	});
-	c.kind = 'bezier';
-	delete c.knots;
-	delete c._knotMap;
+	contour.kind = 'bezier';
+	delete contour.knots;
+	delete contour._knotMap;
 
-	if (FontRig.invalidatePathCache) FontRig.invalidatePathCache(ref.layer);
-	if (FontRig.draw) FontRig.draw();
+	if (layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(layer);
 	return true;
 };
 
-// Convert a bezier contour to hobby. Calls Python (HobbySpline.
-// from_contour) to recover knot positions and tensions; replaces
-// nodes with the solved knot list, then re-solves to populate the
-// bezier shadow for rendering.
-FontRig.convertContourToHobby = function(ci) {
-	var ref = FontRig._findContourByIndex(ci);
-	if (!ref || ref.contour.kind === 'hobby') return false;
+// Layer-agnostic core: bezier → hobby on a specific contour. Calls
+// Python (HobbySpline.from_contour) to recover knots, replaces
+// nodes with the knot list, re-solves to populate the bezier shadow.
+// No undo, no draw — caller batches.
+FontRig.applyConvertContourToHobby = function(contour, layer) {
+	if (!contour || contour.kind === 'hobby') return false;
 	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
 		console.warn('[hobby] convert to hobby: Python solver not ready');
 		FontRig.ensureHobbySolverReady && FontRig.ensureHobbySolverReady(FontRig.state.glyphData);
 		return false;
 	}
 
-	var c = ref.contour;
-	var nodesPayload = (c.nodes || []).map(function(n) {
+	var nodesPayload = (contour.nodes || []).map(function(n) {
 		return [n.x, n.y, n.type];
 	});
 
@@ -290,10 +281,8 @@ FontRig.convertContourToHobby = function(ci) {
 		return false;
 	}
 
-	if (FontRig.pushUndo) FontRig.pushUndo();
-
-	c.kind = 'hobby';
-	c.knots = knots.map(function(k) {
+	contour.kind = 'hobby';
+	contour.knots = knots.map(function(k) {
 		return {
 			x: k.x, y: k.y,
 			segment_type: k.segment_type || 'hobby',
@@ -302,12 +291,31 @@ FontRig.convertContourToHobby = function(ci) {
 			dir_in: null, dir_out: null,
 		};
 	});
-	c.nodes = [];
-	FontRig.solveHobbyContour(c);
+	contour.nodes = [];
+	FontRig.solveHobbyContour(contour);
 
-	if (FontRig.invalidatePathCache) FontRig.invalidatePathCache(ref.layer);
-	if (FontRig.draw) FontRig.draw();
+	if (layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(layer);
 	return true;
+};
+
+// Active-layer wrappers (single-layer fallback). MM-aware callers
+// go through sync_convertContour* in multi-layer-sync.js.
+FontRig.convertContourToBezier = function(ci) {
+	var ref = FontRig._findContourByIndex(ci);
+	if (!ref) return false;
+	if (FontRig.pushUndo) FontRig.pushUndo();
+	var ok = FontRig.applyConvertContourToBezier(ref.contour, ref.layer);
+	if (ok && FontRig.draw) FontRig.draw();
+	return ok;
+};
+
+FontRig.convertContourToHobby = function(ci) {
+	var ref = FontRig._findContourByIndex(ci);
+	if (!ref) return false;
+	if (FontRig.pushUndo) FontRig.pushUndo();
+	var ok = FontRig.applyConvertContourToHobby(ref.contour, ref.layer);
+	if (ok && FontRig.draw) FontRig.draw();
+	return ok;
 };
 
 
@@ -494,24 +502,31 @@ FontRig._resolveKnotByNodeId = function(nodeId) {
 	return { contour: ref.contour, knot: knot, ki: ki, layer: ref.layer };
 };
 
-// Set the segment_type on the knot at the given node id. The
-// segment_type describes the segment going OUT of this knot to the
-// next knot. Re-solves the contour so the bezier shadow refreshes.
+// Layer-agnostic core. Mutates the segment_type on a specific knot
+// in a specific contour, re-solves, dirties the given layer's path
+// cache. No undo, no draw — caller batches.
+FontRig._applyKnotSegmentTypeInContour = function(contour, ki, segmentType, layer) {
+	if (!contour || contour.kind !== 'hobby') return false;
+	if (!contour.knots || !contour.knots[ki]) return false;
+	if (segmentType !== 'hobby' && segmentType !== 'line' && segmentType !== 'fixed') return false;
+	if (contour.knots[ki].segment_type === segmentType) return false;
+
+	contour.knots[ki].segment_type = segmentType;
+	FontRig.solveHobbyContour(contour);
+	if (layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(layer);
+	return true;
+};
+
+// Active-layer wrapper. Used as a fallback / single-layer caller.
+// MM-aware callers should go through sync_setKnotSegmentType in
+// multi-layer-sync.js instead.
 FontRig.setKnotSegmentType = function(nodeId, segmentType) {
 	var info = FontRig._resolveKnotByNodeId(nodeId);
 	if (!info) return false;
-	if (segmentType !== 'hobby' && segmentType !== 'line' && segmentType !== 'fixed') {
-		return false;
-	}
-	if (info.knot.segment_type === segmentType) return false;
-
 	if (FontRig.pushUndo) FontRig.pushUndo();
-	info.knot.segment_type = segmentType;
-
-	FontRig.solveHobbyContour(info.contour);
-	if (info.layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(info.layer);
-	if (FontRig.draw) FontRig.draw();
-	return true;
+	var ok = FontRig._applyKnotSegmentTypeInContour(info.contour, info.ki, segmentType, info.layer);
+	if (ok && FontRig.draw) FontRig.draw();
+	return ok;
 };
 
 // Adjust per-knot tension by a multiplicative factor. By default

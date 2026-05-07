@@ -911,3 +911,84 @@ FontRig.sync_openContourAtNode = function() {
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 };
+
+
+// ===================================================================
+// HOBBY-SPECIFIC SYNC OPERATIONS
+// ===================================================================
+// Per the spec: structural changes (contour kind change, knot
+// segment-type change) propagate to scope layers under
+// active/masters/selected mode. Per-knot tension and direction
+// stay active-layer only — those are fine-tuning, not structure.
+// -------------------------------------------------------------------
+
+// Convert a contour from bezier to hobby across all in-scope layers.
+FontRig.sync_convertContourToHobby = function(contourIdx) {
+	if (typeof contourIdx !== 'number' || contourIdx < 0) return;
+
+	var layers = FontRig.getSyncLayers();
+	if (layers.length === 0) return;
+
+	if (FontRig.pushUndo) FontRig.pushUndo();
+
+	for (var li = 0; li < layers.length; li++) {
+		var layer = layers[li];
+		var ref = FontRig._findContourInLayer(layer, contourIdx);
+		if (!ref || !ref.contour || ref.contour.kind === 'hobby') continue;
+		FontRig.applyConvertContourToHobby(ref.contour, layer);
+	}
+
+	if (FontRig.draw) FontRig.draw();
+	if (FontRig.updateStatusSelected) FontRig.updateStatusSelected();
+};
+
+// Convert a contour from hobby to bezier across all in-scope layers.
+FontRig.sync_convertContourToBezier = function(contourIdx) {
+	if (typeof contourIdx !== 'number' || contourIdx < 0) return;
+
+	var layers = FontRig.getSyncLayers();
+	if (layers.length === 0) return;
+
+	if (FontRig.pushUndo) FontRig.pushUndo();
+
+	for (var li = 0; li < layers.length; li++) {
+		var layer = layers[li];
+		var ref = FontRig._findContourInLayer(layer, contourIdx);
+		if (!ref || !ref.contour || ref.contour.kind !== 'hobby') continue;
+		FontRig.applyConvertContourToBezier(ref.contour, layer);
+	}
+
+	if (FontRig.draw) FontRig.draw();
+	if (FontRig.updateStatusSelected) FontRig.updateStatusSelected();
+};
+
+// Change a hobby knot's segment_type across all in-scope layers.
+// nodeId identifies the knot on the active layer (cX_nY); the same
+// (contour-index, node-index) tuple is used to locate the matching
+// knot in each scope layer. Compatible scope layers have identical
+// knot maps, so the lookup lands on the same knot.
+FontRig.sync_setKnotSegmentType = function(nodeId, segmentType) {
+	var m = nodeId && nodeId.match(/^c(\d+)_n(\d+)$/);
+	if (!m) return;
+	var ci = parseInt(m[1], 10);
+	var ni = parseInt(m[2], 10);
+
+	var layers = FontRig.getSyncLayers();
+	if (layers.length === 0) return;
+
+	if (FontRig.pushUndo) FontRig.pushUndo();
+
+	for (var li = 0; li < layers.length; li++) {
+		var layer = layers[li];
+		var ref = FontRig._findContourInLayer(layer, ci);
+		if (!ref || !ref.contour || ref.contour.kind !== 'hobby') continue;
+		var contour = ref.contour;
+		if (!contour._knotMap) continue;
+		var ki = contour._knotMap[ni];
+		if (ki == null) continue;
+		FontRig._applyKnotSegmentTypeInContour(contour, ki, segmentType, layer);
+	}
+
+	if (FontRig.draw) FontRig.draw();
+	if (FontRig.updateStatusSelected) FontRig.updateStatusSelected();
+};

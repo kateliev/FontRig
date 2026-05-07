@@ -981,7 +981,12 @@ if (ctxMenu) {
 				: (action === 'knotSegLine')  ? 'line'
 				: 'fixed';
 			var nid = ctxMenu._pendingKnotNodeId;
-			if (nid && typeof FontRig.setKnotSegmentType === 'function') {
+			// Structural change → MM-aware. sync_setKnotSegmentType
+			// honours the layer-selector mode; in 'active' mode it
+			// only touches the active layer.
+			if (nid && typeof FontRig.sync_setKnotSegmentType === 'function') {
+				FontRig.sync_setKnotSegmentType(nid, seg);
+			} else if (nid && typeof FontRig.setKnotSegmentType === 'function') {
 				FontRig.setKnotSegmentType(nid, seg);
 			}
 			ctxMenu._pendingKnotNodeId = null;
@@ -1018,14 +1023,23 @@ if (ctxMenu) {
 			}
 			ctxMenu._pendingKnotNodeId = null;
 		} else if (action === 'convertToHobby') {
-			if (pendingContourIdx >= 0 && typeof FontRig.convertContourToHobby === 'function') {
-				FontRig.convertContourToHobby(pendingContourIdx);
+			// Structural change → MM-aware.
+			if (pendingContourIdx >= 0) {
+				if (typeof FontRig.sync_convertContourToHobby === 'function') {
+					FontRig.sync_convertContourToHobby(pendingContourIdx);
+				} else if (typeof FontRig.convertContourToHobby === 'function') {
+					FontRig.convertContourToHobby(pendingContourIdx);
+				}
 				pendingContourIdx = -1;
 				pendingSegmentHit = null;
 			}
 		} else if (action === 'convertToBezier') {
-			if (pendingContourIdx >= 0 && typeof FontRig.convertContourToBezier === 'function') {
-				FontRig.convertContourToBezier(pendingContourIdx);
+			if (pendingContourIdx >= 0) {
+				if (typeof FontRig.sync_convertContourToBezier === 'function') {
+					FontRig.sync_convertContourToBezier(pendingContourIdx);
+				} else if (typeof FontRig.convertContourToBezier === 'function') {
+					FontRig.convertContourToBezier(pendingContourIdx);
+				}
 				pendingContourIdx = -1;
 				pendingSegmentHit = null;
 			}
