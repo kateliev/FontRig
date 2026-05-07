@@ -88,6 +88,7 @@ FontRig.state.vizLayers = {
 	metrics:        true,
 	nodes:          true,
 	handles:        true,
+	hobbyDirHandles:true,
 	startPoints:    true,
 	stackedWarnings:true,
 	selectedSegs:   true,
@@ -104,6 +105,7 @@ FontRig._syncVizFromState = function() {
 	var v = s.vizLayers;
 	v.nodes          = s.showNodes;
 	v.handles        = s.showNodes;   // handles follow nodes
+	v.hobbyDirHandles= s.showNodes;   // direction handles follow nodes
 	v.startPoints    = s.showNodes;
 	v.stackedWarnings= s.showNodes;
 	v.selectedSegs   = s.showNodes;
@@ -214,6 +216,18 @@ FontRig.registerVizLayer({
 	previewMode: 'skip',
 	draw: function(ctx, layer) {
 		FontRig._drawNodeMarkers(layer);
+	}
+});
+
+// ----- z=530: Hobby direction handles ------------------------------
+FontRig.registerVizLayer({
+	identifier:  'hobbyDirHandles',
+	name:        'Hobby direction handles',
+	zIndex:      530,
+	enabledKey:  'hobbyDirHandles',
+	previewMode: 'skip',
+	draw: function(ctx, layer) {
+		FontRig._drawHobbyDirectionHandles(layer);
 	}
 });
 

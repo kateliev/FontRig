@@ -671,6 +671,149 @@ FontRig._withSelectedKnots = function(fn) {
 })();
 
 
+// ===================================================================
+// Per-knot direction pinning
+// ===================================================================
+// dir_in / dir_out are floats in radians, or null = solver picks.
+// Convention (matches TypeRig HobbyKnot.pin_dir_*):
+//   dir_out — angle the curve DEPARTS at, measured from this knot
+//             toward the outgoing handle / next knot.
+//   dir_in  — angle the curve ARRIVES at, same chord-from-prev convention.
+//             The "arrival vector" points FROM prev TO this knot.
+
+// Find a knot's bezier-shadow node index. Returns -1 if not found
+// (e.g. _knotMap stale).
+FontRig._knotIndexToNodeIndex = function(contour, ki) {
+	if (!contour || !contour._knotMap) return -1;
+	var map = contour._knotMap;
+	for (var i = 0; i < map.length; i++) if (map[i] === ki) return i;
+	return -1;
+};
+
+// Solved (or pinned) departure angle at knot ki. Looks at the
+// bezier shadow's next node — for hobby segments that's the first
+// off-curve (tangent control); for line segments it's the next
+// on-curve (chord direction).
+FontRig.getKnotOutDirection = function(contour, ki) {
+	var k = contour && contour.knots && contour.knots[ki];
+	if (!k) return 0;
+	if (k.dir_out != null) return k.dir_out;
+
+	var ni = FontRig._knotIndexToNodeIndex(contour, ki);
+	if (ni < 0 || !contour.nodes || contour.nodes.length < 2) return 0;
+	var n = contour.nodes.length;
+	// Open path's last knot: no outgoing segment — use back-tangent.
+	if (!contour.closed && ni === n - 1) {
+		var prev = contour.nodes[n - 2];
+		return Math.atan2(k.y - prev.y, k.x - prev.x);
+	}
+	var next = contour.nodes[(ni + 1) % n];
+	return Math.atan2(next.y - k.y, next.x - k.x);
+};
+
+// Solved (or pinned) arrival angle at knot ki. By convention this
+// is the angle FROM the previous chord position TO this knot —
+// so visually the "in handle" points BACKWARDS by π relative to it.
+FontRig.getKnotInDirection = function(contour, ki) {
+	var k = contour && contour.knots && contour.knots[ki];
+	if (!k) return 0;
+	if (k.dir_in != null) return k.dir_in;
+
+	var ni = FontRig._knotIndexToNodeIndex(contour, ki);
+	if (ni < 0 || !contour.nodes || contour.nodes.length < 2) return 0;
+	var n = contour.nodes.length;
+	// Open path's first knot: no incoming segment — use forward-tangent.
+	if (!contour.closed && ni === 0) {
+		var nxt = contour.nodes[1];
+		return Math.atan2(nxt.y - k.y, nxt.x - k.x);
+	}
+	var prev = contour.nodes[(ni - 1 + n) % n];
+	return Math.atan2(k.y - prev.y, k.x - prev.x);
+};
+
+// True when either side is pinned.
+FontRig.knotHasPinnedDirection = function(knot) {
+	return !!knot && (knot.dir_in != null || knot.dir_out != null);
+};
+
+// Pin one side of a knot's direction. side ∈ {'out', 'in'}.
+// opts.smooth: also mirror the other side so the tangent stays
+// collinear (dir_in = dir_out + π). Default false (split / cusp).
+FontRig.setKnotDirection = function(nodeId, side, angle, opts) {
+	var info = FontRig._resolveKnotByNodeId(nodeId);
+	if (!info) return false;
+	if (side !== 'out' && side !== 'in') return false;
+	opts = opts || {};
+
+	var k = info.knot;
+	if (side === 'out') {
+		k.dir_out = angle;
+		if (opts.smooth) k.dir_in = angle + Math.PI;
+	} else {
+		k.dir_in = angle;
+		if (opts.smooth) k.dir_out = angle - Math.PI;
+	}
+
+	FontRig.solveHobbyContour(info.contour);
+	if (info.layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(info.layer);
+	if (FontRig.draw) FontRig.draw();
+	return true;
+};
+
+// Snapshot the currently-solved tangents into dir_in/dir_out, so the
+// knot becomes pinned at exactly its current shape. Useful for the
+// "Pin Direction" context-menu action.
+FontRig.pinKnotDirectionAtSolved = function(nodeId) {
+	var info = FontRig._resolveKnotByNodeId(nodeId);
+	if (!info) return false;
+	if (FontRig.pushUndo) FontRig.pushUndo();
+	info.knot.dir_out = FontRig.getKnotOutDirection(info.contour, info.ki);
+	info.knot.dir_in  = FontRig.getKnotInDirection(info.contour,  info.ki);
+
+	FontRig.solveHobbyContour(info.contour);
+	if (info.layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(info.layer);
+	if (FontRig.draw) FontRig.draw();
+	return true;
+};
+
+// Release: drop both pins, the solver decides again.
+FontRig.releaseKnotDirection = function(nodeId) {
+	var info = FontRig._resolveKnotByNodeId(nodeId);
+	if (!info) return false;
+	if (info.knot.dir_in == null && info.knot.dir_out == null) return false;
+
+	if (FontRig.pushUndo) FontRig.pushUndo();
+	info.knot.dir_in = null;
+	info.knot.dir_out = null;
+
+	FontRig.solveHobbyContour(info.contour);
+	if (info.layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(info.layer);
+	if (FontRig.draw) FontRig.draw();
+	return true;
+};
+
+// Direction-handle screen radius (constant — handle stays a fixed
+// pixel size regardless of zoom). Mirrors the bezier handle look.
+FontRig.HOBBY_DIR_HANDLE_RADIUS = 28;
+
+// Compute the screen-space endpoint of a knot's direction handle.
+// side ∈ {'out', 'in'}. The 'in' handle visually points BACKWARDS
+// (toward where the curve came from), so we render at angle dir_in+π.
+// Returns { x, y } in screen coords.
+FontRig.computeKnotDirHandlePos = function(contour, ki, side) {
+	var knot = contour.knots[ki];
+	var sp = FontRig.glyphToScreen(knot.x, knot.y);
+	var angle = (side === 'out')
+		? FontRig.getKnotOutDirection(contour, ki)
+		: FontRig.getKnotInDirection(contour, ki) + Math.PI;
+	var R = FontRig.HOBBY_DIR_HANDLE_RADIUS;
+	return {
+		x: sp.x + R * Math.cos(-angle),  // canvas y is flipped
+		y: sp.y + R * Math.sin(-angle),
+	};
+};
+
+
 // Walk a glyph and solve every hobby contour. Used right after parse
 // (to display loaded knots) and after Python sync (to refresh after
 // commit/edit). No-op if Pyodide isn't ready — the caller is expected

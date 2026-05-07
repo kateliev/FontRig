@@ -724,6 +724,9 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	var knotTLooser = ctxMenu.querySelector('[data-action="knotTensionLooser"]');
 	var knotTTighter = ctxMenu.querySelector('[data-action="knotTensionTighter"]');
 	var knotTReset = ctxMenu.querySelector('[data-action="knotTensionReset"]');
+	var hobbyDirSep = ctxMenu.querySelector('[data-id="hobby-sep-dir"]');
+	var knotPinDir = ctxMenu.querySelector('[data-action="knotPinDirection"]');
+	var knotReleaseDir = ctxMenu.querySelector('[data-action="knotReleaseDirection"]');
 
 	// Hit test: node first, then segment
 	var nodeHit = null;
@@ -872,6 +875,12 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	if (knotTTighter) knotTTighter.style.display = hasKnot ? '' : 'none';
 	if (knotTReset)   knotTReset.style.display   = hasKnot ? '' : 'none';
 
+	// Direction items: Pin shown when knot is free; Release shown when pinned.
+	var dirPinned = hasKnot && (knotInfo.knot.dir_in != null || knotInfo.knot.dir_out != null);
+	if (hobbyDirSep)    hobbyDirSep.style.display    = hasKnot ? '' : 'none';
+	if (knotPinDir)     knotPinDir.style.display     = (hasKnot && !dirPinned) ? '' : 'none';
+	if (knotReleaseDir) knotReleaseDir.style.display = (hasKnot &&  dirPinned) ? '' : 'none';
+
 	// Mark the current segment_type with a checkmark prefix so the
 	// user can see at a glance which one is active without opening
 	// a property panel.
@@ -994,6 +1003,18 @@ if (ctxMenu) {
 			var nidR = ctxMenu._pendingKnotNodeId;
 			if (nidR && typeof FontRig.resetKnotTension === 'function') {
 				FontRig.resetKnotTension(nidR);
+			}
+			ctxMenu._pendingKnotNodeId = null;
+		} else if (action === 'knotPinDirection') {
+			var nidPD = ctxMenu._pendingKnotNodeId;
+			if (nidPD && typeof FontRig.pinKnotDirectionAtSolved === 'function') {
+				FontRig.pinKnotDirectionAtSolved(nidPD);
+			}
+			ctxMenu._pendingKnotNodeId = null;
+		} else if (action === 'knotReleaseDirection') {
+			var nidRD = ctxMenu._pendingKnotNodeId;
+			if (nidRD && typeof FontRig.releaseKnotDirection === 'function') {
+				FontRig.releaseKnotDirection(nidRD);
 			}
 			ctxMenu._pendingKnotNodeId = null;
 		} else if (action === 'convertToHobby') {

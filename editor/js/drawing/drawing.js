@@ -763,6 +763,89 @@ FontRig._drawStartPoints = function(layer) {
 	}
 };
 
+// Pass 4: Hobby direction handles --------------------------------------
+// Renders a thin tangent line + dot for each pinned hobby-knot side,
+// and a dashed/hollow stub for selected-but-free knots so the user
+// has a target to grab. Solid-filled = pinned, dashed-hollow = free
+// hint based on the solved tangent.
+FontRig._drawHobbyDirectionHandles = function(layer) {
+	if (!layer || !layer.shapes) return;
+	var ctx = FontRig.dom.ctx;
+	var sel = FontRig.state.selectedNodeIds;
+	var tn = FontRig.getCurrentTheme().node;
+
+	var ci = 0;
+	for (var si = 0; si < layer.shapes.length; si++) {
+		var shape = layer.shapes[si];
+		for (var ki2 = 0; ki2 < shape.contours.length; ki2++) {
+			var contour = shape.contours[ki2];
+			if (contour.kind !== 'hobby' || !contour.knots) { ci++; continue; }
+			if (!contour._knotMap) { ci++; continue; }
+
+			for (var ki = 0; ki < contour.knots.length; ki++) {
+				var knot = contour.knots[ki];
+
+				// Find the bezier-shadow node id so we can check
+				// selection. There's exactly one on-curve per knot.
+				var nodeIdx = FontRig._knotIndexToNodeIndex(contour, ki);
+				if (nodeIdx < 0) continue;
+				var nodeId = 'c' + ci + '_n' + nodeIdx;
+				var isSelected = sel.has(nodeId);
+
+				var hasOut = (knot.dir_out != null);
+				var hasIn  = (knot.dir_in  != null);
+
+				// Skip entirely if the knot is free and not selected.
+				if (!hasOut && !hasIn && !isSelected) continue;
+
+				var sp = FontRig.glyphToScreen(knot.x, knot.y);
+
+				// Render each side independently.
+				['out', 'in'].forEach(function(side) {
+					var pinned = (side === 'out') ? hasOut : hasIn;
+					// Hint stubs only when selected; pinned always shown.
+					if (!pinned && !isSelected) return;
+
+					var endP = FontRig.computeKnotDirHandlePos(contour, ki, side);
+
+					ctx.save();
+					ctx.strokeStyle = pinned
+						? (tn.knotHobby || tn.onCorner)
+						: (tn.handleLine || 'rgba(91,157,239,0.45)');
+					ctx.lineWidth = pinned ? 1.5 : 1;
+					if (!pinned) ctx.setLineDash([3, 3]);
+
+					ctx.beginPath();
+					ctx.moveTo(sp.x, sp.y);
+					ctx.lineTo(endP.x, endP.y);
+					ctx.stroke();
+
+					ctx.setLineDash([]);
+
+					// Dot at the end — filled if pinned, hollow ring otherwise.
+					ctx.beginPath();
+					ctx.arc(endP.x, endP.y, 3.5, 0, Math.PI * 2);
+					if (pinned) {
+						ctx.fillStyle = (tn.knotHobby || tn.onCorner);
+						ctx.fill();
+						ctx.strokeStyle = tn.outline;
+						ctx.lineWidth = 1;
+						ctx.stroke();
+					} else {
+						ctx.fillStyle = 'rgba(0,0,0,0)';
+						ctx.fill();
+						ctx.strokeStyle = (tn.handleLine || 'rgba(91,157,239,0.7)');
+						ctx.lineWidth = 1.25;
+						ctx.stroke();
+					}
+					ctx.restore();
+				});
+			}
+			ci++;
+		}
+	}
+};
+
 // Combined (backward compat — used by preview nodes path)
 FontRig.drawNodes = function(layer) {
 	FontRig._drawHandleLines(layer);

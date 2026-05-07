@@ -152,6 +152,64 @@ FontRig.hitTestNode = function(sx, sy, radius) {
 	return closest;
 };
 
+// -- Hit test: hobby direction handle -------------------------------
+// Returns { contour, ki, side, knot, layer, nodeId } or null.
+// A direction handle is hittable when:
+//   - it's pinned (always visible), OR
+//   - the underlying knot is selected (free-hint stub).
+// Tests handles before regular nodes so the user can grab a handle
+// without first selecting the knot under it.
+FontRig.hitTestHobbyDirHandle = function(sx, sy, radius) {
+	const layer = FontRig.getActiveLayer();
+	if (!layer) return null;
+
+	const r = radius || 8;
+	const r2 = r * r;
+	const sel = FontRig.state.selectedNodeIds;
+
+	let best = null;
+	let bestDist = Infinity;
+
+	let ci = 0;
+	for (const shape of layer.shapes) {
+		for (const contour of shape.contours) {
+			if (contour.kind !== 'hobby' || !contour.knots || !contour._knotMap) {
+				ci++;
+				continue;
+			}
+			for (let ki = 0; ki < contour.knots.length; ki++) {
+				const knot = contour.knots[ki];
+				const ni = FontRig._knotIndexToNodeIndex(contour, ki);
+				if (ni < 0) continue;
+
+				const nodeId = `c${ci}_n${ni}`;
+				const isSelected = sel.has(nodeId);
+
+				for (const side of ['out', 'in']) {
+					const pinned = (side === 'out')
+						? (knot.dir_out != null)
+						: (knot.dir_in  != null);
+					if (!pinned && !isSelected) continue;
+
+					const ep = FontRig.computeKnotDirHandlePos(contour, ki, side);
+					const dx = ep.x - sx;
+					const dy = ep.y - sy;
+					const d2 = dx * dx + dy * dy;
+					if (d2 < r2 && d2 < bestDist) {
+						bestDist = d2;
+						best = {
+							contour, ki, side, knot,
+							nodeId, layer,
+						};
+					}
+				}
+			}
+			ci++;
+		}
+	}
+	return best;
+};
+
 // -- Hit test: rectangle (screen coords) ----------------------------
 FontRig.hitTestRect = function(x1, y1, x2, y2) {
 	const layer = FontRig.getActiveLayer();

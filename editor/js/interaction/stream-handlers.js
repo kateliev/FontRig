@@ -118,6 +118,21 @@ FontRig.handleCanvasDrag = async function(stream, initialEvent) {
 		}
 	}
 
+	// -- Hobby direction handle hit (tested before nodes so the user
+	//    can grab a handle without first selecting the underlying knot)
+	if (state.showNodes) {
+		var dirHit = null;
+		FontRig._withActiveOffset(function() {
+			if (typeof FontRig.hitTestHobbyDirHandle === 'function') {
+				dirHit = FontRig.hitTestHobbyDirHandle(sx, sy);
+			}
+		});
+		if (dirHit) {
+			await FontRig._handleHobbyDirDrag(stream, initialEvent, sx, sy, dirHit);
+			return;
+		}
+	}
+
 	// -- Node hit
 	if (state.showNodes) {
 		var hit = null;
@@ -223,6 +238,85 @@ FontRig._handleTransformDrag = async function(stream, sx, sy) {
 	FontRig.tfMouseUp();
 	FontRig.invalidatePathCache();
 	FontRig.draw();
+};
+
+
+// ===================================================================
+// Hobby direction handle drag
+// ===================================================================
+// The user grabbed a direction handle on a hobby knot. Default is
+// SPLIT (only the side they grabbed gets pinned), so dragging makes
+// a corner / cusp without affecting the other side. Hold Shift to
+// MIRROR (smooth tangent — the opposite side is pinned to angle+π).
+//
+// Double-click on a handle is intercepted separately and releases
+// the pin via FontRig.releaseKnotDirection.
+FontRig._handleHobbyDirDrag = async function(stream, initialEvent, sx, sy, hit) {
+	var state = FontRig.state;
+	var contour = hit.contour;
+	var knot = hit.knot;
+	var side = hit.side;
+
+	// Double-click on handle → release. Don't enter a drag.
+	if (initialEvent.e && initialEvent.e.detail >= 2) {
+		if (typeof FontRig.releaseKnotDirection === 'function' && hit.nodeId) {
+			FontRig.releaseKnotDirection(hit.nodeId);
+		}
+		return;
+	}
+
+	FontRig.pushUndo();
+	FontRig.dom.canvasWrap.style.cursor = 'crosshair';
+
+	// Helper: angle from knot to glyph-space (gx, gy), in the same
+	// (atan2 of dy, dx) convention used by getKnot*Direction.
+	function angleFromKnot(gx, gy) {
+		return Math.atan2(gy - knot.y, gx - knot.x);
+	}
+
+	// Apply current cursor → pin side. Convention reminder:
+	//   dir_out = angle from this knot toward the next chord
+	//   dir_in  = angle from prev chord toward this knot
+	// The IN handle is rendered at angle+π (back-pointing), so when
+	// the user drags it, the angle from knot→cursor equals dir_in+π.
+	function applyAt(gx, gy, mirror) {
+		var theta = angleFromKnot(gx, gy);
+		if (side === 'out') {
+			knot.dir_out = theta;
+			if (mirror) knot.dir_in = theta + Math.PI;
+		} else {
+			// Cursor angle ≈ dir_in + π → recover dir_in.
+			var dirIn = theta - Math.PI;
+			knot.dir_in = dirIn;
+			if (mirror) knot.dir_out = dirIn - Math.PI;
+		}
+		FontRig.solveHobbyContour(contour);
+		if (hit.layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(hit.layer);
+		FontRig.draw();
+	}
+
+	// Apply at the click location too (initial pin even if the user
+	// doesn't drag — useful when they just want to pin at the current
+	// solved tangent).
+	var initGp;
+	FontRig._withActiveOffset(function() { initGp = FontRig.screenToGlyph(sx, sy); });
+	applyAt(initGp.x, initGp.y, !!(initialEvent.e && initialEvent.e.shiftKey));
+
+	for await (var ev of stream) {
+		if (ev.sx === undefined) continue;
+
+		var coords = FontRig._interactionCoords(ev.absSx, ev.absSy);
+		var mirror = !!ev.shiftKey;
+
+		FontRig._withActiveOffset(function() {
+			var dgp = FontRig.screenToGlyph(coords.sx, coords.sy);
+			applyAt(dgp.x, dgp.y, mirror);
+		});
+
+		FontRig.updateStatusSelected();
+	}
+
+	FontRig.updateCanvasCursor();
 };
 
 
