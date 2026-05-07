@@ -2816,14 +2816,32 @@ FontRig.moveSelectedNodes = function(dx, dy) {
 	const sel = FontRig.state.selectedNodeIds;
 	if (sel.size === 0) return;
 
+	const hobbyContours = new Set();
+
 	for (const nodeId of sel) {
 		const ref = FontRig.findNodeById(nodeId);
 		if (!ref) continue;
+
+		// Hobby: contour.nodes is solver-derived state. Mutating it
+		// directly looks right until the next solve overwrites the
+		// shadow from the (untouched) source — that's the "snap back"
+		// the user sees on next selection. Route to the source data:
+		// knots for on-curves, fixed_bcp_* for fixed-segment off-curves.
+		if (ref.contour && ref.contour.kind === 'hobby') {
+			FontRig._nudgeHobbyNode(ref.contour, nodeId, dx, dy);
+			hobbyContours.add(ref.contour);
+			continue;
+		}
+
 		ref.node.x = Math.round((ref.node.x + dx) * 10) / 10;
 		ref.node.y = Math.round((ref.node.y + dy) * 10) / 10;
 	}
 
-	// Enforce smooth tangent continuity on neighbors
+	// Re-solve every touched hobby contour so the bezier shadow tracks
+	// the updated knots/BCPs.
+	hobbyContours.forEach(function(c) { FontRig.solveHobbyContour(c); });
+
+	// Enforce smooth tangent continuity on neighbors (bezier only)
 	FontRig.enforceSmoothForKeys(sel, dx, dy);
 
 	// Live lerp: forward or reverse interpolation
@@ -2833,4 +2851,58 @@ FontRig.moveSelectedNodes = function(dx, dy) {
 	FontRig.invalidatePathCache();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
+};
+
+// Nudge a single hobby contour entry by (dx, dy). Routes to the
+// underlying knot for on-curves, or to the fixed_bcp_* fields for
+// off-curves on fixed segments. Caller is responsible for re-solving.
+FontRig._nudgeHobbyNode = function(contour, nodeId, dx, dy) {
+	if (!contour || !contour.knots) return;
+	var m = nodeId && nodeId.match(/^c\d+_n(\d+)$/);
+	if (!m) return;
+	var ni = parseInt(m[1], 10);
+	var map = contour._knotMap;
+	if (!map) return;
+	var round = function(v) { return Math.round(v * 10) / 10; };
+
+	var ki = map[ni];
+	if (ki !== null && ki !== undefined) {
+		var knot = contour.knots[ki];
+		if (!knot) return;
+		knot.x = round(knot.x + dx);
+		knot.y = round(knot.y + dy);
+		// Fixed BCPs anchored on this knot translate with it so the
+		// segment shape doesn't tear.
+		if (knot.fixed_bcp_out_x != null) knot.fixed_bcp_out_x = round(knot.fixed_bcp_out_x + dx);
+		if (knot.fixed_bcp_out_y != null) knot.fixed_bcp_out_y = round(knot.fixed_bcp_out_y + dy);
+		if (knot.fixed_bcp_in_x  != null) knot.fixed_bcp_in_x  = round(knot.fixed_bcp_in_x  + dx);
+		if (knot.fixed_bcp_in_y  != null) knot.fixed_bcp_in_y  = round(knot.fixed_bcp_in_y  + dy);
+		return;
+	}
+
+	// Off-curve: only fixed-segment BCPs are moveable.
+	var skMap = contour._segmentKindMap;
+	if (!skMap || skMap[ni] !== 'fixed') return;
+
+	var niOn = ni;
+	while (niOn > 0 && (map[niOn] === null || map[niOn] === undefined)) niOn--;
+	var ownerKi = map[niOn];
+	if (ownerKi === null || ownerKi === undefined) return;
+	var offset = ni - niOn;
+	var n = contour.knots.length;
+	var targetKi, field;
+	if (offset === 1)      { targetKi = ownerKi;             field = 'fixed_bcp_out'; }
+	else if (offset === 2) { targetKi = (ownerKi + 1) % n;   field = 'fixed_bcp_in';  }
+	else return;
+
+	var target = contour.knots[targetKi];
+	if (!target) return;
+	var sx = target[field + '_x'], sy = target[field + '_y'];
+	if (sx == null || sy == null) {
+		var node = contour.nodes && contour.nodes[ni];
+		if (!node) return;
+		sx = node.x; sy = node.y;
+	}
+	target[field + '_x'] = round(sx + dx);
+	target[field + '_y'] = round(sy + dy);
 };

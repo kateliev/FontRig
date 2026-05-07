@@ -89,12 +89,23 @@ FontRig.sync_moveSelectedNodes = function(dirX, dirY, multiplier) {
 
 // Move nodes by ID set in a specific layer, with smooth enforcement.
 FontRig._moveNodesInLayer = function(layer, nodeIds, dx, dy) {
+	var hobbyContours = new Set();
+
 	for (var id of nodeIds) {
 		var ref = FontRig._findNodeInLayer(layer, id);
 		if (!ref) continue;
+		// Hobby: route through the source-of-truth knot/BCP, then
+		// re-solve below so the bezier shadow tracks the change.
+		if (ref.contour && ref.contour.kind === 'hobby') {
+			FontRig._nudgeHobbyNode(ref.contour, id, dx, dy);
+			hobbyContours.add(ref.contour);
+			continue;
+		}
 		ref.node.x = Math.round((ref.node.x + dx) * 10) / 10;
 		ref.node.y = Math.round((ref.node.y + dy) * 10) / 10;
 	}
+
+	hobbyContours.forEach(function(c) { FontRig.solveHobbyContour(c); });
 
 	// Enforce smooth tangent continuity (same logic as enforceSmoothForKeys
 	// but operating on the given layer instead of the active layer)
