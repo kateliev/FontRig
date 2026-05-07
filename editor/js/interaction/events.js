@@ -116,6 +116,28 @@ dom.canvasWrap.addEventListener('wheel', function(e) {
 	const absSx = e.clientX - rect.left;
 	const absSy = e.clientY - rect.top;
 
+	// Alt-wheel over a hobby knot: per-knot tension. Down = looser
+	// (handles longer, curve laxer), Up = tighter. Shift narrows
+	// the change to alpha (out-tension); Ctrl narrows to beta.
+	if (e.altKey && typeof FontRig.hitTestNode === 'function') {
+		var coords = FontRig._interactionCoords(absSx, absSy);
+		var hit = null;
+		FontRig._withActiveOffset(function() {
+			hit = FontRig.hitTestNode(coords.sx, coords.sy);
+		});
+		if (hit && typeof FontRig._resolveKnotByNodeId === 'function'
+			&& FontRig._resolveKnotByNodeId(hit.id)) {
+			var step = 1.10;
+			var factorT = e.deltaY > 0 ? (1 / step) : step;
+			FontRig.pushUndo();
+			FontRig.adjustKnotTension(hit.id, factorT, {
+				alphaOnly: e.shiftKey,
+				betaOnly:  e.ctrlKey,
+			});
+			return;
+		}
+	}
+
 	// Normal zoom (centred on cursor)
 	const { sx: mx, sy: my } = FontRig._interactionCoords(absSx, absSy);
 	const factor = e.deltaY > 0 ? FontRig.WHEEL_ZOOM_OUT : FontRig.WHEEL_ZOOM_IN;
@@ -604,6 +626,58 @@ FontRig.wireTransformInputs();
 	}
 })();
 
+// -- Glyph > Convert all Hobby splines to Beziers -------------------
+(function() {
+	var btn = document.getElementById('btn-flatten-hobby');
+	if (btn) {
+		btn.addEventListener('click', function() {
+			if (typeof FontRig.openFlattenHobbyDialog === 'function') {
+				FontRig.openFlattenHobbyDialog();
+			}
+		});
+	}
+})();
+
+// -- View > Redraw Viewport ----------------------------------------
+// Force-refresh: re-solve every hobby contour, drop the Path2D cache
+// for every layer, redraw. Useful when something looks stale (e.g.
+// Pyodide came online after a glyph load, or an external tool
+// mutated state without dirtying the cache).
+FontRig.redrawViewport = function() {
+	var g = FontRig.state && FontRig.state.glyphData;
+	if (g && typeof FontRig.solveAllHobbyContours === 'function') {
+		FontRig.solveAllHobbyContours(g);
+	}
+	if (g && g.layers && typeof FontRig.invalidatePathCache === 'function') {
+		for (var li = 0; li < g.layers.length; li++) {
+			FontRig.invalidatePathCache(g.layers[li]);
+		}
+	}
+	if (FontRig.draw) FontRig.draw();
+	if (FontRig.updateStatusSelected) FontRig.updateStatusSelected();
+};
+
+(function() {
+	var btn = document.getElementById('btn-redraw');
+	if (btn) {
+		btn.addEventListener('click', function() {
+			FontRig.redrawViewport();
+		});
+	}
+	// Also bind F5 globally — keeps the shortcut in the menu honest.
+	window.addEventListener('keydown', function(e) {
+		if (e.key === 'F5' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+			// Don't fight the user — only intercept when they're not
+			// in an input/textarea (they may want a hard browser reload).
+			var t = e.target;
+			var tag = t && t.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
+			e.preventDefault();
+			FontRig.redrawViewport();
+		}
+	});
+})();
+
 // ===================================================================
 // Context menu (right-click)
 // ===================================================================
@@ -639,6 +713,17 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 	var reverseItem = ctxMenu.querySelector('[data-action="reverseContour"]');
 	var joinItem = ctxMenu.querySelector('[data-action="joinContour"]');
 	var transformItem = ctxMenu.querySelector('[data-action="transformSelection"]');
+	var toHobbyItem = ctxMenu.querySelector('[data-action="convertToHobby"]');
+	var toBezierItem = ctxMenu.querySelector('[data-action="convertToBezier"]');
+	var hobbySep = ctxMenu.querySelector('[data-id="hobby-sep"]');
+	var hobbyTensionSep = ctxMenu.querySelector('[data-id="hobby-sep-tension"]');
+	var hobbyConvertSep = ctxMenu.querySelector('[data-id="hobby-convert-sep"]');
+	var knotSegHobby = ctxMenu.querySelector('[data-action="knotSegHobby"]');
+	var knotSegLine = ctxMenu.querySelector('[data-action="knotSegLine"]');
+	var knotSegFixed = ctxMenu.querySelector('[data-action="knotSegFixed"]');
+	var knotTLooser = ctxMenu.querySelector('[data-action="knotTensionLooser"]');
+	var knotTTighter = ctxMenu.querySelector('[data-action="knotTensionTighter"]');
+	var knotTReset = ctxMenu.querySelector('[data-action="knotTensionReset"]');
 
 	// Hit test: node first, then segment
 	var nodeHit = null;
@@ -649,6 +734,10 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 			segHit = FontRig.hitTestSegment(coords.sx, coords.sy);
 		}
 	});
+
+	// Determine contour kind for kind-aware menu visibility.
+	var hitContour = (nodeHit && nodeHit.contour) || (segHit && segHit.contour) || null;
+	var hitIsHobby = hitContour && hitContour.kind === 'hobby';
 
 	if (nodeHit) {
 		// -- Right-clicked on a node --
@@ -708,6 +797,15 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 				toggleItem.innerHTML = '<span class="tri">node_smooth</span>Toggle Smooth/Sharp';
 			}
 		}
+
+		// Hobby knot: smooth/sharp + retract handles + setStart aren't
+		// meaningful — knots have no handles and the start ring is
+		// implicit at index 0.
+		if (hitIsHobby) {
+			if (toggleItem) toggleItem.style.display = 'none';
+			if (retractItem) retractItem.style.display = 'none';
+			if (setStartItem) setStartItem.style.display = 'none';
+		}
 	} else if (segHit) {
 		// -- Right-clicked on a segment --
 		pendingSegmentHit = segHit;
@@ -729,14 +827,69 @@ dom.canvasWrap.addEventListener('contextmenu', function(e) {
 		if (toCurveItem) toCurveItem.style.display = (stype === 'line' || stype === 'quadratic') ? '' : 'none';
 		if (toQuadItem) toQuadItem.style.display = (stype === 'cubic') ? '' : 'none';
 
+		// Hobby segments are solver-derived. Bezier-flavoured
+		// segment-type conversions don't apply.
+		if (hitIsHobby) {
+			if (toLineItem) toLineItem.style.display = 'none';
+			if (toCurveItem) toCurveItem.style.display = 'none';
+			if (toQuadItem) toQuadItem.style.display = 'none';
+		}
+
 		// Separators: hide first two, show last
-		var seps = ctxMenu.querySelectorAll('.ctx-separator');
+		var seps = ctxMenu.querySelectorAll('.ctx-separator:not([data-id="hobby-sep"])');
 		if (seps[0]) seps[0].style.display = 'none';
 		if (seps[1]) seps[1].style.display = 'none';
 		if (seps[2]) seps[2].style.display = '';
 	} else {
 		hideContextMenu();
 		return;
+	}
+
+	// Hobby ↔ Bezier conversion items. Hobby contours offer "Convert
+	// to Bezier"; bezier contours offer "Convert to Hobby". Hidden
+	// when the hit doesn't carry a contour (shouldn't happen, but
+	// be safe).
+	if (toHobbyItem) toHobbyItem.style.display = (hitContour && !hitIsHobby) ? '' : 'none';
+	if (toBezierItem) toBezierItem.style.display = hitIsHobby ? '' : 'none';
+	if (hobbySep) hobbySep.style.display = hitContour ? '' : 'none';
+
+	// Knot-specific items: segment-type toggle and per-knot tension.
+	// Visible only when the right-click landed on an actual knot
+	// (i.e. an on-curve node of a hobby contour). Off-curve and
+	// segment hits don't carry a knot identity.
+	var knotInfo = (nodeHit && hitIsHobby && typeof FontRig._resolveKnotByNodeId === 'function')
+		? FontRig._resolveKnotByNodeId(nodeHit.id)
+		: null;
+	var hasKnot = !!knotInfo;
+
+	if (hobbyTensionSep) hobbyTensionSep.style.display = hasKnot ? '' : 'none';
+	if (hobbyConvertSep) hobbyConvertSep.style.display = (hasKnot && hitIsHobby) ? '' : 'none';
+
+	if (knotSegHobby) knotSegHobby.style.display = hasKnot ? '' : 'none';
+	if (knotSegLine)  knotSegLine.style.display  = hasKnot ? '' : 'none';
+	if (knotSegFixed) knotSegFixed.style.display = hasKnot ? '' : 'none';
+	if (knotTLooser)  knotTLooser.style.display  = hasKnot ? '' : 'none';
+	if (knotTTighter) knotTTighter.style.display = hasKnot ? '' : 'none';
+	if (knotTReset)   knotTReset.style.display   = hasKnot ? '' : 'none';
+
+	// Mark the current segment_type with a checkmark prefix so the
+	// user can see at a glance which one is active without opening
+	// a property panel.
+	if (hasKnot) {
+		var seg = knotInfo.knot.segment_type || 'hobby';
+		var mark = function(item, value, label, icon) {
+			if (!item) return;
+			var prefix = (seg === value) ? '✓ ' : '';
+			item.innerHTML = '<span class="tri">' + icon + '</span>' + prefix + label;
+		};
+		mark(knotSegHobby, 'hobby', 'Segment: Hobby',  'contour');
+		mark(knotSegLine,  'line',  'Segment: Line',   'curve_to_line');
+		mark(knotSegFixed, 'fixed', 'Segment: Fixed',  'curve_set');
+
+		// Stash for the click handler so it doesn't have to re-resolve.
+		ctxMenu._pendingKnotNodeId = nodeHit.id;
+	} else {
+		ctxMenu._pendingKnotNodeId = null;
 	}
 
 	// Position and show menu
@@ -814,6 +967,47 @@ if (ctxMenu) {
 				FontRig.sync_convertSegmentToQuadratic(pendingSegmentHit);
 				pendingSegmentHit = null;
 				pendingContourIdx = -1;
+			}
+		} else if (action === 'knotSegHobby' || action === 'knotSegLine' || action === 'knotSegFixed') {
+			var seg = (action === 'knotSegHobby') ? 'hobby'
+				: (action === 'knotSegLine')  ? 'line'
+				: 'fixed';
+			var nid = ctxMenu._pendingKnotNodeId;
+			if (nid && typeof FontRig.setKnotSegmentType === 'function') {
+				FontRig.setKnotSegmentType(nid, seg);
+			}
+			ctxMenu._pendingKnotNodeId = null;
+		} else if (action === 'knotTensionLooser') {
+			var nidL = ctxMenu._pendingKnotNodeId;
+			if (nidL && typeof FontRig.adjustKnotTension === 'function') {
+				FontRig.pushUndo();
+				FontRig.adjustKnotTension(nidL, 1 / 1.25);
+			}
+			ctxMenu._pendingKnotNodeId = null;
+		} else if (action === 'knotTensionTighter') {
+			var nidT = ctxMenu._pendingKnotNodeId;
+			if (nidT && typeof FontRig.adjustKnotTension === 'function') {
+				FontRig.pushUndo();
+				FontRig.adjustKnotTension(nidT, 1.25);
+			}
+			ctxMenu._pendingKnotNodeId = null;
+		} else if (action === 'knotTensionReset') {
+			var nidR = ctxMenu._pendingKnotNodeId;
+			if (nidR && typeof FontRig.resetKnotTension === 'function') {
+				FontRig.resetKnotTension(nidR);
+			}
+			ctxMenu._pendingKnotNodeId = null;
+		} else if (action === 'convertToHobby') {
+			if (pendingContourIdx >= 0 && typeof FontRig.convertContourToHobby === 'function') {
+				FontRig.convertContourToHobby(pendingContourIdx);
+				pendingContourIdx = -1;
+				pendingSegmentHit = null;
+			}
+		} else if (action === 'convertToBezier') {
+			if (pendingContourIdx >= 0 && typeof FontRig.convertContourToBezier === 'function') {
+				FontRig.convertContourToBezier(pendingContourIdx);
+				pendingContourIdx = -1;
+				pendingSegmentHit = null;
 			}
 		} else if (action === 'transformSelection') {
 			FontRig.activateTransform();

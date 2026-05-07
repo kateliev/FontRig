@@ -323,6 +323,7 @@ FontRig.pyBridge = {
 				'_cut_npa = None',
 				'_draw_npa = None',
 				'hobby_preview_solve = None',
+				'hobby_knots_from_bezier_json = None',
 				'try:',
 				'    from typerig.core.actions.node_actions       import NodeActions',
 				'    from typerig.core.actions.curve_actions      import CurveActions',
@@ -337,7 +338,7 @@ FontRig.pyBridge = {
 				'    print("Warning: cut_panel_actions not loaded:", _e)',
 				'try:',
 				'    from typerig.core.actions import draw_panel_actions as _draw_npa',
-				'    from typerig.core.actions.draw_panel_actions import hobby_preview_solve',
+				'    from typerig.core.actions.draw_panel_actions import hobby_preview_solve, hobby_knots_from_bezier_json',
 				'except Exception as _e:',
 				'    print("Warning: draw_panel_actions not loaded:", _e)',
 				'',
@@ -381,6 +382,15 @@ FontRig.pyBridge = {
 			this.ready = true;
 			this.loading = false;
 			log('Ready.');
+
+			// Catch up: if a glyph was loaded before Pyodide was ready,
+			// any hobby contours have empty .nodes. Solve them now.
+			if (typeof FontRig.solveAllHobbyContours === 'function' &&
+			    FontRig.state && FontRig.state.glyphData) {
+				if (FontRig.solveAllHobbyContours(FontRig.state.glyphData)) {
+					if (FontRig.draw) FontRig.draw();
+				}
+			}
 
 		} catch (e) {
 			this.error = e.message || String(e);
@@ -465,6 +475,12 @@ FontRig.pyBridge = {
 
 			FontRig.state.glyphData = newGlyph;
 			FontRig.state.rawXml = xml;
+
+			// Hobby contours land here with empty .nodes; the bezier
+			// shadow is recomputed at render time from .knots.
+			if (typeof FontRig.solveAllHobbyContours === 'function') {
+				FontRig.solveAllHobbyContours(newGlyph);
+			}
 
 			// Sync selection: Python node.selected \u2192 JS selectedNodeIds
 			var activeName = FontRig.state.activeLayer || '';

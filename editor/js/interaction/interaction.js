@@ -470,6 +470,22 @@ FontRig.deleteNode = function() {
 	if (!ref) return;
 
 	var contour = ref.contour;
+
+	// Hobby: delete the source knot, re-solve, redraw.
+	if (contour.kind === 'hobby') {
+		var hm = nodeId.match(/^c\d+_n(\d+)$/);
+		if (hm && typeof FontRig._deleteHobbyKnotById === 'function') {
+			FontRig.pushUndo();
+			if (FontRig._deleteHobbyKnotById(contour, parseInt(hm[1], 10))) {
+				if (FontRig.invalidatePathCache) FontRig.invalidatePathCache(layer);
+				sel.clear();
+				FontRig.draw();
+				FontRig.updateStatusSelected();
+			}
+		}
+		return;
+	}
+
 	var nodes = contour.nodes;
 	var n = nodes.length;
 
@@ -1398,6 +1414,14 @@ FontRig._splitCubic = function(pts, t) {
 // Modifies the contour's node array in place.
 FontRig.insertNodeOnSegment = function(hit) {
 	if (!hit || !hit.contour) return;
+
+	// Hobby contours store knots, not bezier nodes. Insert into the
+	// knot list and re-solve; the bezier nodes are rebuilt by the
+	// solver on the next pass.
+	if (hit.contour.kind === 'hobby') {
+		FontRig._insertKnotOnSegment(hit);
+		return;
+	}
 
 	var nodes = hit.contour.nodes;
 	var seg = hit.seg;
@@ -2738,6 +2762,16 @@ FontRig.loadXmlString = function(xmlString, filename) {
 
 		// Re-init grid if multi-view is active
 		if (FontRig.state.multiView) FontRig.initMultiGrid();
+
+		// Hobby contours arrive with empty .nodes — solve once now if
+		// Pyodide is ready, or auto-init it otherwise. (Mirrors the
+		// equivalent hook in setActiveGlyph for the font-mode path.)
+		if (typeof FontRig.solveAllHobbyContours === 'function') {
+			FontRig.solveAllHobbyContours(FontRig.state.glyphData);
+		}
+		if (typeof FontRig.ensureHobbySolverReady === 'function') {
+			FontRig.ensureHobbySolverReady(FontRig.state.glyphData);
+		}
 
 		FontRig.fitToView();
 		FontRig.buildXmlPanel();

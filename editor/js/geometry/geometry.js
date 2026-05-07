@@ -17,8 +17,13 @@ FontRig.getAllNodes = function(layer) {
 	let ci = 0;
 	for (const shape of layer.shapes) {
 		for (const contour of shape.contours) {
+			// Hobby: only on-curves are selectable. Off-curves in
+			// contour.nodes are render-only artefacts of the solver
+			// and don't map back to anything editable.
+			const onlyOn = contour.kind === 'hobby';
 			let ni = 0;
 			for (const node of contour.nodes) {
+				if (onlyOn && node.type !== 'on') { ni++; continue; }
 				nodes.push({
 					...node,
 					id: `c${ci}_n${ni}`,

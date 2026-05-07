@@ -271,6 +271,15 @@ FontRig.sync_insertNodeOnSegment = function(hit) {
 FontRig._insertNodeOnContour = function(hit) {
 	if (!hit || !hit.contour) return;
 
+	// Hobby contours: dispatch to the knot-list mutator. Bezier nodes
+	// are derived state and would be overwritten on the next solve.
+	if (hit.contour.kind === 'hobby') {
+		if (typeof FontRig._insertKnotOnSegment === 'function') {
+			FontRig._insertKnotOnSegment(hit);
+		}
+		return;
+	}
+
 	var nodes = hit.contour.nodes;
 	var seg = hit.seg;
 	var round = function(v) { return Math.round(v * 10) / 10; };
@@ -347,6 +356,17 @@ FontRig._deleteNodeInLayer = function(layer, nodeId) {
 	if (!ref) return;
 
 	var contour = ref.contour;
+
+	// Hobby: drop the source knot, then re-solve. The bezier nodes
+	// the deleter expects are derived state.
+	if (contour.kind === 'hobby') {
+		if (typeof FontRig._deleteHobbyKnotById === 'function') {
+			FontRig._deleteHobbyKnotById(contour, ref.ni);
+			if (FontRig.invalidatePathCache) FontRig.invalidatePathCache(layer);
+		}
+		return;
+	}
+
 	var nodes = contour.nodes;
 	var n = nodes.length;
 	var ni = ref.ni;

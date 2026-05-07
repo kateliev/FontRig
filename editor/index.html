@@ -48,6 +48,19 @@
 				<div class="tb-menu-sep"></div>
 				<div class="tb-menu-item active" id="btn-gui-mode-dark"><span class="tri">gui_mode_dark</span>Dark Mode</div>
 				<div class="tb-menu-item" id="btn-gui-mode-light"><span class="tri">gui_mode_light</span>Light Mode</div>
+				<div class="tb-menu-sep"></div>
+				<div class="tb-menu-item" id="btn-redraw"><span class="tri">refresh</span>Redraw Viewport<span class="tb-shortcut">F5</span></div>
+			</div>
+		</div>
+
+		<!-- Glyph dropdown -->
+		<div class="tb-dropdown">
+			<button class="tb-btn tb-dropdown-trigger" id="menu-glyph">
+				<span class="tri">align_group_to_group</span>
+				Glyph
+			</button>
+			<div class="tb-dropdown-menu">
+				<div class="tb-menu-item" id="btn-flatten-hobby"><span class="tri">contour</span>Convert all Hobby splines to Beziers&hellip;</div>
 			</div>
 		</div>
 
@@ -266,6 +279,17 @@
 	<div class="ctx-item" data-action="reverseContour"><span class="tri">contour_reverse</span>Reverse Contour</div>
 	<div class="ctx-item" data-action="openContour"><span class="tri">contour_open</span>Contour Open</div>
 	<div class="ctx-item" data-action="joinContour"><span class="tri">contour_close</span>Contour Close</div>
+	<div class="ctx-separator" data-id="hobby-sep"></div>
+	<div class="ctx-item" data-action="knotSegHobby"><span class="tri">contour</span>Segment: Hobby</div>
+	<div class="ctx-item" data-action="knotSegLine"><span class="tri">curve_to_line</span>Segment: Line</div>
+	<div class="ctx-item" data-action="knotSegFixed"><span class="tri">curve_set</span>Segment: Fixed</div>
+	<div class="ctx-separator" data-id="hobby-sep-tension"></div>
+	<div class="ctx-item" data-action="knotTensionLooser"><span class="tri">arrows_expand</span>Tension Looser</div>
+	<div class="ctx-item" data-action="knotTensionTighter"><span class="tri">arrows_collapse</span>Tension Tighter</div>
+	<div class="ctx-item" data-action="knotTensionReset"><span class="tri">refresh</span>Tension Reset</div>
+	<div class="ctx-separator" data-id="hobby-convert-sep"></div>
+	<div class="ctx-item" data-action="convertToHobby"><span class="tri">contour</span>Convert to Hobby</div>
+	<div class="ctx-item" data-action="convertToBezier"><span class="tri">contour</span>Convert to Bezier</div>
 </div>
 
 <!-- Drop overlay -->
@@ -289,6 +313,7 @@
 <script src="js/core/theme.js"></script>
 <script src="js/data/parser.js"></script>
 <script src="js/data/serializer.js"></script>
+<script src="js/data/hobby-contour.js"></script>
 <script src="js/data/font.js"></script>
 <script src="js/geometry/geometry.js"></script>
 <script src="js/widgets/fr-widgets.js"></script>

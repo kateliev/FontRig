@@ -21,9 +21,10 @@ import json
 from typerig.core.objects.shape import Shape
 from typerig.core.objects.contour import Contour
 from typerig.core.objects.node import Node
+from typerig.core.objects.hobbyspline import HobbyKnot
 from typerig.core.actions.draw_actions import HobbyDrawActions
 
-__version__ = '0.1'
+__version__ = '0.2'
 
 # -- Helpers -------------------------------------------------------------------
 def _iter_scope_layers(glyph, scope_layers):
@@ -97,37 +98,102 @@ def _solve_hobby_contour(knots, closed=False, tension=1.0):
 	return HobbyDrawActions.hobby_to_contour(spline)
 
 
+def _build_hobby_knot(entry, tension):
+	'''Build a HobbyKnot from a normalized knot dict. Tension applies
+	to alpha/beta only when the entry doesn't carry its own values.'''
+	pos = entry['position']
+	kw = {'segment_type': entry.get('segment', 'hobby')}
+
+	# Per-knot tension wins; fall back to the contour-wide default.
+	if 'alpha' in entry:
+		kw['alpha'] = float(entry['alpha'])
+	elif tension != 1.0:
+		kw['alpha'] = float(tension)
+
+	if 'beta' in entry:
+		kw['beta'] = float(entry['beta'])
+	elif tension != 1.0:
+		kw['beta'] = float(tension)
+
+	# Direction pins (radians; None means auto).
+	if entry.get('dir_in') is not None:
+		kw['dir_in'] = float(entry['dir_in'])
+	if entry.get('dir_out') is not None:
+		kw['dir_out'] = float(entry['dir_out'])
+
+	return HobbyKnot(float(pos[0]), float(pos[1]), **kw)
+
+
 # -- Dispatcher entry: committed Hobby curve -----------------------------------
 def npa_draw_hobby(glyph, scope_layers, NodeActions, knots_json,
                    closed=False, tension=1.0):
-	'''Build a Hobby spline from knot positions and append the
-	resulting contour as a new Shape on every in-scope layer.
+	'''Commit a kind="hobby" Contour carrying the user's knots to
+	every in-scope layer. The hobby solver is NOT run at commit time;
+	knots are the persisted source of truth, the bezier shadow is
+	recomputed on render/export.
 
 	Arguments:
 		knots_json (str | list): JSON string or Python list of knots.
-			Each knot is either [x, y] or {"position": [x, y]}.
+			Each knot is either [x, y] or
+			{"position": [x, y], "segment": "hobby"|"line", ...}.
 		closed (bool): Close the resulting curve.
-		tension (float): Hobby global tension.
+		tension (float): Hobby tension applied to alpha/beta on knots
+			that don't carry their own.
 
 	Returns:
 		bool: True if at least one layer was committed to.
 	'''
 	knots = _normalize_knots(knots_json)
-	contour = _solve_hobby_contour(knots, closed=closed, tension=tension)
-	if contour is None:
+	if len(knots) < 2:
 		return False
 
 	committed = 0
 	for lyr in _iter_scope_layers(glyph, scope_layers):
-		# Per-layer clone — appending the same Contour to multiple
-		# Shapes/layers risks aliasing on subsequent edits.
-		nodes_copy = [Node(n.x, n.y, type=n.type) for n in contour.nodes]
-		c = Contour(nodes_copy, closed=contour.closed)
+		# Per-layer build — sharing a Contour across layers would
+		# alias knots on subsequent edits.
+		c = Contour(kind='hobby', closed=bool(closed))
+		for entry in knots:
+			c.knots.append(_build_hobby_knot(entry, tension))
+
 		# Single-element list is mandatory (FontRig dev guide §10).
 		lyr.shapes.append(Shape([c]))
 		committed += 1
 
 	return committed > 0
+
+
+# -- Conversion helpers (no glyph mutation) ------------------------------------
+def hobby_knots_from_bezier_json(nodes_json):
+	'''Convert a bezier contour (as a JSON list of [x, y, type] node
+	triples) into a hobby knot list. Returns a JSON string of
+	[{"x":..,"y":..,"segment_type":..,"alpha":..,"beta":..}, ...].
+
+	Used by the JS-side "Convert to Hobby" action.
+	'''
+	from typerig.core.objects.node import Node
+	from typerig.core.objects.contour import Contour
+	from typerig.core.objects.hobbyspline import HobbySpline
+
+	raw = json.loads(nodes_json) if isinstance(nodes_json, str) else nodes_json
+	nodes = [Node(float(t[0]), float(t[1]), type=t[2]) for t in raw]
+
+	# Need a Contour to drive HobbySpline.from_contour — assume closed
+	# unless the JS caller indicated otherwise (for now: closed).
+	# The contour kind here is whatever the source was; HobbySpline.
+	# from_contour walks .nodes regardless.
+	c = Contour(nodes, closed=True)
+	hs = HobbySpline.from_contour(c)
+
+	out = []
+	for k in hs.data:
+		out.append({
+			'x': float(k.x),
+			'y': float(k.y),
+			'segment_type': getattr(k, 'segment_type', 'hobby'),
+			'alpha': float(getattr(k, 'alpha', 1.0)),
+			'beta':  float(getattr(k, 'beta',  1.0)),
+		})
+	return json.dumps(out)
 
 
 # -- Preview helper (no glyph mutation) ----------------------------------------

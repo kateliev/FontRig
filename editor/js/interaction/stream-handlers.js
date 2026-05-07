@@ -227,11 +227,120 @@ FontRig._handleTransformDrag = async function(stream, sx, sy) {
 
 
 // ===================================================================
+// Hobby knot drag — moves source knots, re-solves the bezier shadow
+// ===================================================================
+// Hobby contours store knots; .nodes is the solver's output and gets
+// rebuilt every frame from knot positions. Dragging a "node" in a
+// hobby contour is really dragging its underlying knot.
+FontRig._selectionHasHobby = function(idSet) {
+	if (!idSet || idSet.size === 0) return false;
+	for (var nodeId of idSet) {
+		var ref = FontRig.findNodeById(nodeId);
+		if (ref && ref.contour && ref.contour.kind === 'hobby') return true;
+	}
+	return false;
+};
+
+FontRig._handleHobbyKnotDrag = async function(stream, initialEvent, sx, sy) {
+	var state = FontRig.state;
+	var e = initialEvent.e;
+
+	FontRig.pushUndo();
+	if (typeof FontRig.lerpEditStart === 'function') FontRig.lerpEditStart();
+
+	var gp;
+	FontRig._withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
+	var dragOrigin = { x: gp.x, y: gp.y };
+
+	// Resolve each selected node id to its source knot. Off-curves
+	// were already filtered out of selection via getAllNodes, but
+	// guard anyway.
+	var dragKnots = [];     // { knot, startX, startY, contour }
+	var touchedContours = new Set();
+
+	for (var nodeId of state.selectedNodeIds) {
+		var ref = FontRig.findNodeById(nodeId);
+		if (!ref || !ref.contour || ref.contour.kind !== 'hobby') continue;
+
+		var contour = ref.contour;
+		var m = nodeId.match(/^c\d+_n(\d+)$/);
+		if (!m) continue;
+		var ni = parseInt(m[1], 10);
+
+		var map = contour._knotMap;
+		if (!map) continue;
+		var ki = map[ni];
+		if (ki === null || ki === undefined) continue;
+
+		var knot = contour.knots[ki];
+		if (!knot) continue;
+
+		dragKnots.push({
+			knot: knot,
+			startX: knot.x,
+			startY: knot.y,
+			contour: contour,
+		});
+		touchedContours.add(contour);
+	}
+
+	if (dragKnots.length === 0) return;
+
+	FontRig.dom.canvasWrap.style.cursor = 'move';
+
+	for await (var event of stream) {
+		if (event.sx === undefined) continue;
+
+		var evtCoords = FontRig._interactionCoords(event.absSx, event.absSy);
+		FontRig._withActiveOffset(function() {
+			var dgp = FontRig.screenToGlyph(evtCoords.sx, evtCoords.sy);
+			var dx = dgp.x - dragOrigin.x;
+			var dy = dgp.y - dragOrigin.y;
+
+			if (event.shiftKey) {
+				if (Math.abs(dx) > Math.abs(dy)) dy = 0;
+				else dx = 0;
+			}
+
+			for (var i = 0; i < dragKnots.length; i++) {
+				var dk = dragKnots[i];
+				dk.knot.x = Math.round((dk.startX + dx) * 10) / 10;
+				dk.knot.y = Math.round((dk.startY + dy) * 10) / 10;
+			}
+
+			// Re-solve every affected hobby contour, refresh path cache.
+			touchedContours.forEach(function(c) {
+				FontRig.solveHobbyContour(c);
+			});
+
+			var lyr = FontRig.getActiveLayer();
+			if (lyr) FontRig.invalidatePathCache(lyr);
+		});
+
+		if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
+		FontRig.draw();
+		FontRig.updateStatusSelected();
+	}
+
+	FontRig.updateCanvasCursor();
+};
+
+
+// ===================================================================
 // Node drag (moves selected + follower handles)
 // ===================================================================
 FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 	var state = FontRig.state;
 	var e = initialEvent.e;
+
+	// Hobby contours have a separate drag path: knots are the source
+	// of truth, the bezier nodes are render-only. If any selected
+	// node sits on a hobby contour, route there. (Mixed selections
+	// across hobby + bezier aren't supported — pick one kind.)
+	if (FontRig._selectionHasHobby(state.selectedNodeIds)) {
+		await FontRig._handleHobbyKnotDrag(stream, initialEvent, sx, sy);
+		return;
+	}
 
 	FontRig.pushUndo();
 

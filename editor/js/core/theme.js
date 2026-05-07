@@ -74,6 +74,14 @@ FontRig.themeDark = {
 		strokeWidth:  1.5,                 // node stroke width
 		handleWidth:  1,                   // handle line width
 		startSize:    6,                   // start point triangle size
+		// -- Hobby knot pentagons -----------------------------------
+		// Body colour for both filled (hobby) and hollow (line, fixed)
+		// pentagons; falls back to onCorner so the user's regular
+		// node-colour preference applies without extra setup.
+		knotHobby:    null,                // null → use onCorner
+		knotLine:     null,                // null → use onCorner
+		knotFixed:    null,                // null → use onCorner
+		knotStrokeWidth: 1.5,
 	},
 
 	// -- Anchors ----------------------------------------------------
@@ -203,6 +211,12 @@ FontRig.themeLight = {
 
 	// -- Nodes & handles --------------------------------------------
 	node: {
+		// Hobby knot pentagons — see dark theme block for semantics.
+		knotHobby:    null,
+		knotLine:     null,
+		knotFixed:    null,
+		knotStrokeWidth: 1.5,
+
 		onCorner:     '#383a42',           // on-curve corner
 		onSmooth:     '#50a14f',           // on-curve smooth
 		offCurve:     '#4078f2',           // cubic/quadratic off-curve

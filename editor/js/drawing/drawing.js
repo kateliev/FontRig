@@ -512,6 +512,11 @@ FontRig._drawHandleLines = function(layer) {
 
 	for (const shape of layer.shapes) {
 		for (const contour of shape.contours) {
+			// Hobby: off-curves are render-only, dragging them
+			// wouldn't propagate to the persisted knots — keep the
+			// surface clean by suppressing handle lines entirely.
+			if (contour.kind === 'hobby') continue;
+
 			const nodes = contour.nodes;
 			const n = nodes.length;
 
@@ -586,6 +591,7 @@ FontRig._drawNodeMarkers = function(layer) {
 		for (const contour of shape.contours) {
 			const nodes = contour.nodes;
 			const n = nodes.length;
+			const isHobby = contour.kind === 'hobby';
 
 			// Find first on-curve (start point — drawn as triangle separately)
 			let firstOn = 0;
@@ -597,8 +603,15 @@ FontRig._drawNodeMarkers = function(layer) {
 			for (let ni = 0; ni < n; ni++) {
 				const node = nodes[ni];
 
-				// Skip the start node — triangle replaces it
-				if (ni === firstOn) { continue; }
+				// Hobby: only on-curves are interactive (they map back
+				// to knots). Off-curves are suppressed entirely.
+				if (isHobby && node.type !== 'on') continue;
+
+				// Skip the start node — for bezier the triangle replaces
+				// it; for hobby we render the start knot as a pentagon
+				// like the rest (the start triangle is drawn separately
+				// with a small ring).
+				if (!isHobby && ni === firstOn) { continue; }
 
 				// Skip end node if it overlaps the start node
 				if (ni === n - 1 && node.x === startNode.x && node.y === startNode.y) {
@@ -615,7 +628,49 @@ FontRig._drawNodeMarkers = function(layer) {
 					ctx.strokeStyle = isSelected ? tn.selected : tn.outline;
 					ctx.lineWidth = tn.strokeWidth;
 
-					if (node.smooth) {
+					if (isHobby) {
+						// Knot marker: pentagon (matches the drawing-tool
+						// preview). Filled = hobby segment going OUT of
+						// this knot, hollow = line / fixed.
+						var ki = (contour._knotMap && contour._knotMap[ni] != null)
+							? contour._knotMap[ni] : null;
+						var seg = (ki != null && contour.knots && contour.knots[ki])
+							? (contour.knots[ki].segment_type || 'hobby')
+							: 'hobby';
+						var hollow = (seg === 'line' || seg === 'fixed');
+
+						// Per-segment-type colour with sensible fallbacks
+						// to onCorner (so the user's regular node colour
+						// applies). Selection always wins.
+						var knotKey = (seg === 'line') ? 'knotLine'
+									: (seg === 'fixed') ? 'knotFixed'
+									: 'knotHobby';
+						var knotColor = isSelected
+							? tn.selected
+							: (tn[knotKey] || tn.onCorner);
+
+						if (hollow) {
+							// No fill — the stroke IS the visible mark,
+							// so it must use the body colour, not the
+							// thin "outline" border colour.
+							ctx.strokeStyle = knotColor;
+							ctx.lineWidth = tn.knotStrokeWidth || tn.strokeWidth || 1.5;
+						} else {
+							ctx.fillStyle = knotColor;
+							ctx.strokeStyle = isSelected ? tn.selected : tn.outline;
+							ctx.lineWidth = tn.strokeWidth;
+						}
+
+						FontRig.drawTool._drawPentagon(ctx, sp.x, sp.y, r + 1, hollow);
+
+						if (seg === 'fixed') {
+							// Inner dot distinguishes fixed from line.
+							ctx.fillStyle = knotColor;
+							ctx.beginPath();
+							ctx.arc(sp.x, sp.y, 1.5, 0, Math.PI * 2);
+							ctx.fill();
+						}
+					} else if (node.smooth) {
 						ctx.beginPath();
 						ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
 						ctx.fill();
@@ -658,6 +713,23 @@ FontRig._drawStartPoints = function(layer) {
 			}
 
 			const startNode = nodes[firstOn];
+
+			// Hobby: replace the orientation triangle with a thin ring
+			// around the first knot's pentagon. The pentagon itself is
+			// drawn by _drawNodeMarkers.
+			if (contour.kind === 'hobby') {
+				const sp = FontRig.glyphToScreen(startNode.x, startNode.y);
+				ctx.save();
+				ctx.strokeStyle = tn.startPoint || tn.outline;
+				ctx.lineWidth = 1;
+				ctx.beginPath();
+				ctx.arc(sp.x, sp.y, (tn.radius || 4) + 4, 0, Math.PI * 2);
+				ctx.stroke();
+				ctx.restore();
+				ci++;
+				continue;
+			}
+
 			const nextNode = nodes[(firstOn + 1) % n];
 			const sp = FontRig.glyphToScreen(startNode.x, startNode.y);
 			const np = FontRig.glyphToScreen(nextNode.x, nextNode.y);
@@ -729,6 +801,9 @@ FontRig.drawPreviewNodes = function(layer) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
 			var contour = shape.contours[ki];
+			// Hobby contours have no editable handles — skip the
+			// proximity reveal pass entirely.
+			if (contour.kind === 'hobby') { ci++; continue; }
 			var nodes = contour.nodes;
 			var n = nodes.length;
 
@@ -775,6 +850,7 @@ FontRig.drawPreviewNodes = function(layer) {
 			var contour = shape.contours[ki];
 			var nodes = contour.nodes;
 			var n = nodes.length;
+			var isHobby = contour.kind === 'hobby';
 
 			var firstOn = 0;
 			for (var j = 0; j < n; j++) {
@@ -782,9 +858,13 @@ FontRig.drawPreviewNodes = function(layer) {
 			}
 
 			for (var ni = 0; ni < n; ni++) {
-				if (ni === firstOn) continue;
+				// Bezier: start point is drawn as a triangle separately.
+				// Hobby: start knot is rendered like the others (with a
+				// ring overlay), so don't skip it.
+				if (!isHobby && ni === firstOn) continue;
 
 				var node = nodes[ni];
+				if (isHobby && node.type !== 'on') continue;
 				var startNode = nodes[firstOn];
 
 				if (ni === n - 1 && node.x === startNode.x && node.y === startNode.y) continue;

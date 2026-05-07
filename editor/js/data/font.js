@@ -292,6 +292,17 @@ FontRig.switchGlyph = async function(name) {
 	FontRig.state.glyphData = entry.glyphData;
 	FontRig.state.rawXml = '';
 
+	// Hobby contours arrive with empty .nodes (the persisted truth is
+	// .knots). Solve once now so the renderer has bezier nodes to walk.
+	// If Pyodide isn't ready, auto-init it; the bridge's ready handler
+	// will re-run the solve and redraw once initialization completes.
+	if (typeof FontRig.solveAllHobbyContours === 'function') {
+		FontRig.solveAllHobbyContours(entry.glyphData);
+	}
+	if (typeof FontRig.ensureHobbySolverReady === 'function') {
+		FontRig.ensureHobbySolverReady(entry.glyphData);
+	}
+
 	// Restore per-glyph state
 	FontRig.state.selectedNodeIds = entry.selection;
 

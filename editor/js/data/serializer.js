@@ -107,9 +107,13 @@ FontRig.shapeToXml = function(shape, indent) {
 };
 
 FontRig.contourToXml = function(contour, indent) {
+	var kind = contour.kind || FontRig.CONTOUR_KIND_BEZIER || 'bezier';
+
 	var xml = indent + '<contour';
 	if (contour.name) xml += ' name="' + FontRig.esc(contour.name) + '"';
 	if (contour.identifier) xml += ' identifier="' + FontRig.esc(contour.identifier) + '"';
+	// kind is always written explicitly so reads never have to guess.
+	xml += ' kind="' + FontRig.esc(kind) + '"';
 	// closed only written when true (false is default)
 	if (contour.closed) xml += ' closed="True"';
 	// clockwise only written when not null
@@ -118,11 +122,20 @@ FontRig.contourToXml = function(contour, indent) {
 	}
 	xml += '>\n';
 
-	for (var ni = 0; ni < contour.nodes.length; ni++) {
-		var node = contour.nodes[ni];
-		xml += indent + '  <node x="' + node.x + '" y="' + node.y + '" type="' + node.type + '"';
-		if (node.smooth) xml += ' smooth="True"';
-		xml += '/>\n';
+	if (kind === 'hobby') {
+		// Hobby: persist knots only. No bezier shadow is written.
+		var knots = contour.knots || [];
+		for (var ki = 0; ki < knots.length; ki++) {
+			xml += FontRig.knotToXml(knots[ki], indent + '  ');
+		}
+	} else {
+		// Bezier (default).
+		for (var ni = 0; ni < contour.nodes.length; ni++) {
+			var node = contour.nodes[ni];
+			xml += indent + '  <node x="' + node.x + '" y="' + node.y + '" type="' + node.type + '"';
+			if (node.smooth) xml += ' smooth="True"';
+			xml += '/>\n';
+		}
 	}
 
 	// Only write lib for truly custom data
@@ -136,6 +149,33 @@ FontRig.contourToXml = function(contour, indent) {
 	}
 
 	xml += indent + '</contour>\n';
+	return xml;
+};
+
+// Serialize a single hobby knot. Defaults (segment_type='hobby',
+// alpha=1.0, beta=1.0, dir_in/dir_out=null) are skipped to keep the
+// emitted XML compact and to match TypeRig core's HobbyKnot output.
+FontRig.knotToXml = function(knot, indent) {
+	var xml = indent + '<knot x="' + FontRig.fmtFloat(knot.x) + '" y="' + FontRig.fmtFloat(knot.y) + '"';
+
+	var seg = knot.segment_type || 'hobby';
+	if (seg !== 'hobby') xml += ' segment_type="' + FontRig.esc(seg) + '"';
+
+	if (knot.alpha !== undefined && knot.alpha !== null && knot.alpha !== 1.0) {
+		xml += ' alpha="' + FontRig.fmtFloat(knot.alpha) + '"';
+	}
+	if (knot.beta !== undefined && knot.beta !== null && knot.beta !== 1.0) {
+		xml += ' beta="' + FontRig.fmtFloat(knot.beta) + '"';
+	}
+
+	if (knot.dir_in !== undefined && knot.dir_in !== null) {
+		xml += ' dir_in="' + FontRig.fmtFloat(knot.dir_in) + '"';
+	}
+	if (knot.dir_out !== undefined && knot.dir_out !== null) {
+		xml += ' dir_out="' + FontRig.fmtFloat(knot.dir_out) + '"';
+	}
+
+	xml += '/>\n';
 	return xml;
 };
 

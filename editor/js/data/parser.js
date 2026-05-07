@@ -115,10 +115,19 @@ FontRig.parseShape = function(el) {
 	return shape;
 };
 
+// Default contour kind when the attribute is absent. Legacy files
+// (pre-Hobby) have no `kind` and must continue to load as bezier.
+FontRig.CONTOUR_KIND_BEZIER = 'bezier';
+FontRig.CONTOUR_KIND_HOBBY = 'hobby';
+
 FontRig.parseContour = function(el) {
+	const kindAttr = el.getAttribute('kind');
+	const kind = kindAttr || FontRig.CONTOUR_KIND_BEZIER;
+
 	const contour = {
 		name: el.getAttribute('name') || '',
 		identifier: el.getAttribute('identifier') || '',
+		kind: kind,
 		closed: false,  // default open — only written when true
 		clockwise: null,
 		nodes: [],
@@ -146,16 +155,55 @@ FontRig.parseContour = function(el) {
 		contour.lib = libData;
 	}
 
-	for (const nodeEl of el.querySelectorAll(':scope > node')) {
-		contour.nodes.push({
-			x: parseFloat(nodeEl.getAttribute('x') || '0'),
-			y: parseFloat(nodeEl.getAttribute('y') || '0'),
-			type: nodeEl.getAttribute('type') || 'on',
-			smooth: nodeEl.getAttribute('smooth') === 'True',
-		});
+	if (kind === FontRig.CONTOUR_KIND_HOBBY) {
+		// Hobby contour: knots are the source of truth. Bezier nodes
+		// are recomputed from knots at render/export time and never
+		// persisted, so .nodes stays empty here.
+		contour.knots = [];
+		for (const knotEl of el.querySelectorAll(':scope > knot')) {
+			contour.knots.push(FontRig.parseKnot(knotEl));
+		}
+	} else {
+		// Bezier (default).
+		for (const nodeEl of el.querySelectorAll(':scope > node')) {
+			contour.nodes.push({
+				x: parseFloat(nodeEl.getAttribute('x') || '0'),
+				y: parseFloat(nodeEl.getAttribute('y') || '0'),
+				type: nodeEl.getAttribute('type') || 'on',
+				smooth: nodeEl.getAttribute('smooth') === 'True',
+			});
+		}
 	}
 
 	return contour;
+};
+
+// Parse a <knot> element. Mirrors typerig.core.objects.hobbyspline
+// HobbyKnot's XML schema: x, y are required; segment_type, alpha,
+// beta default to 'hobby' / 1.0 / 1.0; dir_in/dir_out default to
+// null (solver-free).
+FontRig.parseKnot = function(el) {
+	const knot = {
+		x: parseFloat(el.getAttribute('x') || '0'),
+		y: parseFloat(el.getAttribute('y') || '0'),
+		segment_type: el.getAttribute('segment_type') || 'hobby',
+		alpha: 1.0,
+		beta: 1.0,
+		dir_in: null,
+		dir_out: null,
+	};
+
+	const a = el.getAttribute('alpha');
+	if (a !== null) knot.alpha = parseFloat(a);
+	const b = el.getAttribute('beta');
+	if (b !== null) knot.beta = parseFloat(b);
+
+	const di = el.getAttribute('dir_in');
+	if (di !== null) knot.dir_in = parseFloat(di);
+	const dout = el.getAttribute('dir_out');
+	if (dout !== null) knot.dir_out = parseFloat(dout);
+
+	return knot;
 };
 
 FontRig.parsePlistDict = function(dictEl) {
