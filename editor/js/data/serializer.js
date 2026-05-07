@@ -175,6 +175,15 @@ FontRig.knotToXml = function(knot, indent) {
 		xml += ' dir_out="' + FontRig.fmtFloat(knot.dir_out) + '"';
 	}
 
+	if (knot.fixed_bcp_out_x !== undefined && knot.fixed_bcp_out_x !== null
+		&& knot.fixed_bcp_out_y !== undefined && knot.fixed_bcp_out_y !== null) {
+		xml += ' bcp_out="' + FontRig.fmtFloat(knot.fixed_bcp_out_x) + ',' + FontRig.fmtFloat(knot.fixed_bcp_out_y) + '"';
+	}
+	if (knot.fixed_bcp_in_x !== undefined && knot.fixed_bcp_in_x !== null
+		&& knot.fixed_bcp_in_y !== undefined && knot.fixed_bcp_in_y !== null) {
+		xml += ' bcp_in="' + FontRig.fmtFloat(knot.fixed_bcp_in_x) + ',' + FontRig.fmtFloat(knot.fixed_bcp_in_y) + '"';
+	}
+
 	xml += '/>\n';
 	return xml;
 };

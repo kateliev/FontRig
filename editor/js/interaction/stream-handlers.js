@@ -346,10 +346,11 @@ FontRig._handleHobbyKnotDrag = async function(stream, initialEvent, sx, sy) {
 	FontRig._withActiveOffset(function() { gp = FontRig.screenToGlyph(sx, sy); });
 	var dragOrigin = { x: gp.x, y: gp.y };
 
-	// Resolve each selected node id to its source knot. Off-curves
-	// were already filtered out of selection via getAllNodes, but
-	// guard anyway.
-	var dragKnots = [];     // { knot, startX, startY, contour }
+	// Resolve each selected node id to either an on-curve knot or a
+	// fixed-segment off-curve BCP. Hobby/line off-curves are already
+	// filtered out by getAllNodes — only knots and fixed BCPs land here.
+	var dragKnots = [];     // { kind:'knot', knot, startX, startY, contour }
+	                        //   or { kind:'bcp', knot, field, startX, startY, contour }
 	var touchedContours = new Set();
 
 	for (var nodeId of state.selectedNodeIds) {
@@ -363,16 +364,67 @@ FontRig._handleHobbyKnotDrag = async function(stream, initialEvent, sx, sy) {
 
 		var map = contour._knotMap;
 		if (!map) continue;
+		var skMap = contour._segmentKindMap;
 		var ki = map[ni];
-		if (ki === null || ki === undefined) continue;
 
-		var knot = contour.knots[ki];
-		if (!knot) continue;
+		if (ki !== null && ki !== undefined) {
+			// On-curve: drag the knot itself.
+			var knot = contour.knots[ki];
+			if (!knot) continue;
+			dragKnots.push({
+				kind: 'knot',
+				knot: knot,
+				startX: knot.x,
+				startY: knot.y,
+				contour: contour,
+			});
+			touchedContours.add(contour);
+			continue;
+		}
+
+		// Off-curve: must be a fixed-segment BCP to be draggable.
+		if (!skMap || skMap[ni] !== 'fixed') continue;
+
+		// Walk back to the owning on-curve to determine in/out side.
+		var niOn = ni;
+		while (niOn > 0 && (map[niOn] === null || map[niOn] === undefined)) niOn--;
+		var ownerKi = map[niOn];
+		if (ownerKi === null || ownerKi === undefined) continue;
+
+		var offset = ni - niOn;       // 1 = out-bcp, 2 = in-bcp
+		var nKnots = contour.knots.length;
+		var targetKi, field;
+		if (offset === 1) {
+			targetKi = ownerKi;
+			field = 'fixed_bcp_out';
+		} else if (offset === 2) {
+			targetKi = (ownerKi + 1) % nKnots;
+			field = 'fixed_bcp_in';
+		} else {
+			continue;
+		}
+
+		var targetKnot = contour.knots[targetKi];
+		if (!targetKnot) continue;
+
+		var sx0 = targetKnot[field + '_x'];
+		var sy0 = targetKnot[field + '_y'];
+		// Initialize from the solver shadow if absent (defensive).
+		if (sx0 == null || sy0 == null) {
+			var node = contour.nodes[ni];
+			if (!node) continue;
+			sx0 = node.x;
+			sy0 = node.y;
+			targetKnot[field + '_x'] = sx0;
+			targetKnot[field + '_y'] = sy0;
+		}
 
 		dragKnots.push({
-			knot: knot,
-			startX: knot.x,
-			startY: knot.y,
+			kind: 'bcp',
+			knot: targetKnot,
+			field: field,
+			startX: sx0,
+			startY: sy0,
 			contour: contour,
 		});
 		touchedContours.add(contour);
@@ -398,8 +450,15 @@ FontRig._handleHobbyKnotDrag = async function(stream, initialEvent, sx, sy) {
 
 			for (var i = 0; i < dragKnots.length; i++) {
 				var dk = dragKnots[i];
-				dk.knot.x = Math.round((dk.startX + dx) * 10) / 10;
-				dk.knot.y = Math.round((dk.startY + dy) * 10) / 10;
+				var nx = Math.round((dk.startX + dx) * 10) / 10;
+				var ny = Math.round((dk.startY + dy) * 10) / 10;
+				if (dk.kind === 'bcp') {
+					dk.knot[dk.field + '_x'] = nx;
+					dk.knot[dk.field + '_y'] = ny;
+				} else {
+					dk.knot.x = nx;
+					dk.knot.y = ny;
+				}
 			}
 
 			// Re-solve every affected hobby contour, refresh path cache.

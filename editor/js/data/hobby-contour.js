@@ -28,6 +28,12 @@ FontRig._hobbyKnotToPayload = function(knot) {
 	if (knot.beta  !== undefined && knot.beta  !== null && knot.beta  !== 1.0) entry.beta  = knot.beta;
 	if (knot.dir_in  !== undefined && knot.dir_in  !== null) entry.dir_in  = knot.dir_in;
 	if (knot.dir_out !== undefined && knot.dir_out !== null) entry.dir_out = knot.dir_out;
+	if (knot.fixed_bcp_out_x != null && knot.fixed_bcp_out_y != null) {
+		entry.bcp_out = [knot.fixed_bcp_out_x, knot.fixed_bcp_out_y];
+	}
+	if (knot.fixed_bcp_in_x != null && knot.fixed_bcp_in_y != null) {
+		entry.bcp_in = [knot.fixed_bcp_in_x, knot.fixed_bcp_in_y];
+	}
 	return entry;
 };
 
@@ -56,6 +62,32 @@ FontRig._buildKnotMap = function(knots, closed) {
 
 	// Open path only — append the terminal endpoint for the chord.
 	if (!closed) map.push(n - 1);
+
+	return map;
+};
+
+// Parallel map: per node-index, the kind of the segment that node
+// belongs to. For on-curves this is the OUTGOING segment kind; for
+// off-curves this is the kind of the segment they sit inside (i.e.
+// the outgoing segment of the previous on-curve). The terminal
+// on-curve of an open contour gets null (no outgoing segment).
+FontRig._buildSegmentKindMap = function(knots, closed) {
+	var map = [];
+	var n = knots.length;
+	if (n === 0) return map;
+
+	var count = closed ? n : n - 1;
+
+	for (var i = 0; i < count; i++) {
+		var seg = knots[i].segment_type || 'hobby';
+		map.push(seg);
+		if (seg === 'hobby' || seg === 'fixed') {
+			map.push(seg);
+			map.push(seg);
+		}
+	}
+
+	if (!closed) map.push(null);
 
 	return map;
 };
@@ -100,6 +132,7 @@ FontRig.solveHobbyContour = function(contour) {
 			return { x: t[0], y: t[1], type: t[2], smooth: false };
 		});
 		contour._knotMap = FontRig._buildKnotMap(contour.knots, !!contour.closed);
+		contour._segmentKindMap = FontRig._buildSegmentKindMap(contour.knots, !!contour.closed);
 		return true;
 	} catch (err) {
 		console.warn('[hobby] solve failed:', err);
@@ -263,8 +296,9 @@ FontRig.applyConvertContourToHobby = function(contour, layer) {
 	var raw;
 	try {
 		pyo.globals.set('_bz_nodes', JSON.stringify(nodesPayload));
+		pyo.globals.set('_bz_closed', !!contour.closed);
 		raw = pyo.runPython(
-			'hobby_knots_from_bezier_json(_bz_nodes) ' +
+			'hobby_knots_from_bezier_json(_bz_nodes, _bz_closed) ' +
 			'if hobby_knots_from_bezier_json else "[]"'
 		);
 	} catch (err) {
@@ -283,12 +317,17 @@ FontRig.applyConvertContourToHobby = function(contour, layer) {
 
 	contour.kind = 'hobby';
 	contour.knots = knots.map(function(k) {
+		var bo = k.fixed_bcp_out, bi = k.fixed_bcp_in;
 		return {
 			x: k.x, y: k.y,
 			segment_type: k.segment_type || 'hobby',
 			alpha: (k.alpha != null) ? k.alpha : 1.0,
 			beta:  (k.beta  != null) ? k.beta  : 1.0,
 			dir_in: null, dir_out: null,
+			fixed_bcp_out_x: (bo && bo.length === 2) ? bo[0] : null,
+			fixed_bcp_out_y: (bo && bo.length === 2) ? bo[1] : null,
+			fixed_bcp_in_x:  (bi && bi.length === 2) ? bi[0] : null,
+			fixed_bcp_in_y:  (bi && bi.length === 2) ? bi[1] : null,
 		};
 	});
 	contour.nodes = [];
@@ -509,9 +548,57 @@ FontRig._applyKnotSegmentTypeInContour = function(contour, ki, segmentType, laye
 	if (!contour || contour.kind !== 'hobby') return false;
 	if (!contour.knots || !contour.knots[ki]) return false;
 	if (segmentType !== 'hobby' && segmentType !== 'line' && segmentType !== 'fixed') return false;
-	if (contour.knots[ki].segment_type === segmentType) return false;
 
-	contour.knots[ki].segment_type = segmentType;
+	var knots = contour.knots;
+	var n = knots.length;
+	var oldType = knots[ki].segment_type || 'hobby';
+	var newType = segmentType;
+	if (oldType === newType) return false;
+
+	// segment_type describes the OUT segment of knot ki. Open contours
+	// have no outgoing segment from the last knot — toggles are no-ops.
+	if (!contour.closed && ki >= n - 1) return false;
+
+	var nextKi = (ki + 1) % n;
+	var clearBcp = function(knot, fieldRoot) {
+		knot[fieldRoot + '_x'] = null;
+		knot[fieldRoot + '_y'] = null;
+	};
+	var setBcp = function(knot, fieldRoot, x, y) {
+		knot[fieldRoot + '_x'] = Math.round(x * 10) / 10;
+		knot[fieldRoot + '_y'] = Math.round(y * 10) / 10;
+	};
+
+	if (newType === 'fixed' && oldType !== 'fixed') {
+		// Snapshot or initialize the BCPs so the segment is editable.
+		if (oldType === 'hobby') {
+			// Pull off-curve positions from the solver's bezier shadow.
+			var niOn = FontRig._knotIndexToNodeIndex(contour, ki);
+			var nodes = contour.nodes;
+			if (niOn >= 0 && nodes && nodes.length > niOn + 2) {
+				var off1 = nodes[niOn + 1];
+				var off2 = nodes[niOn + 2];
+				if (off1 && off2) {
+					setBcp(knots[ki],     'fixed_bcp_out', off1.x, off1.y);
+					setBcp(knots[nextKi], 'fixed_bcp_in',  off2.x, off2.y);
+				}
+			}
+		} else if (oldType === 'line') {
+			// No off-curves to snapshot — start at chord-thirds so the
+			// segment looks straight until the user drags a BCP.
+			var a = knots[ki], b = knots[nextKi];
+			setBcp(a, 'fixed_bcp_out', a.x + (b.x - a.x) / 3, a.y + (b.y - a.y) / 3);
+			setBcp(b, 'fixed_bcp_in',  a.x + 2 * (b.x - a.x) / 3, a.y + 2 * (b.y - a.y) / 3);
+		}
+	}
+
+	if (oldType === 'fixed' && newType !== 'fixed') {
+		// Drop the BCPs the segment owned — solver picks again.
+		clearBcp(knots[ki],     'fixed_bcp_out');
+		clearBcp(knots[nextKi], 'fixed_bcp_in');
+	}
+
+	knots[ki].segment_type = newType;
 	FontRig.solveHobbyContour(contour);
 	if (layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(layer);
 	return true;

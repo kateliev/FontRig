@@ -121,6 +121,14 @@ def _build_hobby_knot(entry, tension):
 	if entry.get('dir_out') is not None:
 		kw['dir_out'] = float(entry['dir_out'])
 
+	# Fixed-segment BCPs (complex coords for the solver).
+	bo = entry.get('bcp_out')
+	if bo is not None and len(bo) == 2:
+		kw['fixed_bcp_out'] = complex(float(bo[0]), float(bo[1]))
+	bi = entry.get('bcp_in')
+	if bi is not None and len(bi) == 2:
+		kw['fixed_bcp_in'] = complex(float(bi[0]), float(bi[1]))
+
 	return HobbyKnot(float(pos[0]), float(pos[1]), **kw)
 
 
@@ -163,36 +171,100 @@ def npa_draw_hobby(glyph, scope_layers, NodeActions, knots_json,
 
 
 # -- Conversion helpers (no glyph mutation) ------------------------------------
-def hobby_knots_from_bezier_json(nodes_json):
-	'''Convert a bezier contour (as a JSON list of [x, y, type] node
-	triples) into a hobby knot list. Returns a JSON string of
-	[{"x":..,"y":..,"segment_type":..,"alpha":..,"beta":..}, ...].
+def hobby_knots_from_bezier_json(nodes_json, closed=True):
+	'''Convert a bezier contour (JSON list of [x, y, type] triples) into
+	a LOSSLESS hobby knot list: every cubic becomes a 'fixed' segment
+	with the original BCPs preserved verbatim, every implicit straight
+	or geometrically straight cubic becomes 'line'. No 'hobby' segments
+	are emitted — the designer opts into parametric control per segment
+	afterward.
 
-	Used by the JS-side "Convert to Hobby" action.
+	Returns a JSON string of
+	[{"x":..,"y":..,"segment_type":..,"alpha":..,"beta":..,
+	  "fixed_bcp_out":[x,y]?, "fixed_bcp_in":[x,y]?}, ...].
 	'''
-	from typerig.core.objects.node import Node
-	from typerig.core.objects.contour import Contour
-	from typerig.core.objects.hobbyspline import HobbySpline
+	from typerig.core.objects.hobbyspline import is_line_segment
 
 	raw = json.loads(nodes_json) if isinstance(nodes_json, str) else nodes_json
-	nodes = [Node(float(t[0]), float(t[1]), type=t[2]) for t in raw]
+	nodes = [(float(t[0]), float(t[1]), t[2]) for t in raw]
 
-	# Need a Contour to drive HobbySpline.from_contour — assume closed
-	# unless the JS caller indicated otherwise (for now: closed).
-	# The contour kind here is whatever the source was; HobbySpline.
-	# from_contour walks .nodes regardless.
-	c = Contour(nodes, closed=True)
-	hs = HobbySpline.from_contour(c)
+	on_indices = [i for i, n in enumerate(nodes) if n[2] == 'on']
+	if not on_indices:
+		return '[]'
+
+	# Drop a trailing duplicate-of-first on-curve in closed contours
+	# (some serializers emit one).
+	if closed and len(on_indices) >= 2:
+		first_i, last_i = on_indices[0], on_indices[-1]
+		if (abs(nodes[first_i][0] - nodes[last_i][0]) < 1e-6
+			and abs(nodes[first_i][1] - nodes[last_i][1]) < 1e-6):
+			on_indices = on_indices[:-1]
+
+	n_on = len(on_indices)
+	if n_on < 2:
+		return '[]'
+
+	# Per-segment classification: (segment_type, bcp_out_xy, bcp_in_xy)
+	# bcp_out belongs to the segment's start knot; bcp_in to its end knot.
+	n_seg = n_on if closed else n_on - 1
+	seg_info = []
+	for s in range(n_seg):
+		i_start = on_indices[s]
+		i_end = on_indices[(s + 1) % n_on]
+		if i_end > i_start:
+			offs = nodes[i_start + 1 : i_end]
+		else:
+			# Closed wraparound on the final segment
+			offs = nodes[i_start + 1:] + nodes[:i_end]
+
+		if len(offs) == 0:
+			seg_info.append(('line', None, None))
+		elif len(offs) == 2:
+			z0 = complex(nodes[i_start][0], nodes[i_start][1])
+			z1 = complex(offs[0][0], offs[0][1])
+			z2 = complex(offs[1][0], offs[1][1])
+			z3 = complex(nodes[i_end][0], nodes[i_end][1])
+			if is_line_segment(z0, z1, z2, z3):
+				seg_info.append(('line', None, None))
+			else:
+				seg_info.append((
+					'fixed',
+					(offs[0][0], offs[0][1]),
+					(offs[1][0], offs[1][1]),
+				))
+		else:
+			# Quadratic or other unsupported shape — fall back to line.
+			seg_info.append(('line', None, None))
 
 	out = []
-	for k in hs.data:
-		out.append({
-			'x': float(k.x),
-			'y': float(k.y),
-			'segment_type': getattr(k, 'segment_type', 'hobby'),
-			'alpha': float(getattr(k, 'alpha', 1.0)),
-			'beta':  float(getattr(k, 'beta',  1.0)),
-		})
+	for ki in range(n_on):
+		i_on = on_indices[ki]
+		x, y = nodes[i_on][0], nodes[i_on][1]
+
+		# Outgoing segment of this knot
+		if ki < len(seg_info):
+			seg_type, bcp_out, _ = seg_info[ki]
+		else:
+			# Open contour's last knot has no outgoing segment.
+			seg_type, bcp_out = 'hobby', None
+
+		# Incoming bcp comes from the previous segment.
+		if ki == 0:
+			bcp_in = seg_info[-1][2] if (closed and seg_info) else None
+		else:
+			bcp_in = seg_info[ki - 1][2]
+
+		entry = {
+			'x': float(x), 'y': float(y),
+			'segment_type': seg_type,
+			'alpha': 1.0, 'beta': 1.0,
+		}
+		if bcp_out is not None:
+			entry['fixed_bcp_out'] = [float(bcp_out[0]), float(bcp_out[1])]
+		if bcp_in is not None:
+			entry['fixed_bcp_in'] = [float(bcp_in[0]), float(bcp_in[1])]
+		out.append(entry)
+
 	return json.dumps(out)
 
 

@@ -512,16 +512,22 @@ FontRig._drawHandleLines = function(layer) {
 
 	for (const shape of layer.shapes) {
 		for (const contour of shape.contours) {
-			// Hobby: off-curves are render-only, dragging them
-			// wouldn't propagate to the persisted knots — keep the
-			// surface clean by suppressing handle lines entirely.
-			if (contour.kind === 'hobby') continue;
+			const isHobbyKind = contour.kind === 'hobby';
+			const segKind = isHobbyKind ? (contour._segmentKindMap || null) : null;
 
 			const nodes = contour.nodes;
 			const n = nodes.length;
 
 			for (let ni = 0; ni < n; ni++) {
 				const node = nodes[ni];
+
+				// Hobby: only draw handle lines for off-curves on
+				// fixed segments — solver-driven hobby/line off-curves
+				// aren't editable and shouldn't suggest they are.
+				if (isHobbyKind) {
+					if (node.type === 'on') continue;
+					if (!segKind || segKind[ni] !== 'fixed') continue;
+				}
 
 				if (node.type === 'curve') {
 					const sp = FontRig.glyphToScreen(node.x, node.y);
@@ -603,9 +609,13 @@ FontRig._drawNodeMarkers = function(layer) {
 			for (let ni = 0; ni < n; ni++) {
 				const node = nodes[ni];
 
-				// Hobby: only on-curves are interactive (they map back
-				// to knots). Off-curves are suppressed entirely.
-				if (isHobby && node.type !== 'on') continue;
+				// Hobby: on-curves are knots; off-curves on fixed segments
+				// behave like regular cubic BCPs (editable / hit-testable).
+				// Off-curves on hobby/line segments stay hidden.
+				if (isHobby && node.type !== 'on') {
+					var skMap = contour._segmentKindMap;
+					if (!skMap || skMap[ni] !== 'fixed') continue;
+				}
 
 				// Skip the start node — for bezier the triangle replaces
 				// it; for hobby we render the start knot as a pentagon
@@ -795,6 +805,20 @@ FontRig._drawHobbyDirectionHandles = function(layer) {
 				var hasOut = (knot.dir_out != null);
 				var hasIn  = (knot.dir_in  != null);
 
+				// Suppress direction handles on sides bordering a fixed
+				// segment — the BCP handle IS the direction, a separate
+				// dir handle would just collide visually.
+				var nKnots = contour.knots.length;
+				var prevKi = (ki - 1 + nKnots) % nKnots;
+				var fixedOnOut = (knot.segment_type === 'fixed');
+				var fixedOnIn  = (contour.knots[prevKi]
+					&& contour.knots[prevKi].segment_type === 'fixed');
+				// Open contour: no incoming segment for ki==0, no outgoing for ki==last.
+				if (!contour.closed) {
+					if (ki === 0) fixedOnIn = false;
+					if (ki === nKnots - 1) fixedOnOut = false;
+				}
+
 				// Skip entirely if the knot is free and not selected.
 				if (!hasOut && !hasIn && !isSelected) continue;
 
@@ -802,6 +826,8 @@ FontRig._drawHobbyDirectionHandles = function(layer) {
 
 				// Render each side independently.
 				['out', 'in'].forEach(function(side) {
+					var fixedAdjacent = (side === 'out') ? fixedOnOut : fixedOnIn;
+					if (fixedAdjacent) return;
 					var pinned = (side === 'out') ? hasOut : hasIn;
 					// Hint stubs only when selected; pinned always shown.
 					if (!pinned && !isSelected) return;
@@ -884,15 +910,18 @@ FontRig.drawPreviewNodes = function(layer) {
 		var shape = layer.shapes[si];
 		for (var ki = 0; ki < shape.contours.length; ki++) {
 			var contour = shape.contours[ki];
-			// Hobby contours have no editable handles — skip the
-			// proximity reveal pass entirely.
-			if (contour.kind === 'hobby') { ci++; continue; }
+			// Hobby contours: only fixed-segment off-curves are editable.
+			// All other off-curves are solver artefacts — skip them in
+			// the proximity reveal.
+			var isHobbyKind = contour.kind === 'hobby';
+			var skMap = isHobbyKind ? (contour._segmentKindMap || null) : null;
 			var nodes = contour.nodes;
 			var n = nodes.length;
 
 			for (var ni = 0; ni < n; ni++) {
 				var node = nodes[ni];
 				if (node.type !== 'curve' && node.type !== 'off') continue;
+				if (isHobbyKind && (!skMap || skMap[ni] !== 'fixed')) continue;
 
 				var sp = FontRig.glyphToScreen(node.x, node.y);
 				var a = nodeAlpha(sp);
@@ -947,7 +976,10 @@ FontRig.drawPreviewNodes = function(layer) {
 				if (!isHobby && ni === firstOn) continue;
 
 				var node = nodes[ni];
-				if (isHobby && node.type !== 'on') continue;
+				if (isHobby && node.type !== 'on') {
+					var skMap2 = contour._segmentKindMap;
+					if (!skMap2 || skMap2[ni] !== 'fixed') continue;
+				}
 				var startNode = nodes[firstOn];
 
 				if (ni === n - 1 && node.x === startNode.x && node.y === startNode.y) continue;

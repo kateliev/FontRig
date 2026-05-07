@@ -17,13 +17,17 @@ FontRig.getAllNodes = function(layer) {
 	let ci = 0;
 	for (const shape of layer.shapes) {
 		for (const contour of shape.contours) {
-			// Hobby: only on-curves are selectable. Off-curves in
-			// contour.nodes are render-only artefacts of the solver
-			// and don't map back to anything editable.
-			const onlyOn = contour.kind === 'hobby';
+			// Hobby: on-curves map to knots; fixed-segment off-curves
+			// are user-editable BCPs. Other off-curves (hobby/line) are
+			// render-only solver artefacts and don't map to anything
+			// selectable.
+			const isHobbyKind = contour.kind === 'hobby';
+			const skMap = isHobbyKind ? (contour._segmentKindMap || null) : null;
 			let ni = 0;
 			for (const node of contour.nodes) {
-				if (onlyOn && node.type !== 'on') { ni++; continue; }
+				if (isHobbyKind && node.type !== 'on') {
+					if (!skMap || skMap[ni] !== 'fixed') { ni++; continue; }
+				}
 				nodes.push({
 					...node,
 					id: `c${ci}_n${ni}`,
@@ -177,7 +181,8 @@ FontRig.hitTestHobbyDirHandle = function(sx, sy, radius) {
 				ci++;
 				continue;
 			}
-			for (let ki = 0; ki < contour.knots.length; ki++) {
+			const nKnots = contour.knots.length;
+			for (let ki = 0; ki < nKnots; ki++) {
 				const knot = contour.knots[ki];
 				const ni = FontRig._knotIndexToNodeIndex(contour, ki);
 				if (ni < 0) continue;
@@ -185,7 +190,18 @@ FontRig.hitTestHobbyDirHandle = function(sx, sy, radius) {
 				const nodeId = `c${ci}_n${ni}`;
 				const isSelected = sel.has(nodeId);
 
+				const prevKi = (ki - 1 + nKnots) % nKnots;
+				let fixedOnOut = (knot.segment_type === 'fixed');
+				let fixedOnIn  = (contour.knots[prevKi]
+					&& contour.knots[prevKi].segment_type === 'fixed');
+				if (!contour.closed) {
+					if (ki === 0) fixedOnIn = false;
+					if (ki === nKnots - 1) fixedOnOut = false;
+				}
+
 				for (const side of ['out', 'in']) {
+					if ((side === 'out' && fixedOnOut) ||
+						(side === 'in'  && fixedOnIn)) continue;
 					const pinned = (side === 'out')
 						? (knot.dir_out != null)
 						: (knot.dir_in  != null);

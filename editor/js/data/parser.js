@@ -191,6 +191,10 @@ FontRig.parseKnot = function(el) {
 		beta: 1.0,
 		dir_in: null,
 		dir_out: null,
+		fixed_bcp_out_x: null,
+		fixed_bcp_out_y: null,
+		fixed_bcp_in_x: null,
+		fixed_bcp_in_y: null,
 	};
 
 	const a = el.getAttribute('alpha');
@@ -202,6 +206,20 @@ FontRig.parseKnot = function(el) {
 	if (di !== null) knot.dir_in = parseFloat(di);
 	const dout = el.getAttribute('dir_out');
 	if (dout !== null) knot.dir_out = parseFloat(dout);
+
+	// Fixed BCP coords stored as "x,y" strings. None when absent.
+	const parseBcp = function(raw) {
+		if (raw === null) return null;
+		const parts = raw.split(',');
+		if (parts.length !== 2) return null;
+		const x = parseFloat(parts[0]), y = parseFloat(parts[1]);
+		if (isNaN(x) || isNaN(y)) return null;
+		return [x, y];
+	};
+	const bo = parseBcp(el.getAttribute('bcp_out'));
+	if (bo !== null) { knot.fixed_bcp_out_x = bo[0]; knot.fixed_bcp_out_y = bo[1]; }
+	const bi = parseBcp(el.getAttribute('bcp_in'));
+	if (bi !== null) { knot.fixed_bcp_in_x = bi[0]; knot.fixed_bcp_in_y = bi[1]; }
 
 	return knot;
 };
