@@ -617,11 +617,8 @@ FontRig._drawNodeMarkers = function(layer) {
 					if (!skMap || skMap[ni] !== 'fixed') continue;
 				}
 
-				// Skip the start node — for bezier the triangle replaces
-				// it; for hobby we render the start knot as a pentagon
-				// like the rest (the start triangle is drawn separately
-				// with a small ring).
-				if (!isHobby && ni === firstOn) { continue; }
+				// Render the start node like any other; the ring + arrow
+				// (drawn by _drawStartPoints) sits around it.
 
 				// Skip end node if it overlaps the start node
 				if (ni === n - 1 && node.x === startNode.x && node.y === startNode.y) {
@@ -724,47 +721,55 @@ FontRig._drawStartPoints = function(layer) {
 
 			const startNode = nodes[firstOn];
 
-			// Hobby: replace the orientation triangle with a thin ring
-			// around the first knot's pentagon. The pentagon itself is
-			// drawn by _drawNodeMarkers.
-			if (contour.kind === 'hobby') {
-				const sp = FontRig.glyphToScreen(startNode.x, startNode.y);
-				ctx.save();
-				ctx.strokeStyle = tn.startPoint || tn.outline;
-				ctx.lineWidth = 1;
-				ctx.beginPath();
-				ctx.arc(sp.x, sp.y, (tn.radius || 4) + 4, 0, Math.PI * 2);
-				ctx.stroke();
-				ctx.restore();
-				ci++;
-				continue;
-			}
-
-			const nextNode = nodes[(firstOn + 1) % n];
+			// Ring + arrow around the start node — the male-symbol mark.
+			// Direction is toward the next bezier-shadow node: an off-
+			// curve when present (gives the tangent), otherwise the
+			// next on-curve (chord direction).
 			const sp = FontRig.glyphToScreen(startNode.x, startNode.y);
-			const np = FontRig.glyphToScreen(nextNode.x, nextNode.y);
-
-			const dx = np.x - sp.x;
-			const dy = np.y - sp.y;
-			const angle = Math.atan2(dy, dx);
+			const tangentNode = nodes[(firstOn + 1) % n];
+			const tp = FontRig.glyphToScreen(tangentNode.x, tangentNode.y);
+			const ang = Math.atan2(tp.y - sp.y, tp.x - sp.x);
 
 			const isStartSelected = sel.has('c' + ci + '_n' + firstOn);
-			const size = tn.startSize;
+
+			const R = (tn.radius || 4) + 4;
+			const shaftLen = 8;
+			const headLen = 7;
+			const headSpread = 0.55;
+			const sx0 = sp.x + R * Math.cos(ang);
+			const sy0 = sp.y + R * Math.sin(ang);
+			const ex = sp.x + (R + shaftLen) * Math.cos(ang);
+			const ey = sp.y + (R + shaftLen) * Math.sin(ang);
 
 			ctx.save();
-			ctx.translate(sp.x, sp.y);
-			ctx.rotate(angle);
+			ctx.strokeStyle = isStartSelected ? tn.selected : (tn.startPoint || tn.outline);
+			ctx.lineWidth = 1.25;
+			ctx.lineCap = 'round';
+			ctx.lineJoin = 'round';
 
+			// Ring
 			ctx.beginPath();
-			ctx.moveTo(size + 4, 0);
-			ctx.lineTo(-size + 2, -size + 1);
-			ctx.lineTo(-size + 2, size - 1);
-			ctx.closePath();
+			ctx.arc(sp.x, sp.y, R, 0, Math.PI * 2);
+			ctx.stroke();
 
-			ctx.fillStyle = isStartSelected ? tn.selected : tn.startPoint;
+			// Shaft
+			ctx.beginPath();
+			ctx.moveTo(sx0, sy0);
+			ctx.lineTo(ex, ey);
+			ctx.stroke();
+
+			// Filled triangular arrowhead
+			const hx1 = ex - headLen * Math.cos(ang - headSpread);
+			const hy1 = ey - headLen * Math.sin(ang - headSpread);
+			const hx2 = ex - headLen * Math.cos(ang + headSpread);
+			const hy2 = ey - headLen * Math.sin(ang + headSpread);
+			ctx.beginPath();
+			ctx.moveTo(ex, ey);
+			ctx.lineTo(hx1, hy1);
+			ctx.lineTo(hx2, hy2);
+			ctx.closePath();
+			ctx.fillStyle = isStartSelected ? tn.selected : (tn.startPoint || tn.outline);
 			ctx.fill();
-			ctx.strokeStyle = tn.outline;
-			ctx.lineWidth = 1;
 			ctx.stroke();
 
 			ctx.restore();
