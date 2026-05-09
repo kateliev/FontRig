@@ -733,8 +733,8 @@ FontRig._drawStartPoints = function(layer) {
 			const isStartSelected = sel.has('c' + ci + '_n' + firstOn);
 
 			const R = (tn.radius || 4) + 4;
-			const shaftLen = 8;
-			const headLen = 7;
+			const shaftLen = 10;
+			const headLen = 6;
 			const headSpread = 0.55;
 			const sx0 = sp.x + R * Math.cos(ang);
 			const sy0 = sp.y + R * Math.sin(ang);
@@ -833,17 +833,22 @@ FontRig._drawHobbyDirectionHandles = function(layer) {
 				['out', 'in'].forEach(function(side) {
 					var fixedAdjacent = (side === 'out') ? fixedOnOut : fixedOnIn;
 					if (fixedAdjacent) return;
+
 					var pinned = (side === 'out') ? hasOut : hasIn;
+
 					// Hint stubs only when selected; pinned always shown.
 					if (!pinned && !isSelected) return;
 
 					var endP = FontRig.computeKnotDirHandlePos(contour, ki, side);
 
 					ctx.save();
+
 					ctx.strokeStyle = pinned
 						? (tn.knotHobby || tn.onCorner)
 						: (tn.handleLine || 'rgba(91,157,239,0.45)');
+
 					ctx.lineWidth = pinned ? 1.5 : 1;
+
 					if (!pinned) ctx.setLineDash([3, 3]);
 
 					ctx.beginPath();
@@ -853,22 +858,68 @@ FontRig._drawHobbyDirectionHandles = function(layer) {
 
 					ctx.setLineDash([]);
 
-					// Dot at the end — filled if pinned, hollow ring otherwise.
+					// Triangle at the end.
+					// "out" points away from center.
+					// "in" points toward center.
+
+					var dx = endP.x - sp.x;
+					var dy = endP.y - sp.y;
+					var len = Math.hypot(dx, dy) || 1;
+
+					// Unit direction from center -> handle end
+					var ux = dx / len;
+					var uy = dy / len;
+
+					// Flip for "in" so it points toward center
+					if (side === 'in') {
+						ux *= -1;
+						uy *= -1;
+					}
+
+					// Perpendicular
+					var px = -uy;
+					var py = ux;
+
+					var triLen = 9;
+					var triWidth = 9;
+
+					// Triangle tip
+					var tipX = endP.x + ux * triLen * 0.5;
+					var tipY = endP.y + uy * triLen * 0.5;
+
+					// Triangle base center
+					var baseX = endP.x - ux * triLen * 0.5;
+					var baseY = endP.y - uy * triLen * 0.5;
+
+					// Base corners
+					var leftX = baseX + px * triWidth * 0.5;
+					var leftY = baseY + py * triWidth * 0.5;
+
+					var rightX = baseX - px * triWidth * 0.5;
+					var rightY = baseY - py * triWidth * 0.5;
+
 					ctx.beginPath();
-					ctx.arc(endP.x, endP.y, 3.5, 0, Math.PI * 2);
+					ctx.moveTo(tipX, tipY);
+					ctx.lineTo(leftX, leftY);
+					ctx.lineTo(rightX, rightY);
+					ctx.closePath();
+
 					if (pinned) {
 						ctx.fillStyle = (tn.knotHobby || tn.onCorner);
 						ctx.fill();
-						ctx.strokeStyle = tn.outline;
+
+						ctx.strokeStyle = (tn.handleLine || 'rgba(91,157,239,0.7)');
 						ctx.lineWidth = 1;
 						ctx.stroke();
 					} else {
 						ctx.fillStyle = 'rgba(0,0,0,0)';
 						ctx.fill();
+
 						ctx.strokeStyle = (tn.handleLine || 'rgba(91,157,239,0.7)');
 						ctx.lineWidth = 1.25;
 						ctx.stroke();
 					}
+
 					ctx.restore();
 				});
 			}
