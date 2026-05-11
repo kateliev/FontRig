@@ -244,6 +244,90 @@ FontRig.drawTransformFrame = function() {
 // Transform math
 // ===================================================================
 
+// Write a transformed (nx, ny) for a selected node, routing hobby
+// contour writes to the underlying knot (or fixed_bcp_* fields) so
+// the change actually persists past the next solve. Bezier contours
+// fall through to the standard shadow write.
+//
+// For hobby knots with anchored fixed_bcp_* values, translate those
+// BCPs by the same delta as the knot — so fixed segments don't tear
+// during interactive transforms. (This is exact for translation; for
+// scale/rotate/skew the BCPs translate with the knot rather than
+// undergoing the full transform — adequate for the MVP, and the user
+// can adjust BCPs afterward.)
+//
+// `touched` is a Set passed by the caller; this function adds the
+// hobby contour to it so the caller can re-solve once at the end.
+FontRig._tfWriteSourcePos = function(ref, id, origX, origY, nx, ny, touched) {
+	var rx = Math.round(nx * 10) / 10;
+	var ry = Math.round(ny * 10) / 10;
+	if (!ref || !ref.contour || ref.contour.kind !== 'hobby') {
+		if (ref) {
+			ref.node.x = rx;
+			ref.node.y = ry;
+		}
+		return;
+	}
+
+	var contour = ref.contour;
+	var m = id && id.match(/^c\d+_n(\d+)$/);
+	if (!m) return;
+	var ni = parseInt(m[1], 10);
+	var map = contour._knotMap;
+	if (!map) return;
+
+	var dx = rx - Math.round(origX * 10) / 10;
+	var dy = ry - Math.round(origY * 10) / 10;
+	var round = function(v) { return Math.round(v * 10) / 10; };
+
+	var ki = map[ni];
+	if (ki != null) {
+		var knot = contour.knots[ki];
+		if (!knot) return;
+		knot.x = rx;
+		knot.y = ry;
+		// Drag anchored fixed BCPs along by the same delta — keeps
+		// fixed segments attached to their on-curve endpoints.
+		if (knot.fixed_bcp_out_x != null) knot.fixed_bcp_out_x = round(knot.fixed_bcp_out_x + dx);
+		if (knot.fixed_bcp_out_y != null) knot.fixed_bcp_out_y = round(knot.fixed_bcp_out_y + dy);
+		if (knot.fixed_bcp_in_x  != null) knot.fixed_bcp_in_x  = round(knot.fixed_bcp_in_x  + dx);
+		if (knot.fixed_bcp_in_y  != null) knot.fixed_bcp_in_y  = round(knot.fixed_bcp_in_y  + dy);
+		touched.add(contour);
+		return;
+	}
+
+	// Off-curve: must be a fixed-segment BCP to be moveable.
+	var skMap = contour._segmentKindMap;
+	if (!skMap || skMap[ni] !== 'fixed') return;
+
+	var niOn = ni;
+	while (niOn > 0 && (map[niOn] == null)) niOn--;
+	var ownerKi = map[niOn];
+	if (ownerKi == null) return;
+	var offset = ni - niOn;
+	var nKnots = contour.knots.length;
+	var targetKi, field;
+	if (offset === 1)      { targetKi = ownerKi;             field = 'fixed_bcp_out'; }
+	else if (offset === 2) { targetKi = (ownerKi + 1) % nKnots; field = 'fixed_bcp_in'; }
+	else return;
+	var target = contour.knots[targetKi];
+	if (!target) return;
+	target[field + '_x'] = rx;
+	target[field + '_y'] = ry;
+	touched.add(contour);
+};
+
+// Re-solve every hobby contour that got touched during a transform
+// step, so the bezier shadow reflects the new knot/BCP source data.
+FontRig._tfReSolveTouched = function(touched) {
+	if (!touched || touched.size === 0) return;
+	touched.forEach(function(c) {
+		if (typeof FontRig.solveHobbyContour === 'function') {
+			FontRig.solveHobbyContour(c);
+		}
+	});
+};
+
 // -- Scale from handle drag -----------------------------------------
 FontRig._tfApplyScale = function(gx, gy) {
 	var tf = FontRig.tf;
@@ -271,6 +355,7 @@ FontRig._tfApplyScale = function(gx, gy) {
 	if (isVert) sx = 1;
 
 	// Apply to all selected nodes from their start positions
+	var touched = new Set();
 	for (var entry of tf.startPositions) {
 		var id = entry[0], orig = entry[1];
 		var ref = FontRig.findNodeById(id);
@@ -278,9 +363,9 @@ FontRig._tfApplyScale = function(gx, gy) {
 
 		var nx = ox + (orig.x - ox) * sx;
 		var ny = oy + (orig.y - oy) * sy;
-		ref.node.x = Math.round(nx * 10) / 10;
-		ref.node.y = Math.round(ny * 10) / 10;
+		FontRig._tfWriteSourcePos(ref, id, orig.x, orig.y, nx, ny, touched);
 	}
+	FontRig._tfReSolveTouched(touched);
 
 	FontRig._tfUpdateStatus();
 };
@@ -307,6 +392,7 @@ FontRig._tfApplyRotate = function(gx, gy) {
 	var cos = Math.cos(angle);
 	var sin = Math.sin(angle);
 
+	var touched = new Set();
 	for (var entry of tf.startPositions) {
 		var id = entry[0], orig = entry[1];
 		var ref = FontRig.findNodeById(id);
@@ -314,9 +400,11 @@ FontRig._tfApplyRotate = function(gx, gy) {
 
 		var dx = orig.x - ox;
 		var dy = orig.y - oy;
-		ref.node.x = Math.round((ox + dx * cos - dy * sin) * 10) / 10;
-		ref.node.y = Math.round((oy + dx * sin + dy * cos) * 10) / 10;
+		var nx = ox + dx * cos - dy * sin;
+		var ny = oy + dx * sin + dy * cos;
+		FontRig._tfWriteSourcePos(ref, id, orig.x, orig.y, nx, ny, touched);
 	}
+	FontRig._tfReSolveTouched(touched);
 
 	FontRig._tfUpdateStatus();
 };
@@ -361,6 +449,7 @@ FontRig._tfApplySkew = function(gx, gy) {
 	var tanX = Math.tan(skewXrad);
 	var tanY = Math.tan(skewYrad);
 
+	var touched = new Set();
 	for (var entry of tf.startPositions) {
 		var id = entry[0], orig = entry[1];
 		var ref = FontRig.findNodeById(id);
@@ -368,9 +457,11 @@ FontRig._tfApplySkew = function(gx, gy) {
 
 		var dx = orig.x - ox;
 		var dy = orig.y - oy;
-		ref.node.x = Math.round((ox + dx + dy * tanX) * 10) / 10;
-		ref.node.y = Math.round((oy + dy + dx * tanY) * 10) / 10;
+		var nx = ox + dx + dy * tanX;
+		var ny = oy + dy + dx * tanY;
+		FontRig._tfWriteSourcePos(ref, id, orig.x, orig.y, nx, ny, touched);
 	}
+	FontRig._tfReSolveTouched(touched);
 
 	FontRig._tfUpdateStatus();
 };
@@ -570,39 +661,48 @@ FontRig._tfApplyNumeric = function(field, value) {
 
 FontRig._tfScaleAll = function(sx, sy) {
 	var ox = FontRig.tf.origin.x, oy = FontRig.tf.origin.y;
+	var touched = new Set();
 	for (var entry of FontRig.tf.startPositions) {
 		var id = entry[0], orig = entry[1];
 		var ref = FontRig.findNodeById(id);
 		if (!ref) continue;
-		ref.node.x = Math.round((ox + (orig.x - ox) * sx) * 10) / 10;
-		ref.node.y = Math.round((oy + (orig.y - oy) * sy) * 10) / 10;
+		var nx = ox + (orig.x - ox) * sx;
+		var ny = oy + (orig.y - oy) * sy;
+		FontRig._tfWriteSourcePos(ref, id, orig.x, orig.y, nx, ny, touched);
 	}
+	FontRig._tfReSolveTouched(touched);
 };
 
 FontRig._tfRotateAll = function(angle) {
 	var ox = FontRig.tf.origin.x, oy = FontRig.tf.origin.y;
 	var cos = Math.cos(angle), sin = Math.sin(angle);
+	var touched = new Set();
 	for (var entry of FontRig.tf.startPositions) {
 		var id = entry[0], orig = entry[1];
 		var ref = FontRig.findNodeById(id);
 		if (!ref) continue;
 		var dx = orig.x - ox, dy = orig.y - oy;
-		ref.node.x = Math.round((ox + dx * cos - dy * sin) * 10) / 10;
-		ref.node.y = Math.round((oy + dx * sin + dy * cos) * 10) / 10;
+		var nx = ox + dx * cos - dy * sin;
+		var ny = oy + dx * sin + dy * cos;
+		FontRig._tfWriteSourcePos(ref, id, orig.x, orig.y, nx, ny, touched);
 	}
+	FontRig._tfReSolveTouched(touched);
 };
 
 FontRig._tfSkewAll = function(radX, radY) {
 	var ox = FontRig.tf.origin.x, oy = FontRig.tf.origin.y;
 	var tanX = Math.tan(radX), tanY = Math.tan(radY);
+	var touched = new Set();
 	for (var entry of FontRig.tf.startPositions) {
 		var id = entry[0], orig = entry[1];
 		var ref = FontRig.findNodeById(id);
 		if (!ref) continue;
 		var dx = orig.x - ox, dy = orig.y - oy;
-		ref.node.x = Math.round((ox + dx + dy * tanX) * 10) / 10;
-		ref.node.y = Math.round((oy + dy + dx * tanY) * 10) / 10;
+		var nx = ox + dx + dy * tanX;
+		var ny = oy + dy + dx * tanY;
+		FontRig._tfWriteSourcePos(ref, id, orig.x, orig.y, nx, ny, touched);
 	}
+	FontRig._tfReSolveTouched(touched);
 };
 
 // -- Wire numeric inputs --------------------------------------------
