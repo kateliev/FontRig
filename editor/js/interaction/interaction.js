@@ -149,10 +149,24 @@ FontRig._restoreSnapshot = function(snapshot) {
 	}
 };
 
-// Push current state onto undo stack (call before modifying)
-FontRig.pushUndo = function() {
+// Subscribers notified after pushUndo / undo / redo / clearUndo / jumpToUndoIndex.
+FontRig._undoSubs = [];
+FontRig.onUndoChange = function(fn) {
+	if (typeof fn === 'function') FontRig._undoSubs.push(fn);
+};
+FontRig._notifyUndoChange = function() {
+	for (var i = 0; i < FontRig._undoSubs.length; i++) {
+		try { FontRig._undoSubs[i](); } catch (e) { console.warn('onUndoChange listener:', e); }
+	}
+};
+
+// Push current state onto undo stack (call before modifying).
+// Optional `label` is a human-readable description shown in the Undo panel.
+FontRig.pushUndo = function(label) {
 	var snapshot = FontRig._snapshotLayer();
 	if (!snapshot) return;
+	snapshot.label = (typeof label === 'string' && label) ? label : 'Edit';
+	snapshot.t = Date.now();
 	var stacks = FontRig._undoStacks();
 	stacks.undo.push(snapshot);
 	if (stacks.undo.length > FontRig.UNDO_MAX) {
@@ -179,6 +193,8 @@ FontRig.pushUndo = function() {
 
 	// Snapshot lerp layers for reverse propagation
 	if (typeof FontRig.lerpEditStart === 'function') FontRig.lerpEditStart();
+
+	FontRig._notifyUndoChange();
 };
 
 // Push undo for nudge with timer coalescing.
@@ -200,7 +216,11 @@ FontRig.undo = function() {
 	if (stacks.undo.length === 0) return;
 	// Save current state to redo
 	var current = FontRig._snapshotLayer();
-	if (current) stacks.redo.push(current);
+	if (current) {
+		current.label = 'Current';
+		current.t = Date.now();
+		stacks.redo.push(current);
+	}
 	// Restore previous
 	var snapshot = stacks.undo.pop();
 	console.log('[undo] snapshot type:', snapshot._allLayers ? 'multi-layer' : 'legacy', snapshot._allLayers ? Object.keys(snapshot.layers) : '(active only)');
@@ -209,6 +229,7 @@ FontRig.undo = function() {
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 	FontRig.xmlRefresh();
+	FontRig._notifyUndoChange();
 };
 
 FontRig.redo = function() {
@@ -216,7 +237,11 @@ FontRig.redo = function() {
 	if (stacks.redo.length === 0) return;
 	// Save current state to undo
 	var current = FontRig._snapshotLayer();
-	if (current) stacks.undo.push(current);
+	if (current) {
+		current.label = 'Current';
+		current.t = Date.now();
+		stacks.undo.push(current);
+	}
 	// Restore next
 	var snapshot = stacks.redo.pop();
 	FontRig._restoreSnapshot(snapshot);
@@ -224,6 +249,26 @@ FontRig.redo = function() {
 	FontRig.draw();
 	FontRig.updateStatusSelected();
 	FontRig.xmlRefresh();
+	FontRig._notifyUndoChange();
+};
+
+// Jump to a specific position in the combined undo/redo timeline.
+// Timeline = [...undoStack, current, ...redoStackReversed].
+// index < undoStack.length  → undo to that point.
+// index === undoStack.length → no-op (already current).
+// index > undoStack.length  → redo forward.
+FontRig.jumpToUndoIndex = function(index) {
+	var stacks = FontRig._undoStacks();
+	var currentPos = stacks.undo.length;
+	if (index === currentPos) return;
+
+	if (index < currentPos) {
+		var steps = currentPos - index;
+		for (var i = 0; i < steps; i++) FontRig.undo();
+	} else {
+		var fwd = index - currentPos;
+		for (var j = 0; j < fwd; j++) FontRig.redo();
+	}
 };
 
 // Clear undo history (e.g. when loading new glyph)
@@ -231,6 +276,7 @@ FontRig.clearUndo = function() {
 	var stacks = FontRig._undoStacks();
 	stacks.undo.length = 0;
 	stacks.redo.length = 0;
+	FontRig._notifyUndoChange();
 };
 
 // -- Preview button sync --------------------------------------------

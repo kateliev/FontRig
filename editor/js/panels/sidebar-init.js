@@ -146,6 +146,32 @@ SBC.registerWidget({
 	}
 });
 
+// -- Scripting Widget -----------------------------------------------
+SBC.registerWidget({
+	id:    'scripting',
+	label: 'Scripts',
+	icon:  'action_play',
+	mount: function(containerEl, ctx) {
+		return FontRig.ScriptingPanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.update();
+	}
+});
+
+// -- Undo Widget ----------------------------------------------------
+SBC.registerWidget({
+	id:    'undo',
+	label: 'Undo',
+	icon:  'undo',
+	mount: function(containerEl, ctx) {
+		return FontRig.UndoPanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.update();
+	}
+});
+
 // -- Help Widget ----------------------------------------------------
 SBC.registerWidget({
 	id:    'help',

@@ -224,6 +224,12 @@ body {
 	color: var(--accent);
 }
 
+.tb-menu-item.disabled {
+	opacity: 0.4;
+	pointer-events: none;
+	cursor: default;
+}
+
 .tb-menu-item .tri { font-size: 18px; width: 18px; text-align: center; }
 
 .tb-shortcut {

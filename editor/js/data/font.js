@@ -455,3 +455,229 @@ FontRig.stepGlyph = function(direction) {
 	var newName = manifest[newIdx].alias || manifest[newIdx].name;
 	FontRig.switchGlyph(newName);
 };
+
+// -- Build font.xml string from a config ----------------------------
+FontRig._buildFontXml = function(cfg) {
+	var esc = FontRig.esc || function(s){ return String(s); };
+	var lines = [];
+	lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+	lines.push('<font>');
+	lines.push('  <info>');
+	lines.push('    <meta key="family-name" value="' + esc(cfg.family) + '"/>');
+	lines.push('    <meta key="style-name"  value="' + esc(cfg.style)  + '"/>');
+	if (cfg.italicAngle) lines.push('    <meta key="italic-angle" value="' + cfg.italicAngle + '"/>');
+	lines.push('  </info>');
+	lines.push('  <metrics upm="' + cfg.upm + '" ascender="' + cfg.ascender +
+	           '" descender="' + cfg.descender + '" x-height="' + cfg.xHeight +
+	           '" cap-height="' + cfg.capHeight + '"/>');
+	lines.push('  <masters>');
+	lines.push('    <master name="' + esc(cfg.master) + '" layer="' + esc(cfg.master) + '" default="true"/>');
+	lines.push('  </masters>');
+	lines.push('  <encoding>');
+	if (cfg.encoding) {
+		var keys = Object.keys(cfg.encoding);
+		for (var i = 0; i < keys.length; i++) {
+			var v = cfg.encoding[keys[i]];
+			if (v) lines.push('    <entry name="' + esc(keys[i]) + '" unicodes="' + esc(v) + '"/>');
+		}
+	}
+	lines.push('  </encoding>');
+	lines.push('</font>');
+	return lines.join('\n');
+};
+
+// -- Build glyphs.xml string from a manifest array ------------------
+FontRig._buildGlyphsManifestXml = function(manifest) {
+	var esc = FontRig.esc || function(s){ return String(s); };
+	var lines = [];
+	lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+	lines.push('<glyphs>');
+	for (var i = 0; i < manifest.length; i++) {
+		var e = manifest[i];
+		var attrs = 'name="' + esc(e.name) + '" src="' + esc(e.path) + '"';
+		if (e.alias) attrs += ' alias="' + esc(e.alias) + '"';
+		lines.push('  <glyph ' + attrs + '/>');
+	}
+	lines.push('</glyphs>');
+	return lines.join('\n');
+};
+
+// -- Rewrite glyphs.xml on disk -------------------------------------
+FontRig._writeGlyphsManifest = async function() {
+	if (!FontRig.font) return;
+	var xml = FontRig._buildGlyphsManifestXml(FontRig.font.manifest);
+	await FontRig._writeFile(FontRig.font.dirHandle, 'glyphs.xml', xml);
+};
+
+// -- Rewrite font.xml on disk ---------------------------------------
+FontRig._writeFontXml = async function() {
+	if (!FontRig.font) return;
+	var f = FontRig.font;
+	var cfg = {
+		family:     f.info.family,
+		style:      f.info.style,
+		master:     (f.masters && f.masters[0] && f.masters[0].name) || 'Regular',
+		upm:        f.metrics.upm,
+		ascender:   f.metrics.ascender,
+		descender:  f.metrics.descender,
+		xHeight:    f.metrics.xHeight,
+		capHeight:  f.metrics.capHeight,
+		italicAngle: f.info.italicAngle || 0,
+		encoding:   f.encoding
+	};
+	var xml = FontRig._buildFontXml(cfg);
+	await FontRig._writeFile(f.dirHandle, 'font.xml', xml);
+};
+
+// -- Create new .trfont folder + open it ----------------------------
+FontRig.createNewFont = async function() {
+	if (typeof FRWidget === 'undefined' || !FRWidget.NewFontDialog) {
+		alert('Dialog module not loaded.');
+		return;
+	}
+	var cfg = await FRWidget.NewFontDialog();
+	if (!cfg) return;
+
+	var parentDir;
+	try {
+		parentDir = await window.showDirectoryPicker({ mode: 'readwrite' });
+	} catch (e) {
+		if (e.name !== 'AbortError') alert('Could not open directory picker: ' + e.message);
+		return;
+	}
+
+	var folderName = (cfg.family + '-' + cfg.style).replace(/[\\/:*?"<>|\s]+/g, '_') + '.trfont';
+	var dirHandle;
+	try {
+		dirHandle = await parentDir.getDirectoryHandle(folderName, { create: true });
+	} catch (e) {
+		alert('Could not create folder "' + folderName + '": ' + e.message);
+		return;
+	}
+
+	// Write font.xml + empty glyphs.xml + create empty glyphs/ subfolder
+	cfg.encoding = {};
+	await FontRig._writeFile(dirHandle, 'font.xml', FontRig._buildFontXml(cfg));
+	await FontRig._writeFile(dirHandle, 'glyphs.xml', FontRig._buildGlyphsManifestXml([]));
+	await dirHandle.getDirectoryHandle('glyphs', { create: true });
+
+	// Populate FontRig.font state
+	FontRig.font = {
+		dirHandle: dirHandle,
+		info: { family: cfg.family, style: cfg.style, italicAngle: cfg.italicAngle },
+		metrics: {
+			upm: cfg.upm, ascender: cfg.ascender, descender: cfg.descender,
+			xHeight: cfg.xHeight, capHeight: cfg.capHeight
+		},
+		masters: [{ name: cfg.master, layerName: cfg.master, isDefault: true }],
+		encoding: {},
+		manifest: [],
+		manifestIndex: {}
+	};
+
+	FontRig.glyphCache.clear();
+	FontRig.dirtyGlyphs.clear();
+	FontRig.activeGlyph = null;
+	if (FontRig.GlyphRenderer && FontRig.GlyphRenderer.clearCache) FontRig.GlyphRenderer.clearCache();
+
+	FontRig.buildGlyphPanel();
+	if (typeof FontRig.updateFontInfo === 'function') FontRig.updateFontInfo();
+};
+
+// -- Add new glyph to current font ----------------------------------
+FontRig.createNewGlyph = async function() {
+	if (!FontRig.font) {
+		alert('Open or create a font first.');
+		return;
+	}
+	if (typeof FRWidget === 'undefined' || !FRWidget.NewGlyphDialog) {
+		alert('Dialog module not loaded.');
+		return;
+	}
+
+	var defaultWidth = (FontRig.font.metrics && FontRig.font.metrics.upm) || 1000;
+	var cfg = await FRWidget.NewGlyphDialog({ defaultWidth: defaultWidth });
+	if (!cfg) return;
+
+	if (FontRig.font.manifestIndex[cfg.name]) {
+		alert('A glyph named "' + cfg.name + '" already exists.');
+		return;
+	}
+
+	// Build minimal glyph data — one layer per master
+	var masters = FontRig.font.masters && FontRig.font.masters.length
+		? FontRig.font.masters
+		: [{ name: 'Regular', layerName: 'Regular', isDefault: true }];
+	var upm = FontRig.font.metrics.upm || 1000;
+
+	var glyphData = {
+		name: cfg.name,
+		identifier: '',
+		unicodes: cfg.unicodes || '',
+		mark: '',
+		selected: false,
+		layers: masters.map(function (m) {
+			return {
+				name: m.layerName || m.name,
+				identifier: '',
+				width: cfg.width,
+				height: upm,
+				shapes: [],
+				anchors: [],
+				lib: {}
+			};
+		})
+	};
+
+	var xmlString = FontRig.glyphToXml(glyphData);
+	var relPath = 'glyphs/' + cfg.name + '.trglyph';
+	await FontRig._writeFile(FontRig.font.dirHandle, relPath, xmlString);
+
+	// Update manifest + encoding in memory and on disk
+	var entry = { name: cfg.name, path: relPath, alias: '', unicodes: cfg.unicodes || '' };
+	FontRig.font.manifest.push(entry);
+	FontRig.font.manifestIndex[cfg.name] = entry;
+	if (cfg.unicodes) FontRig.font.encoding[cfg.name] = cfg.unicodes;
+
+	await FontRig._writeGlyphsManifest();
+	await FontRig._writeFontXml();
+
+	// Refresh UI + switch to new glyph
+	FontRig.buildGlyphPanel();
+	await FontRig.switchGlyph(cfg.name);
+};
+
+// -- Export current glyph as SVG ------------------------------------
+// mode: 'bw' (black filled, type-design output) or 'color' (per-contour debug)
+FontRig.exportCurrentGlyphAsSVG = function(mode) {
+	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
+		alert('Python runtime is not ready yet.');
+		return;
+	}
+	if (!FontRig.state.glyphData) return;
+
+	FontRig.pyBridge.syncToPython();
+
+	var svg;
+	try {
+		svg = FontRig.pyBridge.pyodide.runPython(
+			'from typerig.core.fileio.svgio import glyph_to_SVG\n' +
+			'glyph_to_SVG(glyph, mode="' + (mode === 'bw' ? 'bw' : 'color') + '") if glyph is not None else ""'
+		);
+	} catch (e) {
+		console.error('SVG export failed:', e);
+		alert('SVG export failed: ' + e.message);
+		return;
+	}
+	if (!svg) return;
+
+	var name = (FontRig.state.glyphData && FontRig.state.glyphData.name) || 'glyph';
+	var suffix = (mode === 'bw') ? '.svg' : '_debug.svg';
+	var blob = new Blob([svg], { type: 'image/svg+xml' });
+	var url = URL.createObjectURL(blob);
+	var a = document.createElement('a');
+	a.href = url;
+	a.download = name + suffix;
+	a.click();
+	URL.revokeObjectURL(url);
+};

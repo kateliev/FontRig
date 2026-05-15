@@ -25,11 +25,31 @@ FontRig.actions = {
 		FontRig.openFont();
 	},
 
+	newFont: function() {
+		if (typeof FontRig.createNewFont === 'function') FontRig.createNewFont();
+	},
+
+	newGlyph: function() {
+		if (typeof FontRig.createNewGlyph === 'function') FontRig.createNewGlyph();
+	},
+
 	saveFile: function() {
 		if (FontRig.font) {
 			FontRig.saveDirtyGlyphs();
 		} else {
 			FontRig.saveXml();
+		}
+	},
+
+	exportSvgBW: function() {
+		if (typeof FontRig.exportCurrentGlyphAsSVG === 'function') {
+			FontRig.exportCurrentGlyphAsSVG('bw');
+		}
+	},
+
+	exportSvgColor: function() {
+		if (typeof FontRig.exportCurrentGlyphAsSVG === 'function') {
+			FontRig.exportCurrentGlyphAsSVG('color');
 		}
 	},
 
@@ -318,7 +338,11 @@ FontRig.dispatchKey = function(e) {
 FontRig.toolbarMap = [
 	{ id: 'btn-load',    action: 'openFile',  desc: 'Load .trglyph file' },
 	{ id: 'btn-open-font', action: 'openFont', desc: 'Open .trfont folder' },
+	{ id: 'btn-new-font',  action: 'newFont',  desc: 'Create new .trfont folder' },
+	{ id: 'btn-new-glyph', action: 'newGlyph', desc: 'Add a new glyph to the open font' },
 	{ id: 'btn-save',    action: 'saveFile',  desc: 'Save .trglyph file' },
+	{ id: 'btn-export-svg-bw',    action: 'exportSvgBW',    desc: 'Export current glyph as SVG (BW)' },
+	{ id: 'btn-export-svg-color', action: 'exportSvgColor', desc: 'Export current glyph as SVG (color-separated debug)' },
 	{ id: 'btn-fit',     action: 'fitToView', desc: 'Fit glyph to view' },
 
 	// Toggle buttons

@@ -52,6 +52,7 @@ FontRig.pyBridge = {
 
 		// File I/O
 		'typerig/core/fileio/xmlio.py',
+		'typerig/core/fileio/svgio.py',
 
 		// Core actions
 		'typerig/core/actions/node_actions.py',
@@ -86,6 +87,10 @@ FontRig.pyBridge = {
 		// to TypeRig core once stable.
 		{ src: 'python/draw_panel_actions.py',
 		  dest: 'typerig/core/actions/draw_panel_actions.py' },
+		// svgio override — patched to make Font optional for the
+		// browser build. Remove once the TypeRig master push lands.
+		{ src: 'python/svgio.py',
+		  dest: 'typerig/core/fileio/svgio.py' },
 	],
 
 	// -- Stub __init__.py contents -----------------------------------------

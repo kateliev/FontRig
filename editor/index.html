@@ -22,10 +22,17 @@
 				File
 			</button>
 			<div class="tb-dropdown-menu">
+				<div class="tb-menu-item" id="btn-new-font"><span class="tri">file</span>New Font&hellip;</div>
+				<div class="tb-menu-item" id="btn-new-glyph"><span class="tri">node_add</span>New Glyph&hellip;</div>
+				<div class="tb-menu-sep"></div>
 				<div class="tb-menu-item" id="btn-load"><span class="tri">file_open</span>Load File<span class="tb-shortcut">Ctrl+O</span></div>
 				<div class="tb-menu-item" id="btn-open-font"><span class="tri">file</span>Open Font<span class="tb-shortcut">Ctrl+Shift+O</span></div>
 				<div class="tb-menu-sep"></div>
 				<div class="tb-menu-item" id="btn-save"><span class="tri">file_save</span>Save<span class="tb-shortcut">Ctrl+S</span></div>
+				<div class="tb-menu-sep"></div>
+				<div class="tb-menu-item" id="btn-export-svg-bw"><span class="tri">file_save</span>Export &rarr; SVG (BW)&hellip;</div>
+				<div class="tb-menu-item" id="btn-export-svg-color"><span class="tri">file_save</span>Export &rarr; SVG (Color debug)&hellip;</div>
+				<div class="tb-menu-item disabled" id="btn-import-svg" title="Not yet implemented"><span class="tri">file_open</span>Import &rarr; SVG&hellip;</div>
 			</div>
 		</div>
 
@@ -321,6 +328,7 @@
 <script src="js/geometry/geometry.js"></script>
 <script src="js/widgets/fr-widgets.js"></script>
 <script src="js/dialogs/fr-dialogs.js"></script>
+<script src="js/dialogs/fr-new-font-dialog.js"></script>
 <script src="js/dialogs/fr-toolbar-controller.js"></script>
 <script src="js/drawing/drawing.js"></script>
 <script src="js/drawing/visualization-layers.js"></script>
@@ -341,6 +349,8 @@
 <script src="js/panels/ai-agent-panel.js"></script>
 <script src="js/panels/workplane.js"></script>
 <script src="js/panels/help-panel.js"></script>
+<script src="js/panels/undo-panel.js"></script>
+<script src="js/panels/scripting-panel.js"></script>
 <script src="js/audio/sonification.js"></script>
 <script src="js/panels/sonification-panel.js"></script>
 <script src="js/tools/draw-tool.js"></script>
