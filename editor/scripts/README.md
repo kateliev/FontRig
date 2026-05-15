@@ -17,6 +17,8 @@ On first launch (or after you clear `fr-scripting-config-v1` in localStorage), t
 
 Inside the panel's Python runtime you get a `glyph` global — the currently active glyph, mirrored from the editor every time you Run. Mutate it however you like; changes propagate back to the canvas and count as one undo step.
 
+When you click **Run**, output goes to the **Python panel** (the REPL) and the Python tab gets focus. The script's scope is the REPL's scope: any names it defines (functions, imports, variables) are reachable at the prompt, so you can keep interacting with the script's leftovers without re-running anything.
+
 ```python
 # my_script.py
 from typerig.core.actions.node_actions import NodeActions

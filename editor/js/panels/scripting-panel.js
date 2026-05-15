@@ -61,20 +61,6 @@ FontRig.ScriptingPanel.mount = function (containerEl) {
 		}
 	});
 
-	// -- Console output --------------------------------------------
-	var console_ = document.createElement('div');
-	console_.className = 'scripting-panel__console';
-	console_.style.flex = '0 0 80px';
-	console_.style.overflowY = 'auto';
-	console_.style.borderTop = '1px solid var(--border, #333)';
-	console_.style.padding = '4px 8px';
-	console_.style.fontFamily = 'monospace';
-	console_.style.fontSize = '11px';
-	console_.style.whiteSpace = 'pre-wrap';
-	console_.style.background = 'rgba(0,0,0,0.15)';
-	wrap.appendChild(console_);
-	inst._console = console_;
-
 	// -- Bottom action bar -----------------------------------------
 	var actions = document.createElement('div');
 	actions.className = 'scripting-panel__actions';
@@ -382,6 +368,11 @@ function _renderScript(inst, script, folderIdx, scriptIdx) {
 // -------------------------------------------------------------------
 // Actions
 // -------------------------------------------------------------------
+// Run the selected script and pipe its output into the Python REPL.
+// Pyodide's globals dict is shared between pyBridge.run() calls, so
+// any names the script defines (functions, imports, variables) are
+// immediately reachable from the REPL prompt — the session simply
+// continues there.
 function _runSelected(inst) {
 	var sel = inst._data.selection;
 	if (!sel || sel.scriptIdx == null) {
@@ -400,11 +391,22 @@ function _runSelected(inst) {
 		FontRig.pushUndo('Script: ' + script.name);
 	}
 
-	_log(inst, '▶ ' + script.name, 'info');
+	// Echo the run as an input line in the REPL so the transcript reads
+	// linearly with whatever the user types next.
+	if (FontRig.PythonPanel && typeof FontRig.PythonPanel.appendToActive === 'function') {
+		FontRig.PythonPanel.appendToActive('# ▶ Running: ' + script.name, 'input');
+	}
+
 	var res = FontRig.pyBridge.run(script.source);
 	if (res) {
 		if (res.output) _log(inst, res.output, 'output');
 		if (res.error)  _log(inst, res.error,  'error');
+	}
+
+	// Switch focus to the Python panel so the user can keep interacting
+	// with whatever the script left in scope.
+	if (FontRig.PythonPanel && typeof FontRig.PythonPanel.focusActive === 'function') {
+		FontRig.PythonPanel.focusActive();
 	}
 }
 
@@ -603,15 +605,20 @@ function _handleFileDrop(inst, files, folderIdx) {
 	Promise.all(pending).then(function () { _save(inst); _renderTree(inst); });
 }
 
-function _log(inst, text, type) {
-	var line = document.createElement('div');
-	line.textContent = text;
-	if (type === 'error') line.style.color = '#f88';
-	else if (type === 'warn') line.style.color = '#fc6';
-	else if (type === 'info') line.style.color = '#8cf';
-	else line.style.color = 'inherit';
-	inst._console.appendChild(line);
-	inst._console.scrollTop = inst._console.scrollHeight;
+// Route panel messages into the Python REPL transcript when it's
+// mounted (the user's preferred place to read output / continue
+// interacting). Falls back to the browser console for boot-time and
+// silent-failure scenarios.
+function _log(_inst, text, type) {
+	var t = type === 'warn' ? 'error' : (type || 'output');
+	var routed = (FontRig.PythonPanel && typeof FontRig.PythonPanel.appendToActive === 'function')
+		? FontRig.PythonPanel.appendToActive(text, t)
+		: false;
+	if (!routed) {
+		if (type === 'error') console.error('[scripts]', text);
+		else if (type === 'warn') console.warn('[scripts]', text);
+		else console.log('[scripts]', text);
+	}
 }
 
 })();

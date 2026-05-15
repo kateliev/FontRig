@@ -322,6 +322,38 @@ FontRig.switchPanelTab = function(tabName) {
 	}
 };
 
+// Fan-out helpers — write to every mounted Python panel instance
+// regardless of which sidebar hosts it. The scripting panel uses
+// these to pipe Run output into the REPL transcript.
+FontRig.PythonPanel.appendToActive = function(text, type) {
+	if (!FontRig.SidebarConfig) return false;
+	var instances = FontRig.SidebarConfig.getInstances('python');
+	if (!instances || instances.length === 0) return false;
+	var wrote = false;
+	for (var i = 0; i < instances.length; i++) {
+		var inst = instances[i];
+		if (inst && typeof inst.appendOutput === 'function') {
+			inst.appendOutput(text, type);
+			wrote = true;
+		}
+	}
+	return wrote;
+};
+
+// Switch the right sidebar to the Python tab (no-op if already there)
+// and focus its input box so the user can keep typing after a script.
+FontRig.PythonPanel.focusActive = function() {
+	if (FontRig._rightSidebar && FontRig.Sidebar) {
+		FontRig.Sidebar.switchTab(FontRig._rightSidebar, 'python');
+	}
+	if (!FontRig.SidebarConfig) return;
+	var instances = FontRig.SidebarConfig.getInstances('python');
+	for (var i = 0; i < instances.length; i++) {
+		var inst = instances[i];
+		if (inst && typeof inst.focus === 'function') inst.focus();
+	}
+};
+
 // Legacy pyPanel API — delegates to PythonPanel
 FontRig.pyPanel = {
 	get history() { return FontRig.PythonPanel._history; },
