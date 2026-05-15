@@ -662,38 +662,105 @@ FontRig._downloadBlob = function(content, filename, mime) {
 	URL.revokeObjectURL(url);
 };
 
-// Run a Python expression that builds an SVG string for a subset of
-// glyph.layers. `layerNames` is a JS array of names to include;
-// pass null for "all layers". Returns the SVG string or '' on failure.
-FontRig._runSvgExport = function(mode, layerNames) {
+// Editor fallback metrics — match drawing.js when no font is open.
+FontRig._FALLBACK_METRICS = { upm: 1000, ascender: 800, descender: -200 };
+
+// Resolve vertical metrics from the open font, or fall back to the
+// editor defaults the canvas itself uses to display the glyph.
+FontRig._currentExportMetrics = function() {
+	if (FontRig.font && FontRig.font.metrics) {
+		var m = FontRig.font.metrics;
+		return {
+			upm:       m.upm       || FontRig._FALLBACK_METRICS.upm,
+			ascender:  m.ascender  != null ? m.ascender  : FontRig._FALLBACK_METRICS.ascender,
+			descender: m.descender != null ? m.descender : FontRig._FALLBACK_METRICS.descender
+		};
+	}
+	return Object.assign({}, FontRig._FALLBACK_METRICS);
+};
+
+// Render one layer of the current glyph to an SVG document string,
+// using a font-canvas viewBox (advance width × ascender..descender).
+// `canvas`: { ascender, descender, advance? } in font units. If
+// advance is null the layer's own advance_width is used.
+FontRig._runSvgExport = function(mode, layerName, canvas) {
 	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
 		alert('Python runtime is not ready yet.');
 		return '';
 	}
 	FontRig.pyBridge.syncToPython();
 	try {
-		FontRig.pyBridge.pyodide.globals.set('_svg_mode', (mode === 'bw') ? 'bw' : 'color');
-		FontRig.pyBridge.pyodide.globals.set('_svg_layer_names_json',
-			layerNames ? JSON.stringify(layerNames) : '');
+		FontRig.pyBridge.pyodide.globals.set('_svg_cfg_json', JSON.stringify({
+			mode:      (mode === 'bw') ? 'bw' : 'color',
+			layer:     layerName,
+			ascender:  canvas.ascender,
+			descender: canvas.descender,
+			advance:   (canvas.advance != null) ? canvas.advance : null
+		}));
 		return FontRig.pyBridge.pyodide.runPython([
-			'from typerig.core.fileio.svgio import glyph_to_SVG',
+			'from typerig.core.fileio.svgio import layer_to_SVG, _format_float',
+			'from xml.etree import ElementTree as ET',
 			'import json as _json',
-			'def _fr_export_svg(g, mode, names):',
+			'',
+			'# OpenType SVG convention (W3C / Microsoft Learn): y=0 is the',
+			'# baseline; SVG y axis points down, so the ascender region is at',
+			'# negative y and the descender region at positive y. The full',
+			'# canvas spans (0, -ascender) -> (advance, -descender).',
+			'def _fr_export_svg(g, cfg):',
 			'    if g is None: return ""',
-			'    saved = list(g.data)',
-			'    try:',
-			'        if names is None:',
-			'            return glyph_to_SVG(g, mode=mode)',
-			'        wanted = set(names)',
-			'        kept = [l for l in saved if l.name in wanted]',
-			'        if not kept:',
-			'            return ""',
-			'        g.data[:] = kept',
-			'        return glyph_to_SVG(g, mode=mode)',
-			'    finally:',
-			'        g.data[:] = saved',
-			'_names = _json.loads(_svg_layer_names_json) if _svg_layer_names_json else None',
-			'_fr_export_svg(glyph, _svg_mode, _names)'
+			'    lyr = None',
+			'    for l in g.data:',
+			'        if l.name == cfg["layer"]:',
+			'            lyr = l; break',
+			'    if lyr is None: return ""',
+			'',
+			'    ascender  = float(cfg["ascender"])',
+			'    descender = float(cfg["descender"])',
+			'    adv = cfg.get("advance")',
+			'    if adv is None:',
+			'        adv = getattr(lyr, "advance_width", None) or getattr(lyr, "width", 0)',
+			'    width  = float(adv)',
+			'    height = ascender - descender',
+			'    if width <= 0 or height <= 0:',
+			'        return ""',
+			'',
+			'    svg = ET.Element("svg", {',
+			'        "xmlns":   "http://www.w3.org/2000/svg",',
+			'        "width":   _format_float(width),',
+			'        "height":  _format_float(height),',
+			'        "viewBox": "0 {} {} {}".format(',
+			'            _format_float(-ascender),',
+			'            _format_float(width),',
+			'            _format_float(height)),',
+			'    })',
+			'    meta = ET.SubElement(svg, "metadata")',
+			'    ET.SubElement(meta, "glyphname").text = str(g.name)',
+			'    ET.SubElement(meta, "layername").text = str(lyr.name)',
+			'    ET.SubElement(meta, "ascender").text  = _format_float(ascender)',
+			'    ET.SubElement(meta, "descender").text = _format_float(descender)',
+			'    ET.SubElement(meta, "advance").text   = _format_float(width)',
+			'',
+			'    # Background rect covers the EM canvas in viewBox space.',
+			'    ET.SubElement(svg, "rect", {',
+			'        "x":      "0",',
+			'        "y":      _format_float(-ascender),',
+			'        "width":  _format_float(width),',
+			'        "height": _format_float(height),',
+			'        "fill":   "#FFFFFF",',
+			'    })',
+			'',
+			'    # layer_to_SVG emits a <g> with transform',
+			'    #   translate(-x_min, y_max) scale(1, -1)',
+			'    # Passing x_min=0, y_max=0 reduces that to a pure Y-flip',
+			'    # (scale(1,-1)), so path coordinates remain in font-native',
+			'    # form with the baseline at SVG y=0 — matching the OT-SVG',
+			'    # specification.',
+			'    group = layer_to_SVG(lyr, mode=cfg["mode"], scale=1.0,',
+			'                         x_min=0, y_min=descender, y_max=0)',
+			'    svg.append(group)',
+			'    return ET.tostring(svg, encoding="unicode")',
+			'',
+			'_fr_export_svg(glyph, _json.loads(_svg_cfg_json))'
 		].join('\n')) || '';
 	} catch (e) {
 		console.error('SVG export failed:', e);
@@ -708,42 +775,51 @@ FontRig.exportCurrentLayerAsSVG = function(mode) {
 	var layer = (typeof FontRig.getActiveLayer === 'function') ? FontRig.getActiveLayer() : null;
 	if (!layer) { alert('No active layer.'); return; }
 
-	var svg = FontRig._runSvgExport(mode, [layer.name]);
+	var m = FontRig._currentExportMetrics();
+	var svg = FontRig._runSvgExport(mode, layer.name, {
+		ascender:  m.ascender,
+		descender: m.descender,
+		advance:   (layer.width != null) ? layer.width : null
+	});
 	if (!svg) return;
 
-	var gName = FontRig._safeFileName(FontRig.state.glyphData.name || 'glyph');
-	var lName = FontRig._safeFileName(layer.name);
+	var gName  = FontRig._safeFileName(FontRig.state.glyphData.name || 'glyph');
+	var lName  = FontRig._safeFileName(layer.name);
 	var suffix = (mode === 'bw') ? '.svg' : '_debug.svg';
 	FontRig._downloadBlob(svg, gName + '-' + lName + suffix, 'image/svg+xml');
 };
 
 // Export every layer of the current glyph as a separate SVG file,
-// using the pattern "glyph_name-layer_name.svg". Prefers
-// showDirectoryPicker (single user action) and falls back to
-// sequential Blob downloads.
+// using the pattern "glyph_name-layer_name.svg". Each file uses the
+// font canvas (advance × ascender..descender). Prefers
+// showDirectoryPicker for a single user choice; falls back to
+// sequential blob downloads.
 FontRig.exportAllLayersAsSVG = async function(mode) {
 	if (!FontRig.state.glyphData) return;
 	var gd = FontRig.state.glyphData;
 	if (!gd.layers || gd.layers.length === 0) return;
 
+	var m = FontRig._currentExportMetrics();
 	var suffix = (mode === 'bw') ? '.svg' : '_debug.svg';
-	var gName = FontRig._safeFileName(gd.name || 'glyph');
+	var gName  = FontRig._safeFileName(gd.name || 'glyph');
 
-	// Build one SVG per layer up front.
 	var files = [];
 	for (var i = 0; i < gd.layers.length; i++) {
-		var lname = gd.layers[i].name;
-		var svg = FontRig._runSvgExport(mode, [lname]);
+		var lyr = gd.layers[i];
+		var svg = FontRig._runSvgExport(mode, lyr.name, {
+			ascender:  m.ascender,
+			descender: m.descender,
+			advance:   (lyr.width != null) ? lyr.width : null
+		});
 		if (svg) {
 			files.push({
-				name: gName + '-' + FontRig._safeFileName(lname) + suffix,
+				name: gName + '-' + FontRig._safeFileName(lyr.name) + suffix,
 				content: svg
 			});
 		}
 	}
 	if (files.length === 0) return;
 
-	// Prefer the directory picker so the user makes a single choice.
 	if (typeof window.showDirectoryPicker === 'function') {
 		try {
 			var dir = await window.showDirectoryPicker({ mode: 'readwrite' });
@@ -757,7 +833,6 @@ FontRig.exportAllLayersAsSVG = async function(mode) {
 		}
 	}
 
-	// Fallback: sequential downloads (browsers may surface a multi-file prompt).
 	for (var k = 0; k < files.length; k++) {
 		FontRig._downloadBlob(files[k].content, files[k].name, 'image/svg+xml');
 	}
