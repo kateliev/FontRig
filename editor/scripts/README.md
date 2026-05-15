@@ -19,6 +19,12 @@ Inside the panel's Python runtime you get a `glyph` global — the currently act
 
 When you click **Run**, output goes to the **Python panel** (the REPL) and the Python tab gets focus. The script's scope is the REPL's scope: any names it defines (functions, imports, variables) are reachable at the prompt, so you can keep interacting with the script's leftovers without re-running anything.
 
+## Live edits
+
+After you've used **Load Config** once, the panel remembers your scripts folder (the `FileSystemDirectoryHandle`, persisted in IndexedDB). On every subsequent **Run** the script is re-read fresh from that folder — so editing `playground.py` in your usual editor and clicking Run picks up the new code immediately, no re-Load needed.
+
+The first Run after a page reload may show a tiny browser prompt asking to re-grant read access to the folder; once granted it stays for the session. If the file has been moved or deleted, Run falls back to the cached source and logs the issue in the REPL.
+
 ```python
 # my_script.py
 from typerig.core.actions.node_actions import NodeActions

@@ -19,6 +19,17 @@ var STORAGE_KEY = 'fr-scripting-config-v1';
 var CONFIG_TYPE = 'fontrig-scripting-config';
 var CONFIG_VERSION = 1;
 
+// IndexedDB store for FileSystemDirectoryHandle. localStorage cannot
+// hold structured-clone-only types (handles), so we keep them here.
+var IDB_NAME      = 'fr-scripting';
+var IDB_STORE     = 'handles';
+var IDB_HANDLE_KEY = 'scripts-dir-handle';
+
+// In-memory cache of the live FileSystemDirectoryHandle. Repopulated
+// on panel mount (from IndexedDB) and replaced on Load Config.
+FontRig.ScriptingPanel = FontRig.ScriptingPanel || {};
+FontRig.ScriptingPanel._dirHandle = null;
+
 // Bundled scripting config. On first run (or after the user clears
 // localStorage) the panel fetches this JSON, resolves any `path`
 // references to inline source, and seeds the tree. Authors a working
@@ -61,6 +72,15 @@ FontRig.ScriptingPanel.mount = function (containerEl) {
 		}
 	});
 
+	// Right-click on empty tree space → context menu with the
+	// folder-management options (no row context).
+	tree.addEventListener('contextmenu', function (e) {
+		// Only handle bare-tree clicks; row handlers stopPropagation.
+		if (e.target !== tree) return;
+		e.preventDefault();
+		_openContextMenu(inst, e.clientX, e.clientY, { kind: 'empty' });
+	});
+
 	// -- Bottom action bar -----------------------------------------
 	var actions = document.createElement('div');
 	actions.className = 'scripting-panel__actions';
@@ -70,19 +90,12 @@ FontRig.ScriptingPanel.mount = function (containerEl) {
 	actions.style.padding = '6px';
 	actions.style.borderTop = '1px solid var(--border, #333)';
 
-	var btnRun        = FRWidget.Button('Run',          { icon: 'action_play', primary: true, compact: true, tooltip: 'Run selected script', onClick: function () { _runSelected(inst); } });
-	var btnNewFolder  = FRWidget.Button('New Folder',   { compact: true, tooltip: 'Create a new folder', onClick: function () { _createFolder(inst); } });
-	var btnDelFolder  = FRWidget.Button('Del Folder',   { compact: true, tooltip: 'Remove selected folder', onClick: function () { _removeFolder(inst); } });
-	var btnAddScript  = FRWidget.Button('Add Script',   { compact: true, tooltip: 'Add a .py script from disk', onClick: function () { _addScript(inst); } });
-	var btnDelScript  = FRWidget.Button('Del Script',   { compact: true, tooltip: 'Remove selected script', onClick: function () { _removeScript(inst); } });
-	var btnLoadCfg    = FRWidget.Button('Load Config',  { compact: true, tooltip: 'Load configuration from JSON', onClick: function () { _loadConfig(inst); } });
-	var btnSaveCfg    = FRWidget.Button('Save Config',  { compact: true, tooltip: 'Save configuration to JSON', onClick: function () { _saveConfig(inst); } });
+	// Run is primary; tree management lives in the right-click menu.
+	var btnRun     = FRWidget.Button('Run',         { icon: 'action_play', primary: true, compact: true, tooltip: 'Run selected script', onClick: function () { _runSelected(inst); } });
+	var btnLoadCfg = FRWidget.Button('Load Config', { compact: true, tooltip: 'Load configuration from JSON', onClick: function () { _loadConfig(inst); } });
+	var btnSaveCfg = FRWidget.Button('Save Config', { compact: true, tooltip: 'Save configuration to JSON', onClick: function () { _saveConfig(inst); } });
 
 	actions.appendChild(btnRun);
-	actions.appendChild(btnNewFolder);
-	actions.appendChild(btnDelFolder);
-	actions.appendChild(btnAddScript);
-	actions.appendChild(btnDelScript);
 	actions.appendChild(btnLoadCfg);
 	actions.appendChild(btnSaveCfg);
 	wrap.appendChild(actions);
@@ -99,12 +112,94 @@ FontRig.ScriptingPanel.mount = function (containerEl) {
 	if (!data._seeded) {
 		_seedFromBundle(inst);
 	}
+
+	// Quietly re-attach the user's scripts-folder handle from a
+	// previous session. Permission is requested lazily on Run, so
+	// this only restores the reference — no prompts on page load.
+	if (!FontRig.ScriptingPanel._dirHandle) {
+		_idbGet(IDB_HANDLE_KEY).then(function (handle) {
+			if (handle) FontRig.ScriptingPanel._dirHandle = handle;
+		});
+	}
 	return inst;
 };
 
 // -------------------------------------------------------------------
 // State persistence
 // -------------------------------------------------------------------
+// -------------------------------------------------------------------
+// IndexedDB: persist the scripts-folder handle
+// -------------------------------------------------------------------
+function _idb() {
+	return new Promise(function (resolve, reject) {
+		var req = indexedDB.open(IDB_NAME, 1);
+		req.onupgradeneeded = function () {
+			req.result.createObjectStore(IDB_STORE);
+		};
+		req.onsuccess = function () { resolve(req.result); };
+		req.onerror   = function () { reject(req.error); };
+	});
+}
+
+function _idbGet(key) {
+	return _idb().then(function (db) {
+		return new Promise(function (resolve) {
+			var tx = db.transaction(IDB_STORE, 'readonly');
+			var rq = tx.objectStore(IDB_STORE).get(key);
+			rq.onsuccess = function () { resolve(rq.result); };
+			rq.onerror   = function () { resolve(null); };
+		});
+	}).catch(function () { return null; });
+}
+
+function _idbPut(key, value) {
+	return _idb().then(function (db) {
+		return new Promise(function (resolve) {
+			var tx = db.transaction(IDB_STORE, 'readwrite');
+			tx.objectStore(IDB_STORE).put(value, key);
+			tx.oncomplete = function () { resolve(true); };
+			tx.onerror    = function () { resolve(false); };
+		});
+	}).catch(function () { return false; });
+}
+
+// -------------------------------------------------------------------
+// Live-from-disk read
+// -------------------------------------------------------------------
+// Re-read a script's source from the live directory handle. Returns
+// the fresh text, or null if no handle / no permission / not found.
+// Callers fall back to the cached `script.source` on null.
+function _readFromHandle(dirHandle, relPath) {
+	if (!dirHandle || !relPath) return Promise.resolve(null);
+	var parts = String(relPath).replace(/\\/g, '/').split('/').filter(Boolean);
+	if (parts.length === 0) return Promise.resolve(null);
+
+	var current = Promise.resolve(dirHandle);
+	for (var i = 0; i < parts.length - 1; i++) {
+		(function (name) {
+			current = current.then(function (h) { return h.getDirectoryHandle(name); });
+		})(parts[i]);
+	}
+	return current
+		.then(function (h) { return h.getFileHandle(parts[parts.length - 1]); })
+		.then(function (fh) { return fh.getFile(); })
+		.then(function (f) { return f.text(); })
+		.catch(function () { return null; });
+}
+
+// Ensure read permission on a stored handle. Returns Promise<bool>.
+// Re-prompts the user if needed (e.g., first Run after a reload).
+function _ensureReadPermission(handle) {
+	if (!handle) return Promise.resolve(false);
+	if (typeof handle.queryPermission !== 'function') return Promise.resolve(true);
+	return handle.queryPermission({ mode: 'read' }).then(function (state) {
+		if (state === 'granted') return true;
+		return handle.requestPermission({ mode: 'read' }).then(function (s) {
+			return s === 'granted';
+		});
+	}).catch(function () { return false; });
+}
+
 function _load() {
 	try {
 		var raw = localStorage.getItem(STORAGE_KEY);
@@ -278,6 +373,13 @@ function _renderFolder(inst, folder, folderIdx) {
 		folder.expanded = !(folder.expanded !== false);
 		_renderTree(inst);
 	});
+	header.addEventListener('contextmenu', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		inst._data.selection = { folderIdx: folderIdx, scriptIdx: null };
+		_renderTree(inst);
+		_openContextMenu(inst, e.clientX, e.clientY, { kind: 'folder', folderIdx: folderIdx });
+	});
 
 	// Drop target: accept dragged scripts
 	header.addEventListener('dragover', function (e) {
@@ -348,6 +450,14 @@ function _renderScript(inst, script, folderIdx, scriptIdx) {
 		inst._data.selection = { folderIdx: folderIdx, scriptIdx: scriptIdx };
 		_runSelected(inst);
 	});
+	row.addEventListener('contextmenu', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		inst._data.selection = { folderIdx: folderIdx, scriptIdx: scriptIdx };
+		_renderTree(inst);
+		_openContextMenu(inst, e.clientX, e.clientY,
+			{ kind: 'script', folderIdx: folderIdx, scriptIdx: scriptIdx });
+	});
 
 	row.addEventListener('dragstart', function (e) {
 		e.dataTransfer.effectAllowed = 'move';
@@ -366,6 +476,114 @@ function _renderScript(inst, script, folderIdx, scriptIdx) {
 }
 
 // -------------------------------------------------------------------
+// Context menu
+// -------------------------------------------------------------------
+// Lightweight, self-contained right-click menu. One menu lives in the
+// document body at a time; clicking outside or pressing Escape closes
+// it. The `ctx` argument carries enough information for each entry's
+// handler to act on the right row.
+function _openContextMenu(inst, x, y, ctx) {
+	_closeContextMenu();
+
+	var items = _menuItemsFor(inst, ctx);
+	if (!items || items.length === 0) return;
+
+	var menu = document.createElement('div');
+	menu.className = 'fr-context-menu';
+	menu.style.position = 'fixed';
+	menu.style.left = x + 'px';
+	menu.style.top  = y + 'px';
+	menu.style.minWidth = '180px';
+	menu.style.background = 'var(--bg-secondary, #1e1e1e)';
+	menu.style.border = '1px solid var(--border, #333)';
+	menu.style.borderRadius = '6px';
+	menu.style.padding = '4px 0';
+	menu.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
+	menu.style.zIndex = '10000';
+	menu.style.fontFamily = "'DM Sans', sans-serif";
+	menu.style.fontSize = '12px';
+	menu.style.userSelect = 'none';
+
+	for (var i = 0; i < items.length; i++) {
+		var item = items[i];
+		if (item === '-') {
+			var sep = document.createElement('div');
+			sep.style.height = '1px';
+			sep.style.background = 'var(--border-subtle, #2a2a2a)';
+			sep.style.margin = '4px 8px';
+			menu.appendChild(sep);
+			continue;
+		}
+		menu.appendChild(_menuItem(item));
+	}
+
+	document.body.appendChild(menu);
+	_currentMenu = menu;
+
+	// Clamp inside viewport
+	var rect = menu.getBoundingClientRect();
+	if (rect.right > window.innerWidth)   menu.style.left = (window.innerWidth - rect.width - 4) + 'px';
+	if (rect.bottom > window.innerHeight) menu.style.top  = (window.innerHeight - rect.height - 4) + 'px';
+
+	setTimeout(function () {
+		document.addEventListener('mousedown', _onDocClick, true);
+		document.addEventListener('keydown',  _onDocKey, true);
+	}, 0);
+}
+
+var _currentMenu = null;
+function _closeContextMenu() {
+	if (_currentMenu && _currentMenu.parentNode) _currentMenu.parentNode.removeChild(_currentMenu);
+	_currentMenu = null;
+	document.removeEventListener('mousedown', _onDocClick, true);
+	document.removeEventListener('keydown',  _onDocKey, true);
+}
+function _onDocClick(e) {
+	if (_currentMenu && !_currentMenu.contains(e.target)) _closeContextMenu();
+}
+function _onDocKey(e) {
+	if (e.key === 'Escape') _closeContextMenu();
+}
+
+function _menuItem(item) {
+	var el = document.createElement('div');
+	el.className = 'fr-context-menu__item';
+	el.style.padding = '5px 14px';
+	el.style.cursor = item.disabled ? 'default' : 'pointer';
+	el.style.color = item.disabled ? 'var(--text-dim, #666)' : 'var(--text-secondary, #ccc)';
+	el.style.whiteSpace = 'nowrap';
+	el.textContent = item.label;
+
+	if (!item.disabled) {
+		el.addEventListener('mouseenter', function () { el.style.background = 'var(--bg-hover, #2a2a2a)'; });
+		el.addEventListener('mouseleave', function () { el.style.background = ''; });
+		el.addEventListener('click', function () {
+			_closeContextMenu();
+			try { item.onClick && item.onClick(); }
+			catch (e) { console.warn('context menu action failed:', e); }
+		});
+	}
+	return el;
+}
+
+function _menuItemsFor(inst, ctx) {
+	var d = inst._data;
+	var hasFolder = ctx && (ctx.kind === 'folder' || ctx.kind === 'script');
+	var hasScript = ctx && ctx.kind === 'script';
+	var multipleFolders = (d.folders || []).length > 1;
+
+	return [
+		{ label: 'New folder',  onClick: function () { _createFolder(inst); } },
+		{ label: 'Del folder',  disabled: !hasFolder || !multipleFolders,
+		  onClick: function () { _removeFolder(inst); } },
+		'-',
+		{ label: 'Add script',  onClick: function () { _addScript(inst); } },
+		{ label: 'Del script',  disabled: !hasScript,
+		  onClick: function () { _removeScript(inst); } }
+	];
+}
+
+// -------------------------------------------------------------------
 // Actions
 // -------------------------------------------------------------------
 // Run the selected script and pipe its output into the Python REPL.
@@ -373,6 +591,11 @@ function _renderScript(inst, script, folderIdx, scriptIdx) {
 // any names the script defines (functions, imports, variables) are
 // immediately reachable from the REPL prompt — the session simply
 // continues there.
+//
+// Live-from-disk: if the script entry has a `path` and we hold a
+// directory handle from Load Config, re-read the source fresh on
+// every Run. This makes external edits (your usual editor) show up
+// the next time you click Run with no re-Load step.
 function _runSelected(inst) {
 	var sel = inst._data.selection;
 	if (!sel || sel.scriptIdx == null) {
@@ -387,27 +610,57 @@ function _runSelected(inst) {
 		return;
 	}
 
-	if (typeof FontRig.pushUndo === 'function') {
-		FontRig.pushUndo('Script: ' + script.name);
+	var dirHandle = FontRig.ScriptingPanel._dirHandle;
+	var relPath = script.path || (script.fileName ? script.fileName : null);
+	var canReread = !!(dirHandle && relPath);
+
+	var sourcePromise;
+	if (canReread) {
+		sourcePromise = _ensureReadPermission(dirHandle).then(function (granted) {
+			if (!granted) return script.source;
+			return _readFromHandle(dirHandle, relPath).then(function (fresh) {
+				if (fresh == null) return script.source;
+				// Sync the cache so localStorage and in-tree row stay current.
+				if (fresh !== script.source) {
+					script.source = fresh;
+					delete script._missing;
+					_save(inst);
+				}
+				return fresh;
+			});
+		});
+	} else {
+		sourcePromise = Promise.resolve(script.source);
 	}
 
-	// Echo the run as an input line in the REPL so the transcript reads
-	// linearly with whatever the user types next.
-	if (FontRig.PythonPanel && typeof FontRig.PythonPanel.appendToActive === 'function') {
-		FontRig.PythonPanel.appendToActive('# ▶ Running: ' + script.name, 'input');
-	}
+	sourcePromise.then(function (source) {
+		if (typeof source !== 'string' || source.length === 0) {
+			_log(inst, 'Script source is empty (' + script.name + ').', 'error');
+			return;
+		}
 
-	var res = FontRig.pyBridge.run(script.source);
-	if (res) {
-		if (res.output) _log(inst, res.output, 'output');
-		if (res.error)  _log(inst, res.error,  'error');
-	}
+		if (typeof FontRig.pushUndo === 'function') {
+			FontRig.pushUndo('Script: ' + script.name);
+		}
 
-	// Switch focus to the Python panel so the user can keep interacting
-	// with whatever the script left in scope.
-	if (FontRig.PythonPanel && typeof FontRig.PythonPanel.focusActive === 'function') {
-		FontRig.PythonPanel.focusActive();
-	}
+		// Echo the run as an input line in the REPL so the transcript
+		// reads linearly with whatever the user types next.
+		if (FontRig.PythonPanel && typeof FontRig.PythonPanel.appendToActive === 'function') {
+			FontRig.PythonPanel.appendToActive('# ▶ Running: ' + script.name, 'input');
+		}
+
+		var res = FontRig.pyBridge.run(source);
+		if (res) {
+			if (res.output) _log(inst, res.output, 'output');
+			if (res.error)  _log(inst, res.error,  'error');
+		}
+
+		// Switch focus to the Python panel so the user can keep
+		// interacting with whatever the script left in scope.
+		if (FontRig.PythonPanel && typeof FontRig.PythonPanel.focusActive === 'function') {
+			FontRig.PythonPanel.focusActive();
+		}
+	});
 }
 
 function _createFolder(inst) {
@@ -554,7 +807,12 @@ function _loadConfig(inst) {
 		if (needsDir) {
 			_log(inst, 'Select the folder containing your scripts…', 'info');
 			fetcherPromise = window.showDirectoryPicker({ mode: 'read' })
-				.then(_dirHandleFetcher);
+				.then(function (handle) {
+					// Persist for live re-reads across this session and reloads.
+					FontRig.ScriptingPanel._dirHandle = handle;
+					_idbPut(IDB_HANDLE_KEY, handle);
+					return _dirHandleFetcher(handle);
+				});
 		} else {
 			fetcherPromise = Promise.resolve(function () { return null; });
 		}
