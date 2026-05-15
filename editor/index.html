@@ -30,9 +30,20 @@
 				<div class="tb-menu-sep"></div>
 				<div class="tb-menu-item" id="btn-save"><span class="tri">file_save</span>Save<span class="tb-shortcut">Ctrl+S</span></div>
 				<div class="tb-menu-sep"></div>
-				<div class="tb-menu-item" id="btn-export-svg-bw"><span class="tri">file_save</span>Export &rarr; SVG (BW)&hellip;</div>
-				<div class="tb-menu-item" id="btn-export-svg-color"><span class="tri">file_save</span>Export &rarr; SVG (Color debug)&hellip;</div>
-				<div class="tb-menu-item disabled" id="btn-import-svg" title="Not yet implemented"><span class="tri">file_open</span>Import &rarr; SVG&hellip;</div>
+				<div class="tb-menu-item tb-submenu"><span class="tri">file_save</span>Export<span class="tb-submenu-arrow">&#9656;</span>
+					<div class="tb-dropdown-menu tb-submenu-menu">
+						<div class="tb-menu-item" id="btn-export-svg-layer-bw"><span class="tri">file_save</span>SVG &rarr; Current Layer</div>
+						<div class="tb-menu-item" id="btn-export-svg-layer-color"><span class="tri">file_save</span>SVG &rarr; Current Layer (Debug color)</div>
+						<div class="tb-menu-sep"></div>
+						<div class="tb-menu-item" id="btn-export-svg-all-bw"><span class="tri">file_save</span>SVG &rarr; All layers&hellip;</div>
+						<div class="tb-menu-item" id="btn-export-svg-all-color"><span class="tri">file_save</span>SVG &rarr; All layers (Debug color)&hellip;</div>
+					</div>
+				</div>
+				<div class="tb-menu-item tb-submenu"><span class="tri">file_open</span>Import<span class="tb-submenu-arrow">&#9656;</span>
+					<div class="tb-dropdown-menu tb-submenu-menu">
+						<div class="tb-menu-item disabled" id="btn-import-svg" title="Not yet implemented"><span class="tri">file_open</span>SVG&hellip;</div>
+					</div>
+				</div>
 			</div>
 		</div>
 

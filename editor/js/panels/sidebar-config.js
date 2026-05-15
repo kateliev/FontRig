@@ -163,7 +163,7 @@ FontRig.SidebarConfig.defaults = {
 			{ id: 'python',     active: true },
 			{ id: 'sonification', active: true },
 			{ id: 'ai-agent',   active: false },
-			{ id: 'scripting',  active: false },
+			{ id: 'scripting',  active: true },
 			{ id: 'undo',       active: false },
 			{ id: 'help',       active: true },
 		],

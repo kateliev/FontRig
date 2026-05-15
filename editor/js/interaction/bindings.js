@@ -41,17 +41,10 @@ FontRig.actions = {
 		}
 	},
 
-	exportSvgBW: function() {
-		if (typeof FontRig.exportCurrentGlyphAsSVG === 'function') {
-			FontRig.exportCurrentGlyphAsSVG('bw');
-		}
-	},
-
-	exportSvgColor: function() {
-		if (typeof FontRig.exportCurrentGlyphAsSVG === 'function') {
-			FontRig.exportCurrentGlyphAsSVG('color');
-		}
-	},
+	exportSvgLayerBW:    function() { if (typeof FontRig.exportCurrentLayerAsSVG === 'function') FontRig.exportCurrentLayerAsSVG('bw'); },
+	exportSvgLayerColor: function() { if (typeof FontRig.exportCurrentLayerAsSVG === 'function') FontRig.exportCurrentLayerAsSVG('color'); },
+	exportSvgAllBW:      function() { if (typeof FontRig.exportAllLayersAsSVG    === 'function') FontRig.exportAllLayersAsSVG('bw'); },
+	exportSvgAllColor:   function() { if (typeof FontRig.exportAllLayersAsSVG    === 'function') FontRig.exportAllLayersAsSVG('color'); },
 
 	// -- Undo / Redo ---
 	undo: function() {
@@ -341,8 +334,10 @@ FontRig.toolbarMap = [
 	{ id: 'btn-new-font',  action: 'newFont',  desc: 'Create new .trfont folder' },
 	{ id: 'btn-new-glyph', action: 'newGlyph', desc: 'Add a new glyph to the open font' },
 	{ id: 'btn-save',    action: 'saveFile',  desc: 'Save .trglyph file' },
-	{ id: 'btn-export-svg-bw',    action: 'exportSvgBW',    desc: 'Export current glyph as SVG (BW)' },
-	{ id: 'btn-export-svg-color', action: 'exportSvgColor', desc: 'Export current glyph as SVG (color-separated debug)' },
+	{ id: 'btn-export-svg-layer-bw',    action: 'exportSvgLayerBW',    desc: 'Export current layer as SVG' },
+	{ id: 'btn-export-svg-layer-color', action: 'exportSvgLayerColor', desc: 'Export current layer as SVG (debug color)' },
+	{ id: 'btn-export-svg-all-bw',      action: 'exportSvgAllBW',      desc: 'Export all layers as SVG files' },
+	{ id: 'btn-export-svg-all-color',   action: 'exportSvgAllColor',   desc: 'Export all layers as SVG files (debug color)' },
 	{ id: 'btn-fit',     action: 'fitToView', desc: 'Fit glyph to view' },
 
 	// Toggle buttons

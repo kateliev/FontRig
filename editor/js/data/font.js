@@ -647,37 +647,118 @@ FontRig.createNewGlyph = async function() {
 	await FontRig.switchGlyph(cfg.name);
 };
 
-// -- Export current glyph as SVG ------------------------------------
-// mode: 'bw' (black filled, type-design output) or 'color' (per-contour debug)
-FontRig.exportCurrentGlyphAsSVG = function(mode) {
-	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
-		alert('Python runtime is not ready yet.');
-		return;
-	}
-	if (!FontRig.state.glyphData) return;
+// -- SVG export helpers ---------------------------------------------
+FontRig._safeFileName = function(s) {
+	return String(s || '').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
+};
 
-	FontRig.pyBridge.syncToPython();
-
-	var svg;
-	try {
-		svg = FontRig.pyBridge.pyodide.runPython(
-			'from typerig.core.fileio.svgio import glyph_to_SVG\n' +
-			'glyph_to_SVG(glyph, mode="' + (mode === 'bw' ? 'bw' : 'color') + '") if glyph is not None else ""'
-		);
-	} catch (e) {
-		console.error('SVG export failed:', e);
-		alert('SVG export failed: ' + e.message);
-		return;
-	}
-	if (!svg) return;
-
-	var name = (FontRig.state.glyphData && FontRig.state.glyphData.name) || 'glyph';
-	var suffix = (mode === 'bw') ? '.svg' : '_debug.svg';
-	var blob = new Blob([svg], { type: 'image/svg+xml' });
+FontRig._downloadBlob = function(content, filename, mime) {
+	var blob = new Blob([content], { type: mime || 'application/octet-stream' });
 	var url = URL.createObjectURL(blob);
 	var a = document.createElement('a');
 	a.href = url;
-	a.download = name + suffix;
+	a.download = filename;
 	a.click();
 	URL.revokeObjectURL(url);
+};
+
+// Run a Python expression that builds an SVG string for a subset of
+// glyph.layers. `layerNames` is a JS array of names to include;
+// pass null for "all layers". Returns the SVG string or '' on failure.
+FontRig._runSvgExport = function(mode, layerNames) {
+	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
+		alert('Python runtime is not ready yet.');
+		return '';
+	}
+	FontRig.pyBridge.syncToPython();
+	try {
+		FontRig.pyBridge.pyodide.globals.set('_svg_mode', (mode === 'bw') ? 'bw' : 'color');
+		FontRig.pyBridge.pyodide.globals.set('_svg_layer_names_json',
+			layerNames ? JSON.stringify(layerNames) : '');
+		return FontRig.pyBridge.pyodide.runPython([
+			'from typerig.core.fileio.svgio import glyph_to_SVG',
+			'import json as _json',
+			'def _fr_export_svg(g, mode, names):',
+			'    if g is None: return ""',
+			'    saved = list(g.data)',
+			'    try:',
+			'        if names is None:',
+			'            return glyph_to_SVG(g, mode=mode)',
+			'        wanted = set(names)',
+			'        kept = [l for l in saved if l.name in wanted]',
+			'        if not kept:',
+			'            return ""',
+			'        g.data[:] = kept',
+			'        return glyph_to_SVG(g, mode=mode)',
+			'    finally:',
+			'        g.data[:] = saved',
+			'_names = _json.loads(_svg_layer_names_json) if _svg_layer_names_json else None',
+			'_fr_export_svg(glyph, _svg_mode, _names)'
+		].join('\n')) || '';
+	} catch (e) {
+		console.error('SVG export failed:', e);
+		alert('SVG export failed: ' + e.message);
+		return '';
+	}
+};
+
+// Export the currently active layer as a single SVG file.
+FontRig.exportCurrentLayerAsSVG = function(mode) {
+	if (!FontRig.state.glyphData) return;
+	var layer = (typeof FontRig.getActiveLayer === 'function') ? FontRig.getActiveLayer() : null;
+	if (!layer) { alert('No active layer.'); return; }
+
+	var svg = FontRig._runSvgExport(mode, [layer.name]);
+	if (!svg) return;
+
+	var gName = FontRig._safeFileName(FontRig.state.glyphData.name || 'glyph');
+	var lName = FontRig._safeFileName(layer.name);
+	var suffix = (mode === 'bw') ? '.svg' : '_debug.svg';
+	FontRig._downloadBlob(svg, gName + '-' + lName + suffix, 'image/svg+xml');
+};
+
+// Export every layer of the current glyph as a separate SVG file,
+// using the pattern "glyph_name-layer_name.svg". Prefers
+// showDirectoryPicker (single user action) and falls back to
+// sequential Blob downloads.
+FontRig.exportAllLayersAsSVG = async function(mode) {
+	if (!FontRig.state.glyphData) return;
+	var gd = FontRig.state.glyphData;
+	if (!gd.layers || gd.layers.length === 0) return;
+
+	var suffix = (mode === 'bw') ? '.svg' : '_debug.svg';
+	var gName = FontRig._safeFileName(gd.name || 'glyph');
+
+	// Build one SVG per layer up front.
+	var files = [];
+	for (var i = 0; i < gd.layers.length; i++) {
+		var lname = gd.layers[i].name;
+		var svg = FontRig._runSvgExport(mode, [lname]);
+		if (svg) {
+			files.push({
+				name: gName + '-' + FontRig._safeFileName(lname) + suffix,
+				content: svg
+			});
+		}
+	}
+	if (files.length === 0) return;
+
+	// Prefer the directory picker so the user makes a single choice.
+	if (typeof window.showDirectoryPicker === 'function') {
+		try {
+			var dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+			for (var j = 0; j < files.length; j++) {
+				await FontRig._writeFile(dir, files[j].name, files[j].content);
+			}
+			return;
+		} catch (e) {
+			if (e && e.name === 'AbortError') return;
+			console.warn('Directory picker unavailable, falling back to downloads:', e);
+		}
+	}
+
+	// Fallback: sequential downloads (browsers may surface a multi-file prompt).
+	for (var k = 0; k < files.length; k++) {
+		FontRig._downloadBlob(files[k].content, files[k].name, 'image/svg+xml');
+	}
 };
