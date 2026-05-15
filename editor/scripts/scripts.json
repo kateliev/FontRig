@@ -1,0 +1,17 @@
+{
+	"_type": "fontrig-scripting-config",
+	"_version": 1,
+	"_comment": "Bundled FontRig scripting config. Load Config in the Scripts panel accepts this exact shape. Scripts may carry either an inline `source` string (what Save Config writes by default) or a `path` reference to a .py file (what this bundle uses so the playground stays editable on disk).",
+	"folders": [
+		{
+			"name": "scripts",
+			"expanded": true,
+			"scripts": [
+				{
+					"name": "playground",
+					"path": "scripts/playground.py"
+				}
+			]
+		}
+	]
+}
