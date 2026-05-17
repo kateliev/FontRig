@@ -46,10 +46,13 @@ FontRig._getWidgetRect = function(advW, verticalOffset) {
 	var wrapRect = FontRig.dom.canvasWrap.getBoundingClientRect();
 	var state = FontRig.state;
 
-	// Fixed size: half of advance width
+	// Fixed size: half of advance width, capped to match CSS max-width
+	// so centering stays correct at high zoom (CSS clamps the rendered
+	// width; using uncapped widgetW for centering would shift left).
 	var widgetW = 360 * state.zoom;
 	var minW = 80;
-	widgetW = Math.max(minW, widgetW);
+	var maxW = 450;
+	widgetW = Math.max(minW, Math.min(maxW, widgetW));
 
 	// Center on middle of glyph (advance / 2)
 	var midScreenX = (lsbScreen.x + rsbScreen.x) / 2;
@@ -365,13 +368,15 @@ FontRig._positionMultiViewWidget = function() {
 	// Position at bottom center
 	var widgetW = Math.min(400, w * 0.4);
 	var widgetX = w / 2 - widgetW / 2;
-	var widgetY = h - 90;
 
-	// Position the main editable widget
+	// Position the main editable widget. Make it visible first so we
+	// can measure offsetHeight, then pin its bottom 20px from the
+	// canvas-wrap bottom — matching single-view's formula so the
+	// vertical position is consistent across view modes.
 	widget.style.left = widgetX + 'px';
-	widget.style.top = widgetY + 'px';
 	widget.style.width = widgetW + 'px';
 	widget.classList.add('visible');
+	widget.style.top = (h - widget.offsetHeight - 20) + 'px';
 
 	// Populate with current glyph data
 	var layer = FontRig.getActiveLayer();

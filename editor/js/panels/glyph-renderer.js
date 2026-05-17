@@ -208,7 +208,24 @@ FontRig.GlyphRenderer._processItem = async function(item) {
 
 	FontRig.GlyphRenderer.render(canvas, glyphData, { glyphName: name });
 
+	// Stash the glyph's mark color so the glyph-widget panel can tint
+	// list/grid cells without having to reload the .trglyph file.
+	if (!FontRig.glyphMarks) FontRig.glyphMarks = {};
+	FontRig.glyphMarks[name] = glyphData.mark || '';
+
+	// Retint the owning entry now that we know the real mark
+	if (entryEl && FontRig.GlyphWidgetPanel && FontRig.GlyphWidgetPanel.applyMarkTint) {
+		FontRig.GlyphWidgetPanel.applyMarkTint(entryEl, glyphData.mark || '');
+	}
+
 	if (entryEl) entryEl.dataset.thumbLoaded = 'true';
+};
+
+// -- Clear the mark cache (call when font changes) -------------------
+var _origClearCache = FontRig.GlyphRenderer.clearCache;
+FontRig.GlyphRenderer.clearCache = function() {
+	_origClearCache();
+	FontRig.glyphMarks = {};
 };
 
 })();

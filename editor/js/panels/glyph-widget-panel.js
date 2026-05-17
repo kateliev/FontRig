@@ -354,13 +354,23 @@ function _applyMarkTint(el, mark) {
 }
 
 // -- Get mark for a glyph name (from cache) --------------------------
+// Looks in: edit cache, active glyph, then the lightweight thumbnail
+// mark cache populated by the glyph renderer as it loads .trglyph files
+// for lazy thumbnails. This lets unvisited glyphs be tinted too.
 function _getGlyphMark(name) {
 	var cacheEntry = FontRig.glyphCache ? FontRig.glyphCache.get(name) : null;
 	if (cacheEntry && cacheEntry.glyphData) return cacheEntry.glyphData.mark || '';
 	var state = FontRig.state;
 	if (state.glyphData && state.glyphData.name === name) return state.glyphData.mark || '';
+	if (FontRig.glyphMarks && Object.prototype.hasOwnProperty.call(FontRig.glyphMarks, name)) {
+		return FontRig.glyphMarks[name] || '';
+	}
 	return '';
 }
+
+// Exposed for the thumbnail renderer to retint an entry as soon as its
+// glyph is parsed (avoids waiting until the user opens the glyph).
+FontRig.GlyphWidgetPanel.applyMarkTint = _applyMarkTint;
 
 // -- Update mark tint for a single glyph by name --------------------
 function _updateMarkTint(inst, name) {

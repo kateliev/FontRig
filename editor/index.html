@@ -25,7 +25,7 @@
 				<div class="tb-menu-item" id="btn-new-font"><span class="tri">file</span>New Font&hellip;</div>
 				<div class="tb-menu-item" id="btn-new-glyph"><span class="tri">node_add</span>New Glyph&hellip;</div>
 				<div class="tb-menu-sep"></div>
-				<div class="tb-menu-item" id="btn-load"><span class="tri">file_open</span>Load File<span class="tb-shortcut">Ctrl+O</span></div>
+				<div class="tb-menu-item" id="btn-load"><span class="tri">file_open</span>Open Glyph<span class="tb-shortcut">Ctrl+O</span></div>
 				<div class="tb-menu-item" id="btn-open-font"><span class="tri">file</span>Open Font<span class="tb-shortcut">Ctrl+Shift+O</span></div>
 				<div class="tb-menu-sep"></div>
 				<div class="tb-menu-item" id="btn-save"><span class="tri">file_save</span>Save<span class="tb-shortcut">Ctrl+S</span></div>
@@ -99,6 +99,11 @@
 				<div class="tb-menu-item" id="btn-movement-prefs"><span class="tri">keyboard_arows</span>Movement</div>
 			</div>
 		</div>
+
+		<button class="tb-btn" id="btn-py-init" title="Initialize / Reset Python runtime">
+			<span class="tri">action_play</span>
+			Python
+		</button>
 
 		<div class="separator"></div>
 
@@ -185,13 +190,6 @@
 			<span class="tri">panel_right</span>
 			Right panel
 		</button>
-
-		<button class="tb-btn" id="btn-py-init" title="Initialize / Reset Python runtime">
-			<span class="tri">action_play</span>
-			Python
-		</button>
-
-		<div class="separator"></div>
 
 		<button class="tb-btn" id="btn-workplane" title="Open a new workplane window">
 			<span class="tri">select_window</span>

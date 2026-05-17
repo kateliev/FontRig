@@ -386,6 +386,7 @@ body {
 	backdrop-filter: blur(4px);
 	pointer-events: auto;
 	min-width: 100px;
+	max-width: 450px;
 }
 
 .glyph-widget.visible { display: flex; }
