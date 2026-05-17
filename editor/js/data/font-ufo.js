@@ -15,11 +15,11 @@
 
 FontRig._ufoRequirePy = function() {
 	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
-		alert('Python runtime is not ready yet.\nWait for the bottom-status "Ready." then try again.');
+		FontRig.showMessage('Not ready', 'Python runtime is not ready yet.\nWait for the bottom-status "Ready." then try again.');
 		return false;
 	}
 	if (!FontRig.pyBridge.pyodide.globals.get('UfoConverter')) {
-		alert('UFO support failed to load. Check the browser console for import errors.');
+		FontRig.showMessage('UFO not loaded', 'UFO support failed to load. Check the browser console for import errors.');
 		return false;
 	}
 	return true;
@@ -54,6 +54,103 @@ FontRig._runPythonCaptured = function(code) {
 		);
 	} catch (_) {}
 	return { ok: error == null, output: output, error: error };
+};
+
+// -- Copy-friendly error / message dialog --------------------------
+// Replacement for window.alert. The body sits in a readonly textarea
+// so the user can select-all + copy (Ctrl+A, Ctrl+C) and paste the
+// full text. Scrolls for long output. A dedicated Copy button copies
+// to the clipboard with one click.
+FontRig.showMessage = function(title, body) {
+	body = (body == null) ? '' : String(body);
+
+	// Build once, reuse for stacked messages (last one wins).
+	if (!FontRig._msgEl) {
+		var overlay = document.createElement('div');
+		overlay.style.cssText = [
+			'position:fixed', 'inset:0', 'z-index:100000',
+			'background:rgba(0,0,0,0.55)',
+			'display:flex', 'align-items:center', 'justify-content:center',
+			'font:13px/1.4 sans-serif',
+		].join(';');
+
+		var box = document.createElement('div');
+		box.style.cssText = [
+			'background:#1d1f22', 'color:#e6e6e6',
+			'border:1px solid #444', 'border-radius:6px',
+			'padding:16px 18px',
+			'min-width:480px', 'max-width:80vw',
+			'max-height:80vh',
+			'display:flex', 'flex-direction:column', 'gap:10px',
+			'box-shadow:0 8px 32px rgba(0,0,0,0.5)',
+		].join(';');
+
+		var titleEl = document.createElement('div');
+		titleEl.style.cssText = 'font-weight:600;font-size:14px;';
+
+		var ta = document.createElement('textarea');
+		ta.readOnly = true;
+		ta.spellcheck = false;
+		ta.style.cssText = [
+			'flex:1', 'min-height:120px', 'max-height:60vh',
+			'width:100%', 'box-sizing:border-box',
+			'background:#111', 'color:#e6e6e6',
+			'border:1px solid #333', 'border-radius:4px',
+			'padding:10px',
+			'font:12px/1.45 ui-monospace,Consolas,monospace',
+			'resize:vertical', 'white-space:pre',
+		].join(';');
+
+		var btnRow = document.createElement('div');
+		btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+
+		var copyBtn = document.createElement('button');
+		copyBtn.textContent = 'Copy';
+		copyBtn.style.cssText = 'padding:6px 12px;cursor:pointer;';
+		copyBtn.onclick = function() {
+			ta.select();
+			try {
+				if (navigator.clipboard && navigator.clipboard.writeText) {
+					navigator.clipboard.writeText(ta.value);
+				} else {
+					document.execCommand('copy');
+				}
+				copyBtn.textContent = 'Copied!';
+				setTimeout(function() { copyBtn.textContent = 'Copy'; }, 1200);
+			} catch (e) {
+				copyBtn.textContent = 'Copy failed';
+				setTimeout(function() { copyBtn.textContent = 'Copy'; }, 1500);
+			}
+		};
+
+		var closeBtn = document.createElement('button');
+		closeBtn.textContent = 'Close';
+		closeBtn.style.cssText = 'padding:6px 12px;cursor:pointer;';
+		closeBtn.onclick = function() {
+			if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+		};
+		overlay.addEventListener('keydown', function(e) {
+			if (e.key === 'Escape') closeBtn.click();
+		});
+
+		btnRow.appendChild(copyBtn);
+		btnRow.appendChild(closeBtn);
+		box.appendChild(titleEl);
+		box.appendChild(ta);
+		box.appendChild(btnRow);
+		overlay.appendChild(box);
+
+		FontRig._msgEl = {
+			overlay: overlay, title: titleEl, ta: ta, close: closeBtn,
+		};
+	}
+
+	var m = FontRig._msgEl;
+	m.title.textContent = title || 'Message';
+	m.ta.value = body;
+	if (!m.overlay.parentNode) document.body.appendChild(m.overlay);
+	// Focus the textarea so Ctrl+A / Ctrl+C work immediately.
+	setTimeout(function() { m.ta.focus(); m.ta.setSelectionRange(0, 0); }, 0);
 };
 
 FontRig._ufoStatus = function(msg) {
@@ -155,21 +252,15 @@ FontRig._stageFontToMemfs = async function(memfsPath) {
 	FontRig.pyFs.writeText(memfsPath + '/font.xml', fontXml);
 
 	// --- glyphs.xml manifest
-	// Re-mangle filenames first (case-safe; mirrors UFO's
-	// userNameToFileName) so MEMFS writes don't collide between
-	// upper/lower-case glyph names. Then regenerate glyphs.xml from
-	// the live manifest so staged order matches the editor's panel.
-	var manifest  = FontRig.font.manifest || [];
-	FontRig._remangleManifestPaths(manifest);
-	var glyphsXml = FontRig._buildGlyphsXmlFromManifest(manifest);
+	// Do NOT re-mangle here: Pyodide MEMFS is POSIX (case-sensitive),
+	// so A.trglyph and a.trglyph are distinct files; and mangling
+	// would invalidate the dirHandle paths we use below to read
+	// clean glyphs from the source folder. Just regenerate glyphs.xml
+	// from the live manifest so staged order matches the editor's
+	// panel. Filename mangling is applied later, only in Save As,
+	// which writes to a real (potentially case-insensitive) FS.
+	var glyphsXml = FontRig._buildGlyphsXmlFromManifest(FontRig.font.manifest || []);
 	FontRig.pyFs.writeText(memfsPath + '/glyphs.xml', glyphsXml);
-	// Keep manifestIndex consistent with the (possibly renamed) paths.
-	var stIdx = {};
-	for (var si = 0; si < manifest.length; si++) {
-		var se = manifest[si];
-		stIdx[se.alias || se.name] = se;
-	}
-	FontRig.font.manifestIndex = stIdx;
 
 	// --- optional sibling features.fea
 	try {
@@ -294,15 +385,16 @@ FontRig._populateFromMemfsTrfont = async function(memfsPath, displayLabel) {
 	}
 };
 
-// -- Show captured Python output in a small alert ------------------
+// -- Show captured Python output in a copy-friendly dialog ---------
 FontRig._ufoShowResult = function(title, result, extraText) {
-	var msg = title;
-	if (extraText) msg += '\n\n' + extraText;
-	if (result.error) msg += '\n\nError: ' + result.error;
+	var body = '';
+	if (extraText)                      body += extraText + '\n\n';
+	if (result.error)                   body += 'Error:\n' + result.error + '\n\n';
 	if (result.output && result.output.trim()) {
-		msg += '\n\n--- Python output ---\n' + result.output.trim();
+		body += '--- Python output ---\n' + result.output.trim() + '\n';
 	}
-	alert(msg);
+	if (!body) body = '(no details)';
+	FontRig.showMessage(title, body);
 };
 
 
@@ -321,7 +413,7 @@ FontRig.loadDesignspace = async function() {
 	try {
 		dirHandle = await window.showDirectoryPicker({ mode: 'read' });
 	} catch (e) {
-		if (e.name !== 'AbortError') alert('Pick folder failed: ' + e.message);
+		if (e.name !== 'AbortError') FontRig.showMessage('Pick folder failed', String(e && e.stack || e));
 		return;
 	}
 
@@ -365,7 +457,7 @@ FontRig.loadDesignspace = async function() {
 		FontRig._ufoStatus('Loaded ' + dsName + ' (in-memory).');
 		if (result.output && result.output.trim()) console.log('[UFO load]\n' + result.output);
 	} catch (e) {
-		alert('Load failed: ' + e.message);
+		FontRig.showMessage('Load failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Load failed.');
 	} finally {
 		FontRig._ufoSpinner.hide();
@@ -378,7 +470,7 @@ FontRig.loadDesignspace = async function() {
 // ===================================================================
 FontRig.saveDesignspace = async function() {
 	if (!FontRig._ufoRequirePy()) return;
-	if (!FontRig.font) { alert('No font is open.'); return; }
+	if (!FontRig.font) { FontRig.showMessage('No font', 'No font is open.'); return; }
 
 	// Stem from family name. Single directory pick — the .designspace
 	// and the sibling .ufo folders are written into the chosen folder.
@@ -390,7 +482,7 @@ FontRig.saveDesignspace = async function() {
 	try {
 		outHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
 	} catch (e) {
-		if (e.name !== 'AbortError') alert('Pick output folder failed: ' + e.message);
+		if (e.name !== 'AbortError') FontRig.showMessage('Pick output folder failed', String(e && e.stack || e));
 		return;
 	}
 
@@ -422,7 +514,7 @@ FontRig.saveDesignspace = async function() {
 		FontRig._ufoStatus('Saved ' + dsName + '.');
 		if (result.output && result.output.trim()) console.log('[UFO save]\n' + result.output);
 	} catch (e) {
-		alert('Save failed: ' + e.message);
+		FontRig.showMessage('Save failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Save failed.');
 	} finally {
 		FontRig._ufoSpinner.hide();
@@ -438,9 +530,9 @@ FontRig.saveDesignspace = async function() {
 // hand off to ufo_helpers.export_selected_masters_to_ufo.
 FontRig.exportUfoMasterDialog = async function() {
 	if (!FontRig._ufoRequirePy()) return;
-	if (!FontRig.font) { alert('No font is open.'); return; }
+	if (!FontRig.font) { FontRig.showMessage('No font', 'No font is open.'); return; }
 	var masters = FontRig.font.masters || [];
-	if (!masters.length) { alert('Font has no masters defined.'); return; }
+	if (!masters.length) { FontRig.showMessage('No masters', 'Font has no masters defined.'); return; }
 
 	// Build the modal.
 	var overlay = document.createElement('div');
@@ -494,7 +586,7 @@ FontRig.exportUfoMasterDialog = async function() {
 	try {
 		outHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
 	} catch (e) {
-		if (e.name !== 'AbortError') alert('Pick output folder failed: ' + e.message);
+		if (e.name !== 'AbortError') FontRig.showMessage('Pick output folder failed', String(e && e.stack || e));
 		return;
 	}
 
@@ -527,7 +619,7 @@ FontRig.exportUfoMasterDialog = async function() {
 		FontRig._ufoStatus('Exported ' + picks.length + ' master(s).');
 		if (result.output && result.output.trim()) console.log('[UFO export]\n' + result.output);
 	} catch (e) {
-		alert('Export failed: ' + e.message);
+		FontRig.showMessage('Export failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Export failed.');
 	} finally {
 		FontRig._ufoSpinner.hide();
@@ -540,17 +632,17 @@ FontRig.exportUfoMasterDialog = async function() {
 // ===================================================================
 FontRig.importUfoAsMasterDialog = async function() {
 	if (!FontRig._ufoRequirePy()) return;
-	if (!FontRig.font) { alert('Open a font first — Import UFO merges into the open font.'); return; }
+	if (!FontRig.font) { FontRig.showMessage('No font', 'Open a font first — Import UFO merges into the open font.'); return; }
 
 	var ufoHandle;
 	try {
 		ufoHandle = await window.showDirectoryPicker({ mode: 'read' });
 	} catch (e) {
-		if (e.name !== 'AbortError') alert('Pick folder failed: ' + e.message);
+		if (e.name !== 'AbortError') FontRig.showMessage('Pick folder failed', String(e && e.stack || e));
 		return;
 	}
 	if (!/\.ufo$/i.test(ufoHandle.name)) {
-		alert('Pick a folder whose name ends in .ufo.');
+		FontRig.showMessage('Wrong folder', 'Pick a folder whose name ends in .ufo.');
 		return;
 	}
 
@@ -595,7 +687,7 @@ FontRig.importUfoAsMasterDialog = async function() {
 		FontRig._ufoStatus('Merged "' + newName + '" as new master.');
 		if (result.output && result.output.trim()) console.log('[UFO merge]\n' + result.output);
 	} catch (e) {
-		alert('Merge failed: ' + e.message);
+		FontRig.showMessage('Merge failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Merge failed.');
 	} finally {
 		FontRig._ufoSpinner.hide();

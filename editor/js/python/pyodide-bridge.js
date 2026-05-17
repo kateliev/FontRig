@@ -297,6 +297,19 @@ FontRig.pyBridge = {
 				'try:',
 				'    from typerig.core.fileio.trfont import TrFontIO',
 				'    from typerig.core.fileio.ufo    import UfoConverter',
+				'    # Hot-patch collect_font_lib: TR\'s XML parser auto-coerces',
+				'    # digit-only glyph names to int/float (e.g. "7" -> 7.0), and',
+				'    # ufoLib.writeLib rejects non-str entries in public.glyphOrder.',
+				'    # Force every entry to str(). Safe even if upstream already',
+				'    # coerces. Remove once TR core fix lands on the fetched branch.',
+				'    import typerig.core.fileio.ufo as _trufo_mod',
+				'    _orig_collect_font_lib = _trufo_mod.collect_font_lib',
+				'    def _patched_collect_font_lib(font):',
+				'        lib = _orig_collect_font_lib(font)',
+				'        if "public.glyphOrder" in lib:',
+				'            lib["public.glyphOrder"] = [str(x) for x in lib["public.glyphOrder"]]',
+				'        return lib',
+				'    _trufo_mod.collect_font_lib = _patched_collect_font_lib',
 				'except Exception as _e:',
 				'    print("Warning: UFO IO not loaded:", _e)',
 				'',
@@ -528,6 +541,21 @@ FontRig.pyBridge = {
 
 			FontRig.state.glyphData = newGlyph;
 			FontRig.state.rawXml = xml;
+
+			// Re-establish the cache <-> state aliasing that switchGlyph
+			// originally set up. Without this, glyphCache[active].glyphData
+			// keeps pointing at the pre-Python structure and saveDirtyGlyphs
+			// writes stale data on Ctrl+S. Also mark the glyph dirty so the
+			// Save path actually picks it up.
+			if (FontRig.glyphCache && FontRig.activeGlyph &&
+			    FontRig.glyphCache.has(FontRig.activeGlyph)) {
+				var _cacheEntry = FontRig.glyphCache.get(FontRig.activeGlyph);
+				_cacheEntry.glyphData = newGlyph;
+				if (FontRig.dirtyGlyphs) {
+					FontRig.dirtyGlyphs.add(FontRig.activeGlyph);
+					if (FontRig.updateGlyphPanelDirty) FontRig.updateGlyphPanelDirty();
+				}
+			}
 
 			// Hobby contours land here with empty .nodes; the bezier
 			// shadow is recomputed at render time from .knots.

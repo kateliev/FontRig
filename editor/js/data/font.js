@@ -522,13 +522,20 @@ FontRig._buildGlyphsXmlFromManifest = function(manifest) {
 // after Load Designspace). On success the editor switches its working
 // dirHandle to the new folder.
 FontRig.saveFontAs = async function() {
-	if (!FontRig.font) { alert('No font is open.'); return; }
+	if (!FontRig.font) {
+		if (FontRig.showMessage) FontRig.showMessage('No font', 'No font is open.');
+		else alert('No font is open.');
+		return;
+	}
 
 	var outHandle;
 	try {
 		outHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
 	} catch (e) {
-		if (e.name !== 'AbortError') alert('Pick folder failed: ' + e.message);
+		if (e.name !== 'AbortError') {
+			if (FontRig.showMessage) FontRig.showMessage('Pick folder failed', String(e && e.stack || e));
+			else alert('Pick folder failed: ' + e.message);
+		}
 		return;
 	}
 
@@ -640,12 +647,16 @@ FontRig.saveFontAs = async function() {
 		if (FontRig.updateFontInfo)        FontRig.updateFontInfo();
 
 		if (errors.length) {
-			alert('Saved with ' + errors.length + ' error(s):\n' + errors.join('\n'));
+			var report = 'Saved with ' + errors.length + ' error(s):\n\n' + errors.join('\n');
+			if (FontRig.showMessage) FontRig.showMessage('Save As — partial failure', report);
+			else alert(report);
 		} else if (FontRig.setStatus) {
 			FontRig.setStatus('Saved as ' + outHandle.name + '.');
 		}
 	} catch (e) {
-		alert('Save As failed: ' + e.message);
+		var detail = String(e && e.stack || e);
+		if (FontRig.showMessage) FontRig.showMessage('Save As failed', detail);
+		else alert('Save As failed: ' + detail);
 	} finally {
 		if (spinner) spinner.hide();
 	}
