@@ -406,20 +406,33 @@ FontRig.sync_deleteNode = function() {
 		return;
 	}
 
-	// Multi-node delete (without a fully-selected contour) isn't
-	// supported yet — fall back to single-node delete.
-	if (sel.size !== 1) return;
+	// Multi-node delete: process selected nodes one at a time, in
+	// descending (ci, ni) order so each deletion doesn't shift the
+	// indices of nodes we still need to delete. _findNodeInLayer
+	// returns null for stale IDs (e.g. an off-curve removed as a side
+	// effect of deleting its parent on-curve), so we degrade safely.
+	var items = [];
+	sel.forEach(function(id) {
+		var m = id.match(/^c(\d+)_n(\d+)$/);
+		if (m) items.push({ id: id, ci: parseInt(m[1], 10), ni: parseInt(m[2], 10) });
+	});
+	items.sort(function(a, b) {
+		if (a.ci !== b.ci) return b.ci - a.ci;
+		return b.ni - a.ni;
+	});
 
-	var nodeId = sel.values().next().value;
 	for (var li = 0; li < layers.length; li++) {
 		var layer = layers[li];
-		FontRig._deleteNodeInLayer(layer, nodeId);
+		for (var k = 0; k < items.length; k++) {
+			FontRig._deleteNodeInLayer(layer, items[k].id);
+		}
 		FontRig.invalidatePathCache(layer);
 	}
 
 	sel.clear();
 	FontRig.draw();
 	FontRig.updateStatusSelected();
+	if (FontRig.syncXmlFromData) FontRig.syncXmlFromData();
 };
 
 // Remove the contour at a given global index (cumulative across shapes)
