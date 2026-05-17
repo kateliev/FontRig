@@ -50,9 +50,21 @@ FontRig.pyBridge = {
 		'typerig/core/func/utils.py',
 		'typerig/core/func/geometry.py',
 
+		// Font-level objects (needed by trfont + ufo IO)
+		'typerig/core/objects/font.py',
+		'typerig/core/objects/axis.py',
+		'typerig/core/objects/master.py',
+		'typerig/core/objects/instance.py',
+		'typerig/core/objects/encoding.py',
+		'typerig/core/objects/kern.py',
+		'typerig/core/objects/groups.py',
+		'typerig/core/objects/guideline.py',
+
 		// File I/O
 		'typerig/core/fileio/xmlio.py',
 		'typerig/core/fileio/svgio.py',
+		'typerig/core/fileio/trfont.py',
+		'typerig/core/fileio/ufo.py',
 
 		// Core actions
 		'typerig/core/actions/node_actions.py',
@@ -91,6 +103,10 @@ FontRig.pyBridge = {
 		// browser build. Remove once the TypeRig master push lands.
 		{ src: 'python/svgio.py',
 		  dest: 'typerig/core/fileio/svgio.py' },
+		// UFO editor-glue (partial-master export, UFO→master merge).
+		// Stays editor-local: it composes UfoConverter for editor workflows.
+		{ src: 'python/ufo_helpers.py',
+		  dest: 'typerig/core/fileio/ufo_helpers.py' },
 	],
 
 	// -- Stub __init__.py contents -----------------------------------------
@@ -138,6 +154,20 @@ FontRig.pyBridge = {
 			log('Loading Python runtime\u2026');
 			this.pyodide = await loadPyodide();
 			log('Python runtime loaded.');
+
+			// 1b. Load fontTools from the Pyodide CDN. Required by
+			//     typerig.core.fileio.ufo for UFO/Designspace IO.
+			//     fontTools.ufoLib pulls in `fs` (PyFilesystem2) which is
+			//     NOT a prebuilt Pyodide package, so we grab it from PyPI
+			//     via micropip (one extra small wheel, also cached).
+			log('Loading fontTools\u2026');
+			await this.pyodide.loadPackage(['fonttools', 'micropip']);
+			log('Installing fs (PyFilesystem2)\u2026');
+			await this.pyodide.runPythonAsync(
+				'import micropip\n' +
+				'await micropip.install("fs")\n'
+			);
+			log('fontTools + fs ready.');
 
 			// 2. Detect site-packages path dynamically
 			var sitePackages = this.pyodide.runPython(
@@ -261,6 +291,22 @@ FontRig.pyBridge = {
 				'from typerig.core.objects.array import PointArray',
 				'from typerig.core.fileio.xmlio import XMLSerializable',
 				'',
+				'# UFO / Designspace IO (lives in core, uses fontTools).',
+				'TrFontIO = None',
+				'UfoConverter = None',
+				'try:',
+				'    from typerig.core.fileio.trfont import TrFontIO',
+				'    from typerig.core.fileio.ufo    import UfoConverter',
+				'except Exception as _e:',
+				'    print("Warning: UFO IO not loaded:", _e)',
+				'',
+				'# UFO editor-glue (partial-master export, UFO→master merge).',
+				'ufo_helpers = None',
+				'try:',
+				'    from typerig.core.fileio import ufo_helpers',
+				'except Exception as _e:',
+				'    print("Warning: ufo_helpers not loaded:", _e)',
+				'',
 				'# Glyph variable \u2014 synced with viewer',
 				'glyph = None',
 				'',
@@ -378,6 +424,8 @@ FontRig.pyBridge = {
 				'print("           ContourActions:", "loaded" if ContourActions else "not available")',
 				'print("           DrawActions:", "loaded" if DrawActions else "not available")',
 				'print("           NodePanelActions:", "loaded" if _npa else "not available")',
+				'print("           UfoConverter:", "loaded" if UfoConverter else "not available")',
+				'print("           TrFontIO:", "loaded" if TrFontIO else "not available")',
 				'print("Selection: glyph.selected_nodes, node.selected")',
 				'print("Layers:   selected_layers, layer_info")',
 				'print("Scope:    scope_layers, scope_glyphs, scope_layer_mode, scope_glyph_mode")',

@@ -246,7 +246,24 @@ FontRig.loadGlyphFile = async function(name) {
 	if (!entry) return null;
 
 	try {
-		var xmlString = await FontRig._readFile(FontRig.font.dirHandle, entry.path);
+		var xmlString;
+		// In-memory mode: font was loaded from a UFO/Designspace into MEMFS
+		// and never written to a real folder. Serve glyph XML from the map
+		// the loader stashed on FontRig.font.memGlyphs.
+		if (FontRig.font.memGlyphs) {
+			xmlString = FontRig.font.memGlyphs[name];
+			if (xmlString == null) {
+				// Some loaders may key by alias; try the alias too.
+				var alias = entry.alias || entry.name;
+				xmlString = FontRig.font.memGlyphs[alias];
+			}
+			if (xmlString == null) {
+				console.error('In-memory glyph "' + name + '" not in memGlyphs');
+				return null;
+			}
+		} else {
+			xmlString = await FontRig._readFile(FontRig.font.dirHandle, entry.path);
+		}
 		var glyphData = FontRig.parseGlyphXML(xmlString);
 		return glyphData;
 	} catch (e) {
@@ -405,6 +422,132 @@ FontRig.saveDirtyGlyphs = async function() {
 
 	if (errors.length > 0) {
 		alert('Saved ' + saved + ' glyphs. Errors:\n' + errors.join('\n'));
+	}
+};
+
+// -- Save the entire font to a new .trfont folder (Save As) ---------
+// Writes a complete .trfont snapshot to a user-picked directory:
+// font.xml, glyphs.xml, optional features.fea / groups.xml, and every
+// glyph file. Dirty glyphs are serialized from the cache; clean glyphs
+// are read from the current dirHandle or from memGlyphs (in-memory mode
+// after Load Designspace). On success the editor switches its working
+// dirHandle to the new folder.
+FontRig.saveFontAs = async function() {
+	if (!FontRig.font) { alert('No font is open.'); return; }
+
+	var outHandle;
+	try {
+		outHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+	} catch (e) {
+		if (e.name !== 'AbortError') alert('Pick folder failed: ' + e.message);
+		return;
+	}
+
+	var spinner = (FontRig._ufoSpinner) || null;
+	if (spinner) await spinner.show('Saving font…');
+
+	var writeText = async function(rel, text) {
+		await FontRig._writeFile(outHandle, rel, text);
+	};
+
+	try {
+		// font.xml ------------------------------------------------------
+		var fontXml = FontRig.font.rawFontXml;
+		if (!fontXml && FontRig.font.dirHandle) {
+			fontXml = await FontRig._readFile(FontRig.font.dirHandle, 'font.xml');
+		}
+		if (!fontXml) throw new Error('font.xml is not available to copy.');
+		if (spinner && spinner._label) spinner._label.textContent = 'Writing font.xml…';
+		await writeText('font.xml', fontXml);
+
+		// glyphs.xml ----------------------------------------------------
+		var glyphsXml = FontRig.font.rawGlyphsXml;
+		if (!glyphsXml && FontRig.font.dirHandle) {
+			glyphsXml = await FontRig._readFile(FontRig.font.dirHandle, 'glyphs.xml');
+		}
+		if (!glyphsXml) throw new Error('glyphs.xml is not available to copy.');
+		await writeText('glyphs.xml', glyphsXml);
+
+		// Optional siblings --------------------------------------------
+		var fea = FontRig.font.rawFeatures;
+		if (fea == null && FontRig.font.dirHandle) {
+			try { fea = await FontRig._readFile(FontRig.font.dirHandle, 'features.fea'); }
+			catch (_) { fea = null; }
+		}
+		if (fea) await writeText('features.fea', fea);
+
+		var groups = FontRig.font.rawGroupsXml;
+		if (groups == null && FontRig.font.dirHandle) {
+			try { groups = await FontRig._readFile(FontRig.font.dirHandle, 'groups.xml'); }
+			catch (_) { groups = null; }
+		}
+		if (groups) await writeText('groups.xml', groups);
+
+		// Per-glyph files ----------------------------------------------
+		var manifest = FontRig.font.manifest || [];
+		var total    = manifest.length;
+		var errors   = [];
+
+		for (var i = 0; i < manifest.length; i++) {
+			var entry = manifest[i];
+			var key   = entry.alias || entry.name;
+			var rel   = (entry.path || ('glyphs/' + key + '.trglyph')).replace(/\\/g, '/');
+
+			if (spinner && spinner._label) {
+				spinner._label.textContent =
+					'Writing glyphs (' + (i + 1) + '/' + total + ')…';
+			}
+
+			var xml = null;
+
+			// 1. Dirty in-memory wins (serialize live structure).
+			if (FontRig.dirtyGlyphs.has(key)) {
+				var cached = FontRig.glyphCache.get(key);
+				if (cached && cached.glyphData && FontRig.glyphToXml) {
+					xml = FontRig.glyphToXml(cached.glyphData);
+				}
+			}
+			// 2. In-memory map (font loaded from UFO, no dirHandle yet).
+			if (xml == null && FontRig.font.memGlyphs) {
+				xml = FontRig.font.memGlyphs[key];
+				if (xml == null) xml = FontRig.font.memGlyphs[entry.name];
+			}
+			// 3. Read from current dirHandle.
+			if (xml == null && FontRig.font.dirHandle) {
+				try { xml = await FontRig._readFile(FontRig.font.dirHandle, rel); }
+				catch (e) { errors.push(key + ': ' + e.message); }
+			}
+
+			if (xml == null) {
+				errors.push(key + ': source missing');
+				continue;
+			}
+
+			try {
+				await writeText(rel, xml);
+			} catch (e) {
+				errors.push(key + ': ' + e.message);
+			}
+		}
+
+		// Switch the live font to the new location.
+		FontRig.font.dirHandle      = outHandle;
+		FontRig.font.memGlyphs      = null;
+		FontRig.font.memfsTrfontPath = null;
+		FontRig.font.displayLabel   = outHandle.name;
+		FontRig.dirtyGlyphs.clear();
+		if (FontRig.updateGlyphPanelDirty) FontRig.updateGlyphPanelDirty();
+		if (FontRig.updateFontInfo)        FontRig.updateFontInfo();
+
+		if (errors.length) {
+			alert('Saved with ' + errors.length + ' error(s):\n' + errors.join('\n'));
+		} else if (FontRig.setStatus) {
+			FontRig.setStatus('Saved as ' + outHandle.name + '.');
+		}
+	} catch (e) {
+		alert('Save As failed: ' + e.message);
+	} finally {
+		if (spinner) spinner.hide();
 	}
 };
 

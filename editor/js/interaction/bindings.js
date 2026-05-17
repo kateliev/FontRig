@@ -35,9 +35,23 @@ FontRig.actions = {
 
 	saveFile: function() {
 		if (FontRig.font) {
-			FontRig.saveDirtyGlyphs();
+			// In-memory font (loaded from UFO with no on-disk dirHandle):
+			// the only sensible "Save" is a Save As to a new .trfont folder.
+			if (!FontRig.font.dirHandle && typeof FontRig.saveFontAs === 'function') {
+				FontRig.saveFontAs();
+			} else {
+				FontRig.saveDirtyGlyphs();
+			}
 		} else {
 			FontRig.saveXml();
+		}
+	},
+
+	saveFileAs: function() {
+		if (FontRig.font && typeof FontRig.saveFontAs === 'function') {
+			FontRig.saveFontAs();
+		} else {
+			alert('Open a .trfont folder or Load Designspace first.');
 		}
 	},
 
@@ -45,6 +59,12 @@ FontRig.actions = {
 	exportSvgLayerColor: function() { if (typeof FontRig.exportCurrentLayerAsSVG === 'function') FontRig.exportCurrentLayerAsSVG('color'); },
 	exportSvgAllBW:      function() { if (typeof FontRig.exportAllLayersAsSVG    === 'function') FontRig.exportAllLayersAsSVG('bw'); },
 	exportSvgAllColor:   function() { if (typeof FontRig.exportAllLayersAsSVG    === 'function') FontRig.exportAllLayersAsSVG('color'); },
+
+	// -- UFO / Designspace IO ---
+	loadDesignspace:    function() { if (typeof FontRig.loadDesignspace      === 'function') FontRig.loadDesignspace(); },
+	saveDesignspace:    function() { if (typeof FontRig.saveDesignspace      === 'function') FontRig.saveDesignspace(); },
+	exportUfoMaster:    function() { if (typeof FontRig.exportUfoMasterDialog === 'function') FontRig.exportUfoMasterDialog(); },
+	importUfoAsMaster:  function() { if (typeof FontRig.importUfoAsMasterDialog === 'function') FontRig.importUfoAsMasterDialog(); },
 
 	// -- Undo / Redo ---
 	undo: function() {
@@ -334,10 +354,15 @@ FontRig.toolbarMap = [
 	{ id: 'btn-new-font',  action: 'newFont',  desc: 'Create new .trfont folder' },
 	{ id: 'btn-new-glyph', action: 'newGlyph', desc: 'Add a new glyph to the open font' },
 	{ id: 'btn-save',    action: 'saveFile',  desc: 'Save .trglyph file' },
+	{ id: 'btn-save-as', action: 'saveFileAs', desc: 'Save the open font to a new .trfont folder' },
 	{ id: 'btn-export-svg-layer-bw',    action: 'exportSvgLayerBW',    desc: 'Export current layer as SVG' },
 	{ id: 'btn-export-svg-layer-color', action: 'exportSvgLayerColor', desc: 'Export current layer as SVG (debug color)' },
 	{ id: 'btn-export-svg-all-bw',      action: 'exportSvgAllBW',      desc: 'Export all layers as SVG files' },
 	{ id: 'btn-export-svg-all-color',   action: 'exportSvgAllColor',   desc: 'Export all layers as SVG files (debug color)' },
+	{ id: 'btn-load-designspace',  action: 'loadDesignspace',   desc: 'Load a .designspace + sibling .ufo folders' },
+	{ id: 'btn-save-designspace',  action: 'saveDesignspace',   desc: 'Save the open font as .designspace + sibling .ufo folders' },
+	{ id: 'btn-export-ufo-master', action: 'exportUfoMaster',   desc: 'Export selected masters as standalone .ufo files' },
+	{ id: 'btn-import-ufo-master', action: 'importUfoAsMaster', desc: 'Import a .ufo as a new master on the open font' },
 	{ id: 'btn-fit',     action: 'fitToView', desc: 'Fit glyph to view' },
 
 	// Toggle buttons
