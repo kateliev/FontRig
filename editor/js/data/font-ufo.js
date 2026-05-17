@@ -155,12 +155,21 @@ FontRig._stageFontToMemfs = async function(memfsPath) {
 	FontRig.pyFs.writeText(memfsPath + '/font.xml', fontXml);
 
 	// --- glyphs.xml manifest
-	var glyphsXml = FontRig.font.rawGlyphsXml;
-	if (!glyphsXml && FontRig.font.dirHandle) {
-		glyphsXml = await FontRig._readFile(FontRig.font.dirHandle, 'glyphs.xml');
-	}
-	if (!glyphsXml) throw new Error('Cannot recover glyphs.xml for staging.');
+	// Re-mangle filenames first (case-safe; mirrors UFO's
+	// userNameToFileName) so MEMFS writes don't collide between
+	// upper/lower-case glyph names. Then regenerate glyphs.xml from
+	// the live manifest so staged order matches the editor's panel.
+	var manifest  = FontRig.font.manifest || [];
+	FontRig._remangleManifestPaths(manifest);
+	var glyphsXml = FontRig._buildGlyphsXmlFromManifest(manifest);
 	FontRig.pyFs.writeText(memfsPath + '/glyphs.xml', glyphsXml);
+	// Keep manifestIndex consistent with the (possibly renamed) paths.
+	var stIdx = {};
+	for (var si = 0; si < manifest.length; si++) {
+		var se = manifest[si];
+		stIdx[se.alias || se.name] = se;
+	}
+	FontRig.font.manifestIndex = stIdx;
 
 	// --- optional sibling features.fea
 	try {

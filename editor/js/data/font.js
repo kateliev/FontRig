@@ -425,6 +425,95 @@ FontRig.saveDirtyGlyphs = async function() {
 	}
 };
 
+// -- Case-safe .trglyph filename mangler ----------------------------
+// Mirrors UFO's userNameToFileName scheme so .trfont survives on
+// case-insensitive filesystems (Windows NTFS, macOS APFS):
+//   - Every uppercase letter is followed by a trailing underscore:
+//       A → A_, AE → A_E_, foo → foo, Foo → F_oo
+//   - Reserved Windows device names (CON, PRN, AUX, NUL, COM1…, LPT1…)
+//     get an underscore prefix.
+//   - Disallowed path chars are replaced with '_'.
+//   - If two different glyph names still collide after mangling,
+//     a numeric suffix is appended: foo, foo000000000000001, …
+// Pass a `taken` Set of already-used (lowercased) filenames; it is
+// mutated as new names are reserved.
+FontRig._safeGlyphFilename = (function() {
+	var DISALLOWED = /[ -"*+/:<>?\[\\\]|]/g;
+	var RESERVED  = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|clock\$)$/i;
+
+	function mangle(name) {
+		var out = '';
+		for (var i = 0; i < name.length; i++) {
+			var ch = name.charAt(i);
+			if (ch >= 'A' && ch <= 'Z') out += ch + '_';
+			else out += ch;
+		}
+		out = out.replace(DISALLOWED, '_');
+		if (RESERVED.test(out)) out = '_' + out;
+		if (out.length === 0) out = '_';
+		return out;
+	}
+
+	return function safeGlyphFilename(name, taken) {
+		var base = mangle(String(name));
+		var candidate = base + '.trglyph';
+		if (!taken.has(candidate.toLowerCase())) {
+			taken.add(candidate.toLowerCase());
+			return candidate;
+		}
+		// Collision after mangling — append numeric suffix until unique.
+		for (var n = 1; n < 1e9; n++) {
+			var suffix = String(n);
+			while (suffix.length < 15) suffix = '0' + suffix;
+			candidate = base + suffix + '.trglyph';
+			if (!taken.has(candidate.toLowerCase())) {
+				taken.add(candidate.toLowerCase());
+				return candidate;
+			}
+		}
+		throw new Error('Could not allocate unique filename for "' + name + '"');
+	};
+})();
+
+// -- Rebuild manifest entry paths to be case-safe -------------------
+// Walks the live manifest and assigns a fresh, collision-free
+// `path = "glyphs/<mangled>.trglyph"` to every entry. Mutates entries
+// in place so the editor's in-memory state matches what hits disk.
+// Returns the updated manifest (same array reference).
+FontRig._remangleManifestPaths = function(manifest) {
+	var taken = new Set();
+	for (var i = 0; i < manifest.length; i++) {
+		var e = manifest[i];
+		var key = e.alias || e.name;
+		var fname = FontRig._safeGlyphFilename(key, taken);
+		e.path = 'glyphs/' + fname;
+	}
+	return manifest;
+};
+
+// -- Serialize glyphs.xml from the live manifest --------------------
+// Source of truth: FontRig.font.manifest (the same array that drives
+// the glyph panel). Regenerating instead of copying the raw string we
+// captured at load means on-disk order always matches what's on screen.
+FontRig._buildGlyphsXmlFromManifest = function(manifest) {
+	function esc(s) {
+		return String(s == null ? '' : s)
+			.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	}
+	var out = ['<?xml version="1.0" encoding="UTF-8"?>', '<glyphs>'];
+	for (var i = 0; i < manifest.length; i++) {
+		var e = manifest[i];
+		var name = e.name || (e.alias || '');
+		var path = e.path || ('glyphs/' + (e.alias || name) + '.trglyph');
+		var attrs = 'name="' + esc(name) + '" src="' + esc(path) + '"';
+		if (e.alias) attrs += ' alias="' + esc(e.alias) + '"';
+		out.push('\t<glyph ' + attrs + '/>');
+	}
+	out.push('</glyphs>', '');
+	return out.join('\n');
+};
+
 // -- Save the entire font to a new .trfont folder (Save As) ---------
 // Writes a complete .trfont snapshot to a user-picked directory:
 // font.xml, glyphs.xml, optional features.fea / groups.xml, and every
@@ -461,12 +550,23 @@ FontRig.saveFontAs = async function() {
 		await writeText('font.xml', fontXml);
 
 		// glyphs.xml ----------------------------------------------------
-		var glyphsXml = FontRig.font.rawGlyphsXml;
-		if (!glyphsXml && FontRig.font.dirHandle) {
-			glyphsXml = await FontRig._readFile(FontRig.font.dirHandle, 'glyphs.xml');
-		}
-		if (!glyphsXml) throw new Error('glyphs.xml is not available to copy.');
+		// Rewrite every entry's `path` with a case-safe mangled filename
+		// BEFORE serializing glyphs.xml, so the manifest references the
+		// exact filenames we're about to write. Without this, glyphs A
+		// and a collide on Windows/macOS and the second write clobbers
+		// the first. Mirrors UFO's userNameToFileName scheme.
+		var manifest  = FontRig.font.manifest || [];
+		FontRig._remangleManifestPaths(manifest);
+		var glyphsXml = FontRig._buildGlyphsXmlFromManifest(manifest);
 		await writeText('glyphs.xml', glyphsXml);
+		FontRig.font.rawGlyphsXml = glyphsXml;
+		// Refresh manifestIndex pointers in case they got out of sync.
+		var newIndex = {};
+		for (var mi = 0; mi < manifest.length; mi++) {
+			var me = manifest[mi];
+			newIndex[me.alias || me.name] = me;
+		}
+		FontRig.font.manifestIndex = newIndex;
 
 		// Optional siblings --------------------------------------------
 		var fea = FontRig.font.rawFeatures;
