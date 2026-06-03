@@ -73,6 +73,8 @@ FontRig.pyBridge = {
 		'typerig/core/actions/contour_actions.py',
 		'typerig/core/actions/draw_actions.py',
 		'typerig/core/actions/cut_panel_actions.py',
+		// delta_panel_actions.py is staged locally via localModules (below)
+		// until it lands on TypeRig master on GitHub.
 
 		// Core algorithms (used by cut_panel_actions.py for stroke separate
 		// and medial-axis extract).
@@ -107,6 +109,10 @@ FontRig.pyBridge = {
 		// Stays editor-local: it composes UfoConverter for editor workflows.
 		{ src: 'python/ufo_helpers.py',
 		  dest: 'typerig/core/fileio/ufo_helpers.py' },
+		// Delta panel dispatcher — local during dev; promote to the
+		// GitHub manifest once it lands on TypeRig master.
+		{ src: 'python/delta_panel_actions.py',
+		  dest: 'typerig/core/actions/delta_panel_actions.py' },
 	],
 
 	// -- Stub __init__.py contents -----------------------------------------
@@ -247,7 +253,10 @@ FontRig.pyBridge = {
 				log('Fetching editor modules (' + this.localModules.length + ' files)\u2026');
 
 				var localFetches = this.localModules.map(function(mod) {
-					return fetch(mod.src)
+					// cache: 'no-store' so iterating on a localModule file
+					// during dev doesn't get stale-served by the browser.
+					// Manifest fetch (above) already uses the same flag.
+					return fetch(mod.src, { cache: 'no-store' })
 						.then(function(r) {
 							if (!r.ok) throw new Error(mod.src + ': ' + r.status);
 							return r.text();
@@ -386,6 +395,7 @@ FontRig.pyBridge = {
 				'_npa = None',
 				'_cut_npa = None',
 				'_draw_npa = None',
+				'_delta_npa = None',
 				'hobby_preview_solve = None',
 				'hobby_knots_from_bezier_json = None',
 				'try:',
@@ -405,6 +415,10 @@ FontRig.pyBridge = {
 				'    from typerig.core.actions.draw_panel_actions import hobby_preview_solve, hobby_knots_from_bezier_json',
 				'except Exception as _e:',
 				'    print("Warning: draw_panel_actions not loaded:", _e)',
+				'try:',
+				'    from typerig.core.actions import delta_panel_actions as _delta_npa',
+				'except Exception as _e:',
+				'    print("Warning: delta_panel_actions not loaded:", _e)',
 				'',
 				'# Dispatcher: injects (glyph, scope_layers, NodeActions) for all npa_* functions.',
 				'# Actions that need a 4th class (CurveActions, ContourActions, DrawActions) declare',
@@ -423,6 +437,8 @@ FontRig.pyBridge = {
 				'        fn = getattr(_cut_npa, name, None)',
 				'    if fn is None and _draw_npa is not None:',
 				'        fn = getattr(_draw_npa, name, None)',
+				'    if fn is None and _delta_npa is not None:',
+				'        fn = getattr(_delta_npa, name, None)',
 				'    if fn is None: raise RuntimeError("Unknown action: " + name)',
 				'    params = list(_inspect.signature(fn).parameters.keys())',
 				'    if len(params) > 3 and params[3] in _action_classes:',
@@ -437,6 +453,7 @@ FontRig.pyBridge = {
 				'print("           ContourActions:", "loaded" if ContourActions else "not available")',
 				'print("           DrawActions:", "loaded" if DrawActions else "not available")',
 				'print("           NodePanelActions:", "loaded" if _npa else "not available")',
+				'print("           DeltaPanelActions:", "loaded" if _delta_npa else "not available")',
 				'print("           UfoConverter:", "loaded" if UfoConverter else "not available")',
 				'print("           TrFontIO:", "loaded" if TrFontIO else "not available")',
 				'print("Selection: glyph.selected_nodes, node.selected")',

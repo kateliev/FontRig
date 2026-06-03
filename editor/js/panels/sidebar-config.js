@@ -159,6 +159,7 @@ FontRig.SidebarConfig.defaults = {
 			{ id: 'layer',      active: true },
 			{ id: 'node',       active: true },
 			{ id: 'contour',    active: true },
+			{ id: 'delta',      active: false },
 			{ id: 'xml',        active: true },
 			{ id: 'python',     active: true },
 			{ id: 'sonification', active: true },

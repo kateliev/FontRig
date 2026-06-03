@@ -3427,3 +3427,289 @@ body {
 .lp-lerp-spin:focus {
 	border-color: var(--accent);
 }
+
+/* ================================================================== */
+/* DELTA PANEL — lifts the layer-panel visual idiom                    */
+/* ================================================================== */
+/* Same tight-row look, colored left border per row, type badges,      */
+/* native drop indicators, section headers. Per-row tint uses the      */
+/* user's chosen hex color via inline style (CSS can't read JS data),  */
+/* so each row sets `borderLeftColor` + `background` directly.         */
+
+.dp-panel { display: flex; flex-direction: column; gap: 4px; }
+
+.dp-banner-host {
+	min-height: 0;
+}
+
+.dp-banner {
+	padding: 5px 10px;
+	margin: 2px 0;
+	font-size: 11px;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	transition: opacity 0.25s ease-out;
+}
+
+/* Default — warning (yellow). Used for Python loading. */
+.dp-banner,
+.dp-banner--warning {
+	background: rgba(255, 180, 60, 0.10);
+	border-color: rgba(255, 180, 60, 0.30);
+}
+.dp-banner--info {
+	background: rgba(91, 157, 239, 0.10);
+	border-color: rgba(91, 157, 239, 0.30);
+}
+.dp-banner--success {
+	background: rgba(80, 200, 120, 0.10);
+	border-color: rgba(80, 200, 120, 0.30);
+}
+.dp-banner--error {
+	background: rgba(228, 86, 73, 0.10);
+	border-color: rgba(228, 86, 73, 0.30);
+}
+.dp-banner--fading { opacity: 0; }
+
+/* -- Section / group headers (e.g. "Master Layers", "Inputs") ------ */
+.dp-section {
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	overflow: hidden;
+	margin: 2px 0;
+}
+
+.dp-section__header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	background: var(--bg-tertiary);
+	border-bottom: 1px solid var(--border);
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--text-dim);
+	user-select: none;
+	cursor: pointer;
+}
+
+.dp-section__toggle {
+	width: 10px;
+	flex-shrink: 0;
+	text-align: center;
+	font-size: 9px;
+	opacity: 0.7;
+}
+
+.dp-section__title { flex: 1; }
+
+.dp-section__body { display: block; }
+.dp-section--collapsed .dp-section__body { display: none; }
+
+/* Sub-section (Inputs / Targets under an axis) — softer divider */
+.dp-subsection { border: 1px solid var(--border-subtle); border-radius: 3px; margin: 2px 4px; }
+.dp-subsection .dp-section__header {
+	background: var(--bg-secondary);
+	padding: 3px 6px;
+	font-size: 9px;
+}
+
+/* -- Axis name editor lives in the section header ------------------ */
+.dp-axis-name {
+	flex: 1;
+	background: transparent;
+	border: 1px solid transparent;
+	color: inherit;
+	font: inherit;
+	text-transform: none;
+	letter-spacing: 0;
+	padding: 1px 3px;
+	border-radius: 2px;
+	outline: none;
+}
+.dp-axis-name:hover  { border-color: var(--border-subtle); }
+.dp-axis-name:focus  { border-color: var(--accent); background: var(--bg-primary); }
+
+/* -- Rows ---------------------------------------------------------- */
+.dp-row {
+	display: grid;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 6px 2px 4px;
+	border-bottom: 1px solid var(--border-subtle);
+	border-left: 3px solid transparent;
+	background: transparent;
+	cursor: grab;
+	user-select: none;
+	transition: background 0.12s;
+	font-size: 11px;
+	line-height: 1;
+}
+.dp-row:last-child { border-bottom: none; }
+.dp-row:hover { filter: brightness(1.15); }
+
+.dp-row--master      { grid-template-columns: 16px 1fr 50px 50px 16px; }
+.dp-row--input       { grid-template-columns: 16px 1fr 50px 50px 16px; }
+.dp-row--target-stems{ grid-template-columns: 16px 1fr 42px 42px 42px 42px 16px; }
+.dp-row--target-dims { grid-template-columns: 16px 1fr 50px 50px 38px 16px; }
+
+.dp-row--active { box-shadow: inset 2px 0 0 0 var(--accent); }
+
+.dp-row.dp-dragging { opacity: 0.4; }
+.dp-row.dp-drop-above { box-shadow: 0 -2px 0 0 var(--accent) inset; }
+.dp-row.dp-drop-below { box-shadow: 0 2px 0 0 var(--accent) inset; }
+
+/* -- Type badge (M/I/S/D) ---------------------------------------- */
+.dp-badge {
+	width: 14px;
+	height: 14px;
+	border-radius: 2px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 9px;
+	font-weight: 700;
+	text-transform: uppercase;
+	flex-shrink: 0;
+	font-family: 'IBM Plex Mono', monospace;
+}
+.dp-badge--master       { background: rgba(80, 200, 120, 0.15); color: #50c878; }
+.dp-badge--input        { background: rgba(91, 157, 239, 0.15); color: #5b9def; }
+.dp-badge--target-stems { background: rgba(240, 173, 78, 0.15); color: #f0ad4e; }
+.dp-badge--target-dims  { background: rgba(187, 119, 221, 0.15); color: #bb77dd; }
+
+/* -- Name cell ----------------------------------------------------- */
+.dp-name {
+	flex: 1;
+	background: transparent;
+	border: 1px solid transparent;
+	color: var(--text-primary);
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 11px;
+	padding: 1px 3px;
+	border-radius: 2px;
+	outline: none;
+	min-width: 0;
+}
+.dp-name:hover { border-color: var(--border-subtle); }
+.dp-name:focus { border-color: var(--accent); background: var(--bg-primary); }
+
+/* -- Number / text cells ------------------------------------------ */
+.dp-cell {
+	background: var(--bg-primary);
+	border: 1px solid var(--border);
+	color: var(--text-primary);
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 10px;
+	text-align: center;
+	padding: 1px 2px;
+	border-radius: 2px;
+	outline: none;
+	min-width: 0;
+	width: 100%;
+	box-sizing: border-box;
+}
+.dp-cell:focus { border-color: var(--accent); }
+.dp-cell--blank { color: var(--text-dim); font-style: italic; }
+.dp-cell--origin { padding: 1px 4px; }
+
+/* -- Remove button ------------------------------------------------- */
+.dp-remove {
+	width: 14px;
+	height: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text-dim);
+	cursor: pointer;
+	border-radius: 2px;
+	transition: background 0.12s, color 0.12s;
+	line-height: 1;
+}
+.dp-remove:hover { background: rgba(228, 86, 73, 0.15); color: #e45649; }
+
+/* -- Add-action mini buttons in section headers ------------------- */
+.dp-add {
+	width: 18px;
+	height: 18px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text-dim);
+	cursor: pointer;
+	border-radius: 2px;
+	flex-shrink: 0;
+	line-height: 1;
+}
+.dp-add:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* -- Slider stack (live drive via Live Axis) ----------------------- */
+/* Outer container: vertical stack of slider items, one per parameter */
+.dp-slider-row {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 4px 8px 6px 8px;
+	background: var(--bg-tertiary);
+	border-top: 1px solid var(--border-subtle);
+}
+
+/* Inner row: label + range + spinbox, in one horizontal line */
+.dp-slider-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.dp-slider-label {
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 9px;
+	font-weight: 600;
+	color: var(--text-dim);
+	flex-shrink: 0;
+	width: 22px;
+	text-align: right;
+}
+
+.dp-slider {
+	flex: 1;
+	height: 12px;
+	cursor: pointer;
+	-webkit-appearance: none;
+	appearance: none;
+	background: transparent;
+	min-width: 60px;
+}
+.dp-slider::-webkit-slider-runnable-track { height: 1px; background: var(--border); }
+.dp-slider::-webkit-slider-thumb {
+	-webkit-appearance: none; appearance: none;
+	width: 8px; height: 8px; border-radius: 50%;
+	background: var(--accent); border: none;
+	margin-top: -4px; cursor: pointer;
+}
+.dp-slider::-moz-range-track { height: 1px; background: var(--border); border: none; }
+.dp-slider::-moz-range-thumb {
+	width: 8px; height: 8px; border-radius: 50%;
+	background: var(--accent); border: none; cursor: pointer;
+}
+
+.dp-spin {
+	width: 40px;
+	flex-shrink: 0;
+	font-family: 'IBM Plex Mono', monospace;
+	font-size: 10px;
+	text-align: center;
+	border: 1px solid var(--border);
+	border-radius: 2px;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	padding: 1px 2px;
+	outline: none;
+}
+.dp-spin:focus { border-color: var(--accent); }

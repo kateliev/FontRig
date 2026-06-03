@@ -133,6 +133,19 @@ SBC.registerWidget({
 	}
 });
 
+// -- Delta Widget ---------------------------------------------------
+SBC.registerWidget({
+	id:    'delta',
+	label: 'Delta',
+	icon:  'axis_set',
+	mount: function(containerEl, ctx) {
+		return FontRig.DeltaPanel.mount(containerEl, ctx);
+	},
+	update: function(inst) {
+		if (inst) inst.update();
+	}
+});
+
 // -- AI Agent Widget -----------------------------------------------
 SBC.registerWidget({
 	id:    'ai-agent',
