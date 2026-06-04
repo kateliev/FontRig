@@ -41,6 +41,22 @@
 	--xml-highlight-border: rgba(91,157,239,0.5);
 	--scrollbar-thumb: #3a3a40;
 	--scrollbar-track: transparent;
+
+	/* -- Panel table sizing (layer + delta panels share these) -------- */
+	/* Tweak any of these values to change density globally. They're the
+	   one-step-up defaults the user picked over the original 9/10/11px
+	   set; bump further if you want more comfort. */
+	--table-font-row:       12px;   /* row body text & names */
+	--table-font-cell:      11px;   /* numeric cells inside rows */
+	--table-font-header:    11px;   /* uppercase section headers */
+	--table-font-meta:      10px;   /* slider labels, sub-meta */
+	--table-row-pad-y:      4px;
+	--table-row-pad-x:      10px;
+	--table-row-gap:        5px;
+	--table-cell-pad-y:     2px;
+	--table-cell-pad-x:     4px;
+	--table-badge-size:     16px;
+	--table-mono-font:      'IBM Plex Mono', 'JetBrains Mono', monospace;
 }
 
 /* -- Light Mode ------------------------------------------------ */
@@ -3109,10 +3125,10 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	padding: 4px 8px;
+	padding: var(--table-row-pad-y) var(--table-row-pad-x);
 	background: var(--bg-tertiary);
 	border-bottom: 1px solid var(--border);
-	font-size: 10px;
+	font-size: var(--table-font-header);
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
@@ -3145,12 +3161,13 @@ body {
 .lp-table__row {
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	padding: 3px 8px;
+	gap: var(--table-row-gap);
+	padding: var(--table-row-pad-y) var(--table-row-pad-x);
 	cursor: pointer;
 	user-select: none;
 	border-bottom: 1px solid var(--border-subtle);
 	transition: background 0.15s;
+	font-size: var(--table-font-row);
 }
 
 .lp-table__row:last-child {
@@ -3244,8 +3261,8 @@ body {
 /* -- Name cell ---------------------------------------------------- */
 .lp-table__cell--name {
 	flex: 1;
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 11px;
+	font-family: var(--table-mono-font);
+	font-size: var(--table-font-row);
 	color: var(--text-primary);
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -3254,14 +3271,14 @@ body {
 
 /* -- Type badge --------------------------------------------------- */
 .lp-table__badge {
-	width: 18px;
-	height: 18px;
+	width: var(--table-badge-size);
+	height: var(--table-badge-size);
 	border-radius: 3px;
 	flex-shrink: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 10px;
+	font-size: var(--table-font-cell);
 	font-weight: 700;
 	text-transform: uppercase;
 }
@@ -3358,11 +3375,11 @@ body {
 }
 
 .lp-lerp-slider-label {
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 10px;
+	font-family: var(--table-mono-font);
+	font-size: var(--table-font-meta);
 	font-weight: 600;
 	color: var(--text-dim);
-	width: 10px;
+	width: 12px;
 	flex-shrink: 0;
 	text-align: center;
 }
@@ -3411,16 +3428,16 @@ body {
 }
 
 .lp-lerp-spin {
-	width: 42px;
+	width: 46px;
 	flex-shrink: 0;
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 10px;
+	font-family: var(--table-mono-font);
+	font-size: var(--table-font-meta);
 	text-align: center;
 	border: 1px solid var(--border);
 	border-radius: 3px;
 	background: var(--bg-primary);
 	color: var(--text-primary);
-	padding: 1px 2px;
+	padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
 	outline: none;
 }
 
@@ -3483,10 +3500,10 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	padding: 4px 8px;
+	padding: var(--table-row-pad-y) var(--table-row-pad-x);
 	background: var(--bg-tertiary);
 	border-bottom: 1px solid var(--border);
-	font-size: 10px;
+	font-size: var(--table-font-header);
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
@@ -3512,8 +3529,8 @@ body {
 .dp-subsection { border: 1px solid var(--border-subtle); border-radius: 3px; margin: 2px 4px; }
 .dp-subsection .dp-section__header {
 	background: var(--bg-secondary);
-	padding: 3px 6px;
-	font-size: 9px;
+	padding: calc(var(--table-row-pad-y) - 1px) calc(var(--table-row-pad-x) - 2px);
+	font-size: var(--table-font-meta);
 }
 
 /* -- Axis name editor lives in the section header ------------------ */
@@ -3536,15 +3553,15 @@ body {
 .dp-row {
 	display: grid;
 	align-items: center;
-	gap: 4px;
-	padding: 2px 6px 2px 4px;
+	gap: var(--table-row-gap);
+	padding: var(--table-row-pad-y) var(--table-row-pad-x) var(--table-row-pad-y) calc(var(--table-row-pad-x) - 6px);
 	border-bottom: 1px solid var(--border-subtle);
 	border-left: 3px solid transparent;
 	background: transparent;
 	cursor: grab;
 	user-select: none;
 	transition: background 0.12s;
-	font-size: 11px;
+	font-size: var(--table-font-row);
 	line-height: 1;
 }
 .dp-row:last-child { border-bottom: none; }
@@ -3563,17 +3580,17 @@ body {
 
 /* -- Type badge (M/I/S/D) ---------------------------------------- */
 .dp-badge {
-	width: 14px;
-	height: 14px;
+	width: var(--table-badge-size);
+	height: var(--table-badge-size);
 	border-radius: 2px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 9px;
+	font-size: var(--table-font-meta);
 	font-weight: 700;
 	text-transform: uppercase;
 	flex-shrink: 0;
-	font-family: 'IBM Plex Mono', monospace;
+	font-family: var(--table-mono-font);
 }
 .dp-badge--master       { background: rgba(80, 200, 120, 0.15); color: #50c878; }
 .dp-badge--input        { background: rgba(91, 157, 239, 0.15); color: #5b9def; }
@@ -3586,9 +3603,9 @@ body {
 	background: transparent;
 	border: 1px solid transparent;
 	color: var(--text-primary);
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 11px;
-	padding: 1px 3px;
+	font-family: var(--table-mono-font);
+	font-size: var(--table-font-row);
+	padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
 	border-radius: 2px;
 	outline: none;
 	min-width: 0;
@@ -3601,10 +3618,10 @@ body {
 	background: var(--bg-primary);
 	border: 1px solid var(--border);
 	color: var(--text-primary);
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 10px;
+	font-family: var(--table-mono-font);
+	font-size: var(--table-font-cell);
 	text-align: center;
-	padding: 1px 2px;
+	padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
 	border-radius: 2px;
 	outline: none;
 	min-width: 0;
@@ -3617,12 +3634,12 @@ body {
 
 /* -- Remove button ------------------------------------------------- */
 .dp-remove {
-	width: 14px;
-	height: 14px;
+	width: var(--table-badge-size);
+	height: var(--table-badge-size);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 12px;
+	font-size: calc(var(--table-font-row) + 2px);
 	font-weight: 700;
 	color: var(--text-dim);
 	cursor: pointer;
@@ -3634,12 +3651,12 @@ body {
 
 /* -- Add-action mini buttons in section headers ------------------- */
 .dp-add {
-	width: 18px;
-	height: 18px;
+	width: calc(var(--table-badge-size) + 4px);
+	height: calc(var(--table-badge-size) + 4px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 12px;
+	font-size: calc(var(--table-font-row) + 1px);
 	font-weight: 700;
 	color: var(--text-dim);
 	cursor: pointer;
@@ -3668,12 +3685,12 @@ body {
 }
 
 .dp-slider-label {
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 9px;
+	font-family: var(--table-mono-font);
+	font-size: var(--table-font-meta);
 	font-weight: 600;
 	color: var(--text-dim);
 	flex-shrink: 0;
-	width: 22px;
+	width: 26px;
 	text-align: right;
 }
 
@@ -3700,16 +3717,16 @@ body {
 }
 
 .dp-spin {
-	width: 40px;
+	width: 46px;
 	flex-shrink: 0;
-	font-family: 'IBM Plex Mono', monospace;
-	font-size: 10px;
+	font-family: var(--table-mono-font);
+	font-size: var(--table-font-meta);
 	text-align: center;
 	border: 1px solid var(--border);
 	border-radius: 2px;
 	background: var(--bg-primary);
 	color: var(--text-primary);
-	padding: 1px 2px;
+	padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
 	outline: none;
 }
 .dp-spin:focus { border-color: var(--accent); }

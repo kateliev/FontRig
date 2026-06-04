@@ -73,8 +73,7 @@ FontRig.pyBridge = {
 		'typerig/core/actions/contour_actions.py',
 		'typerig/core/actions/draw_actions.py',
 		'typerig/core/actions/cut_panel_actions.py',
-		// delta_panel_actions.py is staged locally via localModules (below)
-		// until it lands on TypeRig master on GitHub.
+		'typerig/core/actions/delta_panel_actions.py',
 
 		// Core algorithms (used by cut_panel_actions.py for stroke separate
 		// and medial-axis extract).
@@ -109,10 +108,6 @@ FontRig.pyBridge = {
 		// Stays editor-local: it composes UfoConverter for editor workflows.
 		{ src: 'python/ufo_helpers.py',
 		  dest: 'typerig/core/fileio/ufo_helpers.py' },
-		// Delta panel dispatcher — local during dev; promote to the
-		// GitHub manifest once it lands on TypeRig master.
-		{ src: 'python/delta_panel_actions.py',
-		  dest: 'typerig/core/actions/delta_panel_actions.py' },
 	],
 
 	// -- Stub __init__.py contents -----------------------------------------
