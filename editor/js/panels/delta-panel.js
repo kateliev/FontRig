@@ -98,13 +98,15 @@ FontRig.DeltaPanel._freshSetup = function() {
 			metrics: true,
 			anchors: true,
 			extrapolate: true,
+			selection: false,        // chk_selection-equivalent (per-contour)
 			origin: 'BS',
 			italic_angle: 0,
 		},
 	};
 };
 
-// Loaded setups from older versions may lack liveAxis — patch in place.
+// Loaded setups from older versions may lack liveAxis or newer option
+// keys — patch in place.
 FontRig.DeltaPanel._migrateSetup = function(setup) {
 	if (!setup) return setup;
 	if (!setup.liveAxis) {
@@ -112,6 +114,10 @@ FontRig.DeltaPanel._migrateSetup = function(setup) {
 	}
 	if (!Array.isArray(setup.liveAxis.inputs)) {
 		setup.liveAxis.inputs = [];
+	}
+	if (!setup.options) setup.options = {};
+	if (setup.options.selection === undefined) {
+		setup.options.selection = false;
 	}
 	return setup;
 };
@@ -319,6 +325,9 @@ FontRig.DeltaPanel.mount = function(containerEl, ctx) {
 	_optToggle('metrics_advance_alt', 'Process metrics', 'metrics');
 	_optToggle('icon_anchor',          'Process anchors', 'anchors');
 	_optToggle('extrapolate',          'Allow extrapolation', 'extrapolate');
+	_optToggle('selection_basic',
+		'Selection mode — only the selected nodes are moved by the delta',
+		'selection');
 
 	root.appendChild(grpOpts);
 
