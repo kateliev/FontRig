@@ -82,9 +82,9 @@ FontRig.sync_moveSelectedNodes = function(dirX, dirY, multiplier) {
 		}
 	}
 
-	// Draw is already called by moveSelectedNodes for active layer;
-	// but we need to refresh for other layers too
-	FontRig.draw();
+	// Draw is already scheduled by moveSelectedNodes for the active
+	// layer; coalesce the multi-layer refresh into the same frame.
+	FontRig.requestDraw();
 };
 
 // Move nodes by ID set in a specific layer, with smooth enforcement.

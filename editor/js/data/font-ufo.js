@@ -154,7 +154,7 @@ FontRig.showMessage = function(title, body) {
 };
 
 FontRig._ufoStatus = function(msg) {
-	console.log('[UFO]', msg);
+	FontRig.log('[UFO]', msg);
 	if (FontRig.setStatus) FontRig.setStatus(msg);
 	if (FontRig._ufoSpinner && FontRig._ufoSpinner._label) {
 		FontRig._ufoSpinner._label.textContent = msg;
@@ -455,7 +455,7 @@ FontRig.loadDesignspace = async function() {
 		FontRig._ufoStatus('Building editor state…');
 		await FontRig._populateFromMemfsTrfont('/tmp/loaded.trfont', dsName + ' (unsaved)');
 		FontRig._ufoStatus('Loaded ' + dsName + ' (in-memory).');
-		if (result.output && result.output.trim()) console.log('[UFO load]\n' + result.output);
+		if (result.output && result.output.trim()) FontRig.log('[UFO load]\n' + result.output);
 	} catch (e) {
 		FontRig.showMessage('Load failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Load failed.');
@@ -512,7 +512,7 @@ FontRig.saveDesignspace = async function() {
 		await FontRig.pyFs.copyMemfsToDirHandle('/tmp/ufo_out', outHandle);
 
 		FontRig._ufoStatus('Saved ' + dsName + '.');
-		if (result.output && result.output.trim()) console.log('[UFO save]\n' + result.output);
+		if (result.output && result.output.trim()) FontRig.log('[UFO save]\n' + result.output);
 	} catch (e) {
 		FontRig.showMessage('Save failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Save failed.');
@@ -617,7 +617,7 @@ FontRig.exportUfoMasterDialog = async function() {
 		await FontRig.pyFs.copyMemfsToDirHandle('/tmp/ufo_masters', outHandle);
 
 		FontRig._ufoStatus('Exported ' + picks.length + ' master(s).');
-		if (result.output && result.output.trim()) console.log('[UFO export]\n' + result.output);
+		if (result.output && result.output.trim()) FontRig.log('[UFO export]\n' + result.output);
 	} catch (e) {
 		FontRig.showMessage('Export failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Export failed.');
@@ -685,7 +685,7 @@ FontRig.importUfoAsMasterDialog = async function() {
 			(FontRig.font.displayLabel || 'font') + ' + ' + newName);
 
 		FontRig._ufoStatus('Merged "' + newName + '" as new master.');
-		if (result.output && result.output.trim()) console.log('[UFO merge]\n' + result.output);
+		if (result.output && result.output.trim()) FontRig.log('[UFO merge]\n' + result.output);
 	} catch (e) {
 		FontRig.showMessage('Merge failed', String(e && e.stack || e));
 		FontRig._ufoStatus('Merge failed.');

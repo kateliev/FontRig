@@ -613,6 +613,7 @@ FontRig.pyBridge = {
 					}
 				}
 			}
+			FontRig._notifyLayerChange(FontRig.state.activeLayer);
 
 			// Update glyph info (only if DOM element exists)
 			var infoHtml = '<span>' + (newGlyph.name || '?') + '</span>';

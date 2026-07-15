@@ -99,7 +99,7 @@ FontRig.drawTool.handleHover = function(event) {
 		return true;
 	}
 
-	FontRig.draw();
+	FontRig.requestDraw();
 	return true;
 };
 
@@ -125,7 +125,7 @@ FontRig.drawTool._dragHandlers['line'] = async function(stream, initialEvent, sx
 			if (ev.sx === undefined) continue;
 			var c = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
 			s.cursor = FontRig.drawTool._maybeSnapAngle(c, ev);
-			FontRig.draw();
+			FontRig.requestDraw();
 		}
 		FontRig.draw();
 		return;
@@ -198,11 +198,11 @@ FontRig.drawTool._dragHandlers['rectDrag'] = async function(stream, initialEvent
 		s.alt = lastAlt;
 		if (ev.sx === undefined) {
 			// Modifier-only event — redraw to update preview shape.
-			FontRig.draw();
+			FontRig.requestDraw();
 			continue;
 		}
 		s.cursor = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 
 	// Compute final geometry on release.
@@ -289,7 +289,7 @@ FontRig.drawTool._dragHandlers['polyline'] = async function(stream, initialEvent
 		for await (var ev of stream) {
 			if (ev.sx === undefined) continue;
 			s.cursor = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
-			FontRig.draw();
+			FontRig.requestDraw();
 		}
 		FontRig.draw();
 		return;
@@ -328,7 +328,7 @@ FontRig.drawTool._dragHandlers['polyline'] = async function(stream, initialEvent
 	for await (var ev3 of stream) {
 		if (ev3.sx === undefined) continue;
 		s.cursor = FontRig.drawTool._cursorGlyph(ev3.absSx, ev3.absSy);
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 	FontRig.draw();
 };
@@ -404,11 +404,11 @@ FontRig.drawTool._dragHandlers['ellipseDrag'] = async function(stream, initialEv
 		s.shift = lastShift;
 		s.alt = lastAlt;
 		if (ev.sx === undefined) {
-			FontRig.draw();
+			FontRig.requestDraw();
 			continue;
 		}
 		s.cursor = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 
 	var rect = FontRig.drawTool._resolveRect(anchor, s.cursor, lastShift, lastAlt);
@@ -519,7 +519,7 @@ FontRig.drawTool._dragHandlers['bezier'] = async function(stream, initialEvent, 
 		if (ev.altKey !== undefined) lastAlt = !!ev.altKey;
 		if (ev.sx === undefined) {
 			// Modifier-only — refresh handle if dragging.
-			if (draggedFar) FontRig.draw();
+			if (draggedFar) FontRig.requestDraw();
 			continue;
 		}
 		var dxS = ev.absSx - startScreen.x;
@@ -546,7 +546,7 @@ FontRig.drawTool._dragHandlers['bezier'] = async function(stream, initialEvent, 
 			}
 		}
 		s.cursor = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 	FontRig.draw();
 };
@@ -846,7 +846,7 @@ FontRig.drawTool._dragHandlers['hobby'] = async function(stream, initialEvent, s
 		for await (var ev of stream) {
 			if (ev.sx === undefined) continue;
 			s.cursor = FontRig.drawTool._cursorGlyph(ev.absSx, ev.absSy);
-			FontRig.draw();
+			FontRig.requestDraw();
 		}
 		FontRig.draw();
 		return;
@@ -891,7 +891,7 @@ FontRig.drawTool._dragHandlers['hobby'] = async function(stream, initialEvent, s
 	for await (var ev2 of stream) {
 		if (ev2.sx === undefined) continue;
 		s.cursor = FontRig.drawTool._cursorGlyph(ev2.absSx, ev2.absSy);
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 	FontRig.draw();
 };

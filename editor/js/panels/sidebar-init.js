@@ -201,7 +201,7 @@ SBC.registerWidget({
 
 // Skip sidebar creation if we're in workplane context (no main DOM)
 if (!dom.main) {
-	console.log('[SidebarInit] Running in workplane context - skipping default sidebars');
+	FontRig.log('[SidebarInit] Running in workplane context - skipping default sidebars');
 } else {
 
 var _quarterWidth = Math.round((dom.main?.clientWidth || 0) * 0.25) || 280;
@@ -394,7 +394,7 @@ FontRig._hideLeftSidebar = function() {
 // Listen for close panel events from config panel (for main window sidebars)
 document.addEventListener('workplanePanelClose', function(e) {
 	var panelId = e.detail.panelId;
-	console.log('[SidebarInit] Close panel requested:', panelId);
+	FontRig.log('[SidebarInit] Close panel requested:', panelId);
 	
 	// In main window, hide the sidebar
 	var sidebar = FontRig.Sidebar.get(panelId);

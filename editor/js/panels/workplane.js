@@ -83,7 +83,7 @@ FontRig.Workplane.open = function() {
 			// Check if the popup has picked it up (its bootstrap sets _isWorkplane)
 			if (popup.FontRig && popup.FontRig._isWorkplane) {
 				clearInterval(bridgeTimer);
-				console.log('[WorkplaneManager] Bridge confirmed after', bridgeAttempts, 'attempts');
+				FontRig.log('[WorkplaneManager] Bridge confirmed after', bridgeAttempts, 'attempts');
 				return;
 			}
 
@@ -91,7 +91,7 @@ FontRig.Workplane.open = function() {
 			if (popup._workplaneBridgeMain && popup.FontRig && !popup.FontRig._isWorkplane) {
 				popup._workplaneBridgeMain(FontRig);
 				clearInterval(bridgeTimer);
-				console.log('[WorkplaneManager] Called popup._workplaneBridgeMain directly');
+				FontRig.log('[WorkplaneManager] Called popup._workplaneBridgeMain directly');
 				return;
 			}
 		} catch (e) {
@@ -101,6 +101,12 @@ FontRig.Workplane.open = function() {
 		if (bridgeAttempts > 100) {  // 10 seconds
 			clearInterval(bridgeTimer);
 			console.warn('[WorkplaneManager] Gave up bridging after 10s');
+			if (FontRig.showMessage) {
+				FontRig.showMessage('Workplane not connected',
+					'The workplane window could not be bridged to the editor ' +
+					'after 10 seconds. Close it and try again, and make sure ' +
+					'popups are allowed for this site.');
+			}
 		}
 	}, 100);
 
@@ -116,7 +122,7 @@ FontRig.Workplane.open = function() {
 			if (!msg || !msg.type) return;
 
 			if (msg.type === 'workplaneReady') {
-				console.log('[WorkplaneManager] Workplane ready:', id);
+				FontRig.log('[WorkplaneManager] Workplane ready:', id);
 				// Send current state to newly connected workplane
 				if (FontRig.font) {
 					channel.postMessage({ type: 'fontChanged' });
@@ -131,11 +137,11 @@ FontRig.Workplane.open = function() {
 			}
 
 			if (msg.type === 'panelAdded') {
-				console.log('[WorkplaneManager] Panel added in', id);
+				FontRig.log('[WorkplaneManager] Panel added in', id);
 			}
 
 			if (msg.type === 'selectGlyph') {
-				console.log('[WorkplaneManager] Glyph selected in workplane:', msg.glyphName);
+				FontRig.log('[WorkplaneManager] Glyph selected in workplane:', msg.glyphName);
 				if (msg.glyphName && FontRig.switchGlyph) {
 					FontRig.switchGlyph(msg.glyphName);
 				}
@@ -152,7 +158,7 @@ FontRig.Workplane.open = function() {
 	};
 
 	_workplanes[id] = entry;
-	console.log('[WorkplaneManager] Opened workplane:', id);
+	FontRig.log('[WorkplaneManager] Opened workplane:', id);
 
 	return entry;
 };
@@ -180,7 +186,7 @@ FontRig.Workplane._cleanup = function(id) {
 	}
 
 	delete _workplanes[id];
-	console.log('[WorkplaneManager] Cleaned up:', id);
+	FontRig.log('[WorkplaneManager] Cleaned up:', id);
 };
 
 FontRig.Workplane.closeAll = function() {

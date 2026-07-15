@@ -12,6 +12,12 @@
 //   FontRig.PanelBridge.create({ id, onMessage, getState });
 //   FontRig.PanelBridge.send(id, type, data);
 //   FontRig.PanelBridge.broadcast(type, data);
+//
+// LISTENER HYGIENE RULE: any window/document/BroadcastChannel listener
+// attached per mount/open (not once at startup) MUST be removed on the
+// matching close/unmount/destroy path — store the bound handler and call
+// removeEventListener, or scope the listener to the interaction (attach
+// on mousedown, detach on mouseup). Startup-singleton wiring may stay.
 // ===================================================================
 'use strict';
 

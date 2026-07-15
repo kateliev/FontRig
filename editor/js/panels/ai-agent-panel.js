@@ -358,7 +358,9 @@ FontRig.AiAgentBridge = {
         var geminiBase = providerConfig.baseUrl || 'https://generativelanguage.googleapis.com';
         var apiEndpoint = (providerConfig.apiEndpoint || '/v1beta/models/{model}:streamGenerateContent').replace('{model}', model);
         var corsProxy = sessionStorage.getItem('ai-cors-proxy-gemini') || providerConfig.corsProxy || '';
-        var targetUrl = geminiBase + apiEndpoint + '?key=' + apiKey + '&alt=sse';
+        // Pass the key via the x-goog-api-key header (set below) rather than
+        // the query string, so it doesn't land in proxy/CORS/access logs.
+        var targetUrl = geminiBase + apiEndpoint + '?alt=sse';
         var baseUrl = corsProxy ? corsProxy + targetUrl : targetUrl;
 
         var systemInstruction = 'You are an expert in font design, TypeRig, and Python scripting for font editing. ' +
@@ -397,10 +399,12 @@ FontRig.AiAgentBridge = {
 
         fetch(baseUrl, {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
+                // Key travels in a header, not the URL (see targetUrl above).
+                'x-goog-api-key': apiKey,
                 // Explicitly tell the proxy we are making a cross-origin request
-                'X-Requested-With': 'XMLHttpRequest' 
+                'X-Requested-With': 'XMLHttpRequest'
             },
             body: JSON.stringify(body)
         }).then(function(response) {

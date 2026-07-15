@@ -864,7 +864,9 @@ FRWidget.Dialog = function(opts) {
 		_dragOy = e.clientY - dialog.offsetTop;
 	});
 
-	window.addEventListener('mousemove', function(e) {
+	// Named so close() can detach them — otherwise every dialog opened
+	// leaves a permanent window mousemove/mouseup pair behind (leak).
+	var _onDragMove = function(e) {
 		if (!_dragging) return;
 		var nx = e.clientX - _dragOx;
 		var ny = e.clientY - _dragOy;
@@ -873,11 +875,10 @@ FRWidget.Dialog = function(opts) {
 		ny = Math.max(0, Math.min(ny, window.innerHeight - 40));
 		dialog.style.left = nx + 'px';
 		dialog.style.top = ny + 'px';
-	});
-
-	window.addEventListener('mouseup', function() {
-		_dragging = false;
-	});
+	};
+	var _onDragUp = function() { _dragging = false; };
+	window.addEventListener('mousemove', _onDragMove);
+	window.addEventListener('mouseup', _onDragUp);
 
 	// Close logic
 	closeBtn.addEventListener('click', function() { api.close(); });
@@ -897,6 +898,8 @@ FRWidget.Dialog = function(opts) {
 			});
 		},
 		close: function() {
+			window.removeEventListener('mousemove', _onDragMove);
+			window.removeEventListener('mouseup', _onDragUp);
 			backdrop.classList.remove('visible');
 			setTimeout(function() {
 				if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);

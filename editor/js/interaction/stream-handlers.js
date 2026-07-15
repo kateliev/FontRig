@@ -210,7 +210,7 @@ FontRig._handlePan = async function(stream, initialEvent) {
 		if (event.sx === undefined) continue;  // skip key events
 		state.pan.x = originX + (event.e.clientX - startX);
 		state.pan.y = originY + (event.e.clientY - startY);
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 
 	FontRig.updateCanvasCursor();
@@ -232,7 +232,7 @@ FontRig._handleTransformDrag = async function(stream, sx, sy) {
 		FontRig._withActiveOffset(function() {
 			tfHandled = FontRig.tfMouseMove(coords.sx, coords.sy, event.e);
 		});
-		if (tfHandled) { FontRig.invalidatePathCache(); FontRig.draw(); }
+		if (tfHandled) { FontRig.invalidatePathCache(); FontRig.requestDraw(); }
 	}
 
 	FontRig.tfMouseUp();
@@ -292,7 +292,7 @@ FontRig._handleHobbyDirDrag = async function(stream, initialEvent, sx, sy, hit) 
 		}
 		FontRig.solveHobbyContour(contour);
 		if (hit.layer && FontRig.invalidatePathCache) FontRig.invalidatePathCache(hit.layer);
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 
 	// Apply at the click location too (initial pin even if the user
@@ -471,7 +471,7 @@ FontRig._handleHobbyKnotDrag = async function(stream, initialEvent, sx, sy) {
 		});
 
 		if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
-		FontRig.draw();
+		FontRig.requestDraw();
 		FontRig.updateStatusSelected();
 	}
 
@@ -635,7 +635,7 @@ FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 		// Live lerp: forward or reverse interpolation (mirrors moveSelectedNodes)
 		if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
 
-		FontRig.draw();
+		FontRig.requestDraw();
 		FontRig.updateStatusSelected();
 	}
 
@@ -710,7 +710,7 @@ FontRig._handleSegmentDrag = async function(stream, initialEvent, sx, sy, segHit
 		// Live lerp: forward or reverse interpolation
 		if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
 
-		FontRig.draw();
+		FontRig.requestDraw();
 		FontRig.updateStatusSelected();
 	}
 
@@ -751,7 +751,7 @@ FontRig._handleAnchorDrag = async function(stream, initialEvent, sx, sy, anchorI
 				a.y = Math.round(ay);
 			}
 		});
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 
 	FontRig.updateCanvasCursor();
@@ -793,7 +793,7 @@ FontRig._handleRectSelect = async function(stream, initialEvent, sx, sy) {
 		if (!event.shiftKey) state.selectedNodeIds.clear();
 		for (var i = 0; i < ids.length; i++) state.selectedNodeIds.add(ids[i]);
 
-		FontRig.draw();
+		FontRig.requestDraw();
 		FontRig.updateStatusSelected();
 	}
 
@@ -845,7 +845,7 @@ FontRig._handleLassoSelect = async function(stream, initialEvent, sx, sy) {
 		if (!event.shiftKey) state.selectedNodeIds.clear();
 		for (var i = 0; i < ids.length; i++) state.selectedNodeIds.add(ids[i]);
 
-		FontRig.draw();
+		FontRig.requestDraw();
 		FontRig.updateStatusSelected();
 	}
 
@@ -888,7 +888,7 @@ FontRig.handleCanvasHover = function(event) {
 
 	// Preview mode / stem measurement: redraw on hover
 	if (state.previewMode || state.showStem) {
-		FontRig.draw();
+		FontRig.requestDraw();
 	}
 
 	// Hover cursor hint

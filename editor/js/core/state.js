@@ -64,6 +64,15 @@ const FontRig = {
 	xmlEditTimer: null,
 };
 
+// -- Debug logging --------------------------------------------------
+// Diagnostic console.log spam is gated behind this flag. Flip to true
+// in the console (FontRig.DEBUG = true) to re-enable. warn/error are
+// never gated. Use FontRig.log(...) in place of console.log.
+FontRig.DEBUG = false;
+FontRig.log = function() {
+	if (FontRig.DEBUG) console.log.apply(console, arguments);
+};
+
 // Populate DOM refs after DOM is ready
 // Note: XML and Python panel elements are now created dynamically
 // per-instance by XmlPanel.mount() / PythonPanel.mount().

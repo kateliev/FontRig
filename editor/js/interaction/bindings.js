@@ -51,7 +51,7 @@ FontRig.actions = {
 		if (FontRig.font && typeof FontRig.saveFontAs === 'function') {
 			FontRig.saveFontAs();
 		} else {
-			alert('Open a .trfont folder or Load Designspace first.');
+			if (FontRig.showMessage) FontRig.showMessage('No font', 'Open a .trfont folder or Load Designspace first.'); else alert('Open a .trfont folder or Load Designspace first.');
 		}
 	},
 

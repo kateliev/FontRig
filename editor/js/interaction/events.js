@@ -148,7 +148,7 @@ dom.canvasWrap.addEventListener('wheel', function(e) {
 	state.zoom = newZoom;
 
 	FontRig.updateZoomStatus();
-	FontRig.draw();
+	FontRig.requestDraw();
 }, { passive: false });
 
 // ===================================================================
@@ -156,6 +156,27 @@ dom.canvasWrap.addEventListener('wheel', function(e) {
 // ===================================================================
 const resizeObserver = new ResizeObserver(function() { FontRig.draw(); });
 resizeObserver.observe(dom.canvasWrap);
+
+// devicePixelRatio changes (browser zoom, moving between monitors) don't
+// always resize canvasWrap's content box, so the ResizeObserver may miss
+// them. draw() re-checks dpr and reallocates only when it differs, so we
+// just need to trigger a redraw. matchMedia fires once per dpr change;
+// re-arm it each time since the query threshold moves with the ratio.
+(function watchDpr() {
+	if (typeof window.matchMedia !== 'function') return;
+	function arm() {
+		var mq = window.matchMedia('(resolution: ' + (window.devicePixelRatio || 1) + 'dppx)');
+		var handler = function() {
+			mq.removeEventListener ? mq.removeEventListener('change', handler)
+				: mq.removeListener(handler);
+			FontRig.draw();
+			arm();
+		};
+		mq.addEventListener ? mq.addEventListener('change', handler)
+			: mq.addListener(handler);
+	}
+	arm();
+})();
 
 // ===================================================================
 // Toolbar: special buttons (exclusive pairs, panels, view modes)
@@ -317,6 +338,7 @@ dom.layerSelect.addEventListener('change', function() {
 	FontRig.draw();
 	FontRig.buildXmlPanel();
 	FontRig.updateLayerPanel();
+	FontRig._notifyLayerChange(state.activeLayer);
 });
 
 // ===================================================================
@@ -568,7 +590,7 @@ document.addEventListener('keyup', function(e) {
 		const maxPanel = mainRect.width - minPanel - dom.splitHandle.offsetWidth;
 		panel.style.width = Math.max(minPanel, Math.min(maxPanel, panelWidth)) + 'px';
 
-		FontRig.draw();
+		FontRig.requestDraw();
 	});
 
 	window.addEventListener('mouseup', function() {

@@ -168,9 +168,9 @@ FontRig.ensureHobbySolverReady = function(glyphData) {
 	if (!FontRig.pyBridge) return;
 	if (FontRig.pyBridge.ready || FontRig.pyBridge.loading) return;
 
-	console.log('[hobby] glyph contains hobby contours — initializing Python solver');
+	FontRig.log('[hobby] glyph contains hobby contours — initializing Python solver');
 	FontRig.pyBridge.init(function(msg) {
-		console.log('[hobby:init] ' + msg);
+		FontRig.log('[hobby:init] ' + msg);
 	}).catch(function(err) {
 		console.error('[hobby] solver init failed:', err);
 	});
@@ -434,7 +434,7 @@ FontRig.openFlattenHobbyDialog = function() {
 	}
 
 	if (countTotal === 0) {
-		console.log('[hobby] no hobby contours in this glyph');
+		FontRig.log('[hobby] no hobby contours in this glyph');
 		return;
 	}
 
@@ -512,7 +512,7 @@ FontRig.openFlattenHobbyDialog = function() {
 					converted = FontRig.flattenHobbyInGlyph(glyphData);
 				}
 
-				console.log('[hobby] flattened ' + converted + ' contour(s)');
+				FontRig.log('[hobby] flattened ' + converted + ' contour(s)');
 				if (FontRig.draw) FontRig.draw();
 				if (FontRig.syncXmlFromData) FontRig.syncXmlFromData();
 				if (FontRig.updateStatusSelected) FontRig.updateStatusSelected();

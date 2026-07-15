@@ -85,6 +85,7 @@ FontRig.syncActiveCellToLayer = function() {
 
 	state.activeLayer = layers[layerIdx].name;
 	FontRig.dom.layerSelect.value = layers[layerIdx].name;
+	FontRig._notifyLayerChange(state.activeLayer);
 };
 
 // -- Ribbon rotation ------------------------------------------------

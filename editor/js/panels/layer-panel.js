@@ -881,6 +881,7 @@ FontRig.LayerPanel._setActiveLayer = function(inst, name) {
 	state.activeLayer = name;
 	if (FontRig.dom.layerSelect) FontRig.dom.layerSelect.value = name;
 	state.selectedNodeIds.clear();
+	FontRig._notifyLayerChange(name);
 
 	// Update active cell in multiview / expanded strip
 	if (state.gridLayers && state.glyphData && !FontRig.isMaskLayer(name)) {
@@ -1016,6 +1017,7 @@ FontRig.LayerPanel.Actions.renameLayer = function(inst) {
 			if (FontRig.state.activeLayer === oldName) {
 				FontRig.state.activeLayer = newName;
 				if (FontRig.dom.layerSelect) FontRig.dom.layerSelect.value = newName;
+				FontRig._notifyLayerChange(newName);
 			}
 		}
 
@@ -1161,6 +1163,7 @@ FontRig.LayerPanel.Actions.setType = function(inst, type) {
 		if (FontRig.state.activeLayer === names[i]) {
 			FontRig.state.activeLayer = layer.name;
 			if (FontRig.dom.layerSelect) FontRig.dom.layerSelect.value = layer.name;
+			FontRig._notifyLayerChange(layer.name);
 		}
 	}
 
@@ -1538,7 +1541,7 @@ FontRig.LayerPanel.Contour.copyOutline = function(inst) {
 		inst._contourClipboard[names[i]] = JSON.parse(JSON.stringify(layer.shapes));
 	}
 
-	console.log('[LayerPanel] Copied outlines from layers:', names.join(', '));
+	FontRig.log('[LayerPanel] Copied outlines from layers:', names.join(', '));
 };
 
 // -- Paste contours from clipboard (by layer name match)
@@ -1638,7 +1641,7 @@ FontRig.LayerPanel._afterChange = function(inst, msg) {
 	// Sync XML panel if open
 	if (typeof FontRig.xmlRefresh === 'function') FontRig.xmlRefresh();
 
-	console.log('[LayerPanel]', msg);
+	FontRig.log('[LayerPanel]', msg);
 };
 
 // =====================================================================
@@ -1811,7 +1814,7 @@ FontRig.LayerPanel.mount = function(containerEl, ctx) {
 		icon: 'extrapolate', tooltip: 'Toggle extrapolation (allow values beyond 0–1000)',
 		onClick: function() {
 			// Future: toggle extrapolation mode
-			console.log('[Lerp] Extrapolation toggle — not yet implemented');
+			FontRig.log('[Lerp] Extrapolation toggle — not yet implemented');
 		}
 	}));
 

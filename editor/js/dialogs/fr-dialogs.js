@@ -143,7 +143,7 @@ if (!FontRig._isWorkplane) FontRig.scope = {
 				for (var i = 0; i < FontRig.font.masters.length; i++) {
 					names.push(FontRig.font.masters[i].layerName);
 				}
-				console.log('[scope] masters from font.masters:', names);
+				FontRig.log('[scope] masters from font.masters:', names);
 				return names;
 			}
 			// Fallback: all non-mask layers in the current glyph
@@ -155,7 +155,7 @@ if (!FontRig._isWorkplane) FontRig.scope = {
 						names.push(lname);
 					}
 				}
-				console.log('[scope] masters from glyphData layers:', names);
+				FontRig.log('[scope] masters from glyphData layers:', names);
 				if (names.length > 0) return names;
 			}
 			console.warn('[scope] masters fallback to active layer only. font:', !!FontRig.font, 'glyphData:', !!FontRig.state.glyphData);

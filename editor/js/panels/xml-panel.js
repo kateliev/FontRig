@@ -184,6 +184,7 @@ function _applyFromInstance(inst) {
 			FontRig.state.activeLayer = newGlyph.layers[0].name;
 			if (FontRig.dom.layerSelect) FontRig.dom.layerSelect.value = FontRig.state.activeLayer;
 		}
+		FontRig._notifyLayerChange(FontRig.state.activeLayer);
 
 		var infoHtml = '<span>' + (newGlyph.name || '?') + '</span>';
 		if (newGlyph.unicodes) infoHtml += ' U+' + newGlyph.unicodes;

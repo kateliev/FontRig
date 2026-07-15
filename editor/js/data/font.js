@@ -179,7 +179,7 @@ FontRig.openFont = async function() {
 		try {
 			fontXml = await FontRig._readFile(dirHandle, 'font.xml');
 		} catch (e) {
-			alert('Not a valid .trfont folder: font.xml not found.');
+			if (FontRig.showMessage) FontRig.showMessage('Invalid font', 'Not a valid .trfont folder: font.xml not found.'); else alert('Not a valid .trfont folder: font.xml not found.');
 			return;
 		}
 
@@ -188,7 +188,7 @@ FontRig.openFont = async function() {
 		try {
 			glyphsXml = await FontRig._readFile(dirHandle, 'glyphs.xml');
 		} catch (e) {
-			alert('Not a valid .trfont folder: glyphs.xml not found.');
+			if (FontRig.showMessage) FontRig.showMessage('Invalid font', 'Not a valid .trfont folder: glyphs.xml not found.'); else alert('Not a valid .trfont folder: glyphs.xml not found.');
 			return;
 		}
 
@@ -233,7 +233,7 @@ FontRig.openFont = async function() {
 	} catch (e) {
 		if (e.name !== 'AbortError') {
 			console.error('openFont error:', e);
-			alert('Error opening font: ' + e.message);
+			if (FontRig.showMessage) FontRig.showMessage('Open failed', 'Error opening font: ' + e.message); else alert('Error opening font: ' + e.message);
 		}
 	}
 };
@@ -305,6 +305,12 @@ FontRig.switchGlyph = async function(name) {
 
 	// Activate
 	var entry = FontRig.glyphCache.get(name);
+	// LRU touch: re-insert so this glyph moves to the most-recently-used
+	// (back) end of the Map. _evictCache drops from the front, so without
+	// this a revisited glyph stays at its original FIFO position and can
+	// be evicted before glyphs never looked at again.
+	FontRig.glyphCache.delete(name);
+	FontRig.glyphCache.set(name, entry);
 	FontRig.activeGlyph = name;
 	FontRig.state.glyphData = entry.glyphData;
 	FontRig.state.rawXml = '';
@@ -401,27 +407,41 @@ FontRig.saveDirtyGlyphs = async function() {
 	var saved = 0;
 	var errors = [];
 
-	for (var name of FontRig.dirtyGlyphs) {
+	// Snapshot the names first — we delete from dirtyGlyphs only on a
+	// confirmed write, so a failed/skipped glyph keeps its dirty flag and
+	// its edits survive to the next save. Iterate a copy to allow mutation.
+	var names = Array.from(FontRig.dirtyGlyphs);
+	for (var i = 0; i < names.length; i++) {
+		var name = names[i];
 		var entry = FontRig.glyphCache.get(name);
-		if (!entry) continue;
+		if (!entry) {
+			errors.push(name + ': not in cache (evicted?) — still unsaved');
+			continue;
+		}
 
 		var manifestEntry = FontRig.font.manifestIndex[name];
-		if (!manifestEntry) continue;
+		if (!manifestEntry) {
+			errors.push(name + ': no manifest entry — still unsaved');
+			continue;
+		}
 
 		try {
 			var xmlString = FontRig.glyphToXml(entry.glyphData);
 			await FontRig._writeFile(FontRig.font.dirHandle, manifestEntry.path, xmlString);
+			FontRig.dirtyGlyphs.delete(name);
 			saved++;
 		} catch (e) {
-			errors.push(name + ': ' + e.message);
+			errors.push(name + ': ' + e.message + ' — still unsaved');
 		}
 	}
 
-	FontRig.dirtyGlyphs.clear();
 	FontRig.updateGlyphPanelDirty();
 
 	if (errors.length > 0) {
-		alert('Saved ' + saved + ' glyphs. Errors:\n' + errors.join('\n'));
+		var msg = 'Saved ' + saved + ' glyph' + (saved === 1 ? '' : 's') + '.\n\n' +
+			errors.length + ' still unsaved:\n' + errors.join('\n');
+		if (FontRig.showMessage) FontRig.showMessage('Save — partial failure', msg);
+		else alert(msg);
 	}
 };
 
@@ -438,7 +458,7 @@ FontRig.saveDirtyGlyphs = async function() {
 // Pass a `taken` Set of already-used (lowercased) filenames; it is
 // mutated as new names are reserved.
 FontRig._safeGlyphFilename = (function() {
-	var DISALLOWED = /[ -"*+/:<>?\[\\\]|]/g;
+	var DISALLOWED = /[\x00-\x1f\x7f"*+/:<>?\[\\\]|]/g;
 	var RESERVED  = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|clock\$)$/i;
 
 	function mangle(name) {
@@ -786,7 +806,7 @@ FontRig._writeFontXml = async function() {
 // -- Create new .trfont folder + open it ----------------------------
 FontRig.createNewFont = async function() {
 	if (typeof FRWidget === 'undefined' || !FRWidget.NewFontDialog) {
-		alert('Dialog module not loaded.');
+		if (FontRig.showMessage) FontRig.showMessage('Dialog unavailable', 'Dialog module not loaded.'); else alert('Dialog module not loaded.');
 		return;
 	}
 	var cfg = await FRWidget.NewFontDialog();
@@ -796,7 +816,7 @@ FontRig.createNewFont = async function() {
 	try {
 		parentDir = await window.showDirectoryPicker({ mode: 'readwrite' });
 	} catch (e) {
-		if (e.name !== 'AbortError') alert('Could not open directory picker: ' + e.message);
+		if (e.name !== 'AbortError') { if (FontRig.showMessage) FontRig.showMessage('Pick folder failed', 'Could not open directory picker: ' + e.message); else alert('Could not open directory picker: ' + e.message); }
 		return;
 	}
 
@@ -805,7 +825,7 @@ FontRig.createNewFont = async function() {
 	try {
 		dirHandle = await parentDir.getDirectoryHandle(folderName, { create: true });
 	} catch (e) {
-		alert('Could not create folder "' + folderName + '": ' + e.message);
+		if (FontRig.showMessage) FontRig.showMessage('Create folder failed', 'Could not create folder "' + folderName + '": ' + e.message); else alert('Could not create folder "' + folderName + '": ' + e.message);
 		return;
 	}
 
@@ -841,11 +861,11 @@ FontRig.createNewFont = async function() {
 // -- Add new glyph to current font ----------------------------------
 FontRig.createNewGlyph = async function() {
 	if (!FontRig.font) {
-		alert('Open or create a font first.');
+		if (FontRig.showMessage) FontRig.showMessage('No font', 'Open or create a font first.'); else alert('Open or create a font first.');
 		return;
 	}
 	if (typeof FRWidget === 'undefined' || !FRWidget.NewGlyphDialog) {
-		alert('Dialog module not loaded.');
+		if (FontRig.showMessage) FontRig.showMessage('Dialog unavailable', 'Dialog module not loaded.'); else alert('Dialog module not loaded.');
 		return;
 	}
 
@@ -854,7 +874,7 @@ FontRig.createNewGlyph = async function() {
 	if (!cfg) return;
 
 	if (FontRig.font.manifestIndex[cfg.name]) {
-		alert('A glyph named "' + cfg.name + '" already exists.');
+		if (FontRig.showMessage) FontRig.showMessage('Name in use', 'A glyph named "' + cfg.name + '" already exists.'); else alert('A glyph named "' + cfg.name + '" already exists.');
 		return;
 	}
 
@@ -939,7 +959,7 @@ FontRig._currentExportMetrics = function() {
 // advance is null the layer's own advance_width is used.
 FontRig._runSvgExport = function(mode, layerName, canvas) {
 	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) {
-		alert('Python runtime is not ready yet.');
+		if (FontRig.showMessage) FontRig.showMessage('Not ready', 'Python runtime is not ready yet.'); else alert('Python runtime is not ready yet.');
 		return '';
 	}
 	FontRig.pyBridge.syncToPython();
@@ -1018,7 +1038,7 @@ FontRig._runSvgExport = function(mode, layerName, canvas) {
 		].join('\n')) || '';
 	} catch (e) {
 		console.error('SVG export failed:', e);
-		alert('SVG export failed: ' + e.message);
+		if (FontRig.showMessage) FontRig.showMessage('SVG export failed', 'SVG export failed: ' + e.message); else alert('SVG export failed: ' + e.message);
 		return '';
 	}
 };
@@ -1027,7 +1047,7 @@ FontRig._runSvgExport = function(mode, layerName, canvas) {
 FontRig.exportCurrentLayerAsSVG = function(mode) {
 	if (!FontRig.state.glyphData) return;
 	var layer = (typeof FontRig.getActiveLayer === 'function') ? FontRig.getActiveLayer() : null;
-	if (!layer) { alert('No active layer.'); return; }
+	if (!layer) { if (FontRig.showMessage) FontRig.showMessage('No layer', 'No active layer.'); else alert('No active layer.'); return; }
 
 	var m = FontRig._currentExportMetrics();
 	var svg = FontRig._runSvgExport(mode, layer.name, {

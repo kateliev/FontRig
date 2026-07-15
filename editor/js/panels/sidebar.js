@@ -345,19 +345,10 @@ FontRig.Sidebar._buildDOM = function(sidebar) {
 // Resize logic
 // ===================================================================
 FontRig.Sidebar._wireResize = function(sidebar) {
-	var isDragging = false;
-
-	sidebar.handleEl.addEventListener('mousedown', function(e) {
-		e.preventDefault();
-		isDragging = true;
-		sidebar.handleEl.classList.add('dragging');
-		document.body.style.cursor = 'col-resize';
-		document.body.style.userSelect = 'none';
-	});
-
-	window.addEventListener('mousemove', function(e) {
-		if (!isDragging) return;
-
+	// Window move/up listeners are scoped to the active drag: attached on
+	// mousedown, detached on mouseup. Otherwise each _wireResize call
+	// (one per sidebar/re-mount) would leave a permanent pair behind.
+	var _onMove = function(e) {
 		var containerRect = sidebar.container.getBoundingClientRect();
 		var mouseX = e.clientX - containerRect.left;
 		var handleW = sidebar.handleEl.offsetWidth || 5;
@@ -376,17 +367,25 @@ FontRig.Sidebar._wireResize = function(sidebar) {
 
 		if (sidebar.onResize) sidebar.onResize();
 		if (typeof FontRig.draw === 'function') FontRig.draw();
-	});
+	};
 
-	window.addEventListener('mouseup', function() {
-		if (isDragging) {
-			isDragging = false;
-			sidebar.handleEl.classList.remove('dragging');
-			document.body.style.cursor = '';
-			document.body.style.userSelect = '';
-			if (sidebar.onResize) sidebar.onResize();
-			if (typeof FontRig.draw === 'function') FontRig.draw();
-		}
+	var _onUp = function() {
+		window.removeEventListener('mousemove', _onMove);
+		window.removeEventListener('mouseup', _onUp);
+		sidebar.handleEl.classList.remove('dragging');
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		if (sidebar.onResize) sidebar.onResize();
+		if (typeof FontRig.draw === 'function') FontRig.draw();
+	};
+
+	sidebar.handleEl.addEventListener('mousedown', function(e) {
+		e.preventDefault();
+		sidebar.handleEl.classList.add('dragging');
+		document.body.style.cursor = 'col-resize';
+		document.body.style.userSelect = 'none';
+		window.addEventListener('mousemove', _onMove);
+		window.addEventListener('mouseup', _onUp);
 	});
 };
 

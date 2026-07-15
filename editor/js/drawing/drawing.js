@@ -142,6 +142,24 @@ FontRig.renderLayer = function(layer, opts) {
 };
 
 // ===================================================================
+// rAF-coalesced redraw
+// ===================================================================
+// During a single input event several subsystems may each want a
+// redraw. requestDraw() collapses them into one paint per animation
+// frame. Use it from continuous-input handlers (drag/pan/zoom/nudge).
+// One-shot paths (load, undo, menu actions) should call draw() directly
+// when they read canvas/screen state immediately afterward.
+FontRig._drawScheduled = false;
+FontRig.requestDraw = function() {
+	if (FontRig._drawScheduled) return;
+	FontRig._drawScheduled = true;
+	requestAnimationFrame(function() {
+		FontRig._drawScheduled = false;
+		FontRig.draw();
+	});
+};
+
+// ===================================================================
 // Glyph Render
 // ===================================================================
 FontRig.draw = function() {
@@ -152,10 +170,18 @@ FontRig.draw = function() {
 	const w = canvasWrap.clientWidth;
 	const h = canvasWrap.clientHeight;
 
-	canvas.width = w * dpr;
-	canvas.height = h * dpr;
-	canvas.style.width = w + 'px';
-	canvas.style.height = h + 'px';
+	// Assigning canvas.width/height reallocates the backing store and
+	// clears the GPU surface — do it ONLY when the size actually changed.
+	// Every plain redraw (drag, marquee, pan) reuses the existing buffer
+	// and just resets the transform + clears via fillRect below.
+	const sz = FontRig._canvasSize;
+	if (!sz || sz.w !== w || sz.h !== h || sz.dpr !== dpr) {
+		canvas.width = w * dpr;
+		canvas.height = h * dpr;
+		canvas.style.width = w + 'px';
+		canvas.style.height = h + 'px';
+		FontRig._canvasSize = { w: w, h: h, dpr: dpr };
+	}
 	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 	// Clear — preview mode: white bg, black fill, no decorations

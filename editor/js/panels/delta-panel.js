@@ -284,7 +284,7 @@ FontRig.DeltaPanel.mount = function(containerEl, ctx) {
 		icon: 'font_save', tooltip: 'Save setup to browser storage',
 		onClick: function() {
 			FontRig.DeltaPanel._saveSetup(inst._setup);
-			console.log('[DeltaPanel] Setup saved.');
+			FontRig.log('[DeltaPanel] Setup saved.');
 			FontRig.DeltaPanel._setStatus(inst,
 				'Setup saved to browser storage.', 'success');
 		}
@@ -1330,7 +1330,7 @@ FontRig.DeltaPanel._actionSetDelta = function(inst) {
 	var msg = 'Axis set — ' + s.axes.length + ' axis'
 		+ (s.axes.length === 1 ? '' : 'es')
 		+ ', ' + nTargets + ' target' + (nTargets === 1 ? '' : 's') + '.';
-	console.log('[DeltaPanel] ' + msg);
+	FontRig.log('[DeltaPanel] ' + msg);
 	FontRig.DeltaPanel._setStatus(inst, msg, 'success');
 };
 
@@ -1338,7 +1338,7 @@ FontRig.DeltaPanel._actionSetDelta = function(inst) {
 // untouched. After this, Bake will rebuild from scratch on next click.
 FontRig.DeltaPanel._actionClearDelta = function(inst) {
 	inst._deltaActive = false;
-	console.log('[DeltaPanel] Delta cleared (setup preserved).');
+	FontRig.log('[DeltaPanel] Delta cleared (setup preserved).');
 	FontRig.DeltaPanel._setStatus(inst,
 		'Axis reset — delta cleared, setup preserved.', 'info');
 };
@@ -1398,7 +1398,7 @@ FontRig.DeltaPanel._actionLiveSet = function(inst) {
 		}
 		inst._liveFingerprintCached =
 			FontRig.DeltaPanel._liveFingerprint(liveAxis);
-		console.log('[DeltaPanel] Live snapshot taken — '
+		FontRig.log('[DeltaPanel] Live snapshot taken — '
 			+ res.inputs + ' inputs, viable: ' + (res.viable || []).join(', '));
 		return true;
 	} catch (e) {
@@ -1469,18 +1469,21 @@ FontRig.DeltaPanel._onActiveLayerChange = function(inst, newName) {
 FontRig.DeltaPanel._startLayerWatcher = function(inst) {
 	if (inst._layerWatcher) return;
 	inst._liveCurrentLayer = FontRig.state.activeLayer || null;
-	inst._layerWatcher = setInterval(function() {
+	// Event-driven (replaces the old 200ms poll): FontRig fires
+	// onLayerChange from every genuine layer-switch site. Store the
+	// unsubscribe fn on the instance so it's torn down on stop/close.
+	inst._layerWatcher = FontRig.onLayerChange(function(active) {
 		if (!inst._liveEnabled) return;
-		var active = FontRig.state.activeLayer || null;
+		active = active || null;
 		if (active !== inst._liveCurrentLayer) {
 			FontRig.DeltaPanel._onActiveLayerChange(inst, active);
 		}
-	}, 200);
+	});
 };
 
 FontRig.DeltaPanel._stopLayerWatcher = function(inst) {
 	if (inst._layerWatcher) {
-		clearInterval(inst._layerWatcher);
+		inst._layerWatcher();  // unsubscribe
 		inst._layerWatcher = null;
 	}
 	inst._liveCurrentLayer = null;
@@ -1556,7 +1559,7 @@ FontRig.DeltaPanel._actionBake = function(inst) {
 		}
 		var summary = 'Bake — ' + parsed.axes_built
 			+ ' axis/axes, ' + parsed.targets_baked + ' target(s).';
-		console.log('[DeltaPanel] ' + summary);
+		FontRig.log('[DeltaPanel] ' + summary);
 		FontRig.DeltaPanel._setStatus(inst,
 			summary + (parsed.warnings && parsed.warnings.length
 				? ' (' + parsed.warnings.length + ' warning'
@@ -1648,7 +1651,7 @@ FontRig.DeltaPanel._actionMeasureStem = function(inst, axis) {
 		return perLayer[k] !== null && perLayer[k] !== undefined;
 	}).length;
 
-	console.log('[DeltaPanel] ' + (axis === 'y' ? 'H' : 'V')
+	FontRig.log('[DeltaPanel] ' + (axis === 'y' ? 'H' : 'V')
 		+ ' stem measured on ' + measuredCount
 		+ ' compatible layer(s) → updated ' + touched + ' row(s).'
 		+ (skipped.length ? ' Skipped (incompatible): ' + skipped.join(', ') : ''));

@@ -875,7 +875,7 @@ function _log(_inst, text, type) {
 	if (!routed) {
 		if (type === 'error') console.error('[scripts]', text);
 		else if (type === 'warn') console.warn('[scripts]', text);
-		else console.log('[scripts]', text);
+		else FontRig.log('[scripts]', text);
 	}
 }
 
