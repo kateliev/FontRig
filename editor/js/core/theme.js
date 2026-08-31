@@ -66,6 +66,7 @@ FontRig.themeDark = {
 		onCorner:     '#5b9def',           // on-curve corner
 		onSmooth:     '#50c878',           // on-curve smooth
 		offCurve:     '#5b9def',           // cubic/quadratic off-curve
+		curvatureHandle: '#e0a13a',        // BCP rhomb in curvature mode
 		selected:     '#ff6b6b',           // any selected node
 		outline:      'rgba(0,0,0,0.5)',   // node stroke
 		handleLine:   'rgba(91,157,239,0.35)',
@@ -220,6 +221,7 @@ FontRig.themeLight = {
 		onCorner:     '#383a42',           // on-curve corner
 		onSmooth:     '#50a14f',           // on-curve smooth
 		offCurve:     '#4078f2',           // cubic/quadratic off-curve
+		curvatureHandle: '#c07d1a',        // BCP rhomb in curvature mode
 		selected:    '#e45649',           // any selected node
 		outline:      'rgba(255,255,255,0.9)',   // node stroke (white for contrast)
 		handleLine:   'rgba(64,120,242,0.5)',

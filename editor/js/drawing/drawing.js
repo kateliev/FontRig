@@ -712,6 +712,23 @@ FontRig._drawNodeMarkers = function(layer) {
 						ctx.fillRect(sp.x - r, sp.y - r, r * 2, r * 2);
 						ctx.strokeRect(sp.x - r, sp.y - r, r * 2, r * 2);
 					}
+				} else if (FontRig.curvatureMode) {
+					// Curvature-handles mode: draw BCP ends as filled rhombs
+					// in a distinct colour so it's obvious the handles now
+					// encode curvature (radius), not just position.
+					var cc = tn.curvatureHandle || '#e0a13a';
+					ctx.fillStyle = isSelected ? tn.selected : cc;
+					ctx.strokeStyle = isSelected ? tn.selected : (tn.curvatureHandleOutline || tn.outline);
+					ctx.lineWidth = tn.strokeWidth;
+					var rr = r + 0.5;
+					ctx.beginPath();
+					ctx.moveTo(sp.x, sp.y - rr);
+					ctx.lineTo(sp.x + rr, sp.y);
+					ctx.lineTo(sp.x, sp.y + rr);
+					ctx.lineTo(sp.x - rr, sp.y);
+					ctx.closePath();
+					ctx.fill();
+					ctx.stroke();
 				} else {
 					ctx.fillStyle = isSelected ? tn.selected : tn.offCurve;
 					ctx.strokeStyle = isSelected ? tn.selected : tn.outline;

@@ -528,6 +528,14 @@ FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 	// Tangent constraints
 	var dragTangents = FontRig.computeDragTangents(dragStartPositions);
 
+	// Curvature mode: snapshot the anchor curvatures to hold while the
+	// selected on-curve nodes move (see interaction/curvature-mode.js).
+	// Nodes are still at their start positions here, so this measures
+	// the targets from the pre-drag geometry.
+	var curvatureTargets = (FontRig.curvatureMode && !dragAltMode &&
+		typeof FontRig._buildCurvatureTargets === 'function')
+		? FontRig._buildCurvatureTargets(state.selectedNodeIds) : null;
+
 	// Slide mode state
 	var slideData = null;
 	if (state.selectedNodeIds.size === 1) {
@@ -630,6 +638,10 @@ FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 				var allMoved = new Set(dragStartPositions.keys());
 				FontRig.enforceSmoothCollinearity(allMoved);
 			}
+
+			// Curvature mode: rescale the stationary-anchor handles so
+			// each adjacent segment keeps its anchor curvature.
+			if (curvatureTargets) FontRig._applyCurvaturePreservation(curvatureTargets);
 		});
 
 		// Live lerp: forward or reverse interpolation (mirrors moveSelectedNodes)
