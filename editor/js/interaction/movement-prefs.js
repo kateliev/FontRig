@@ -91,6 +91,11 @@ FontRig.sync_moveSelectedNodes = function(dirX, dirY, multiplier) {
 FontRig._moveNodesInLayer = function(layer, nodeIds, dx, dy) {
 	var hobbyContours = new Set();
 
+	// Curvature mode: snapshot this layer's curvature targets before the
+	// nudge so synced masters hold curvature just like the active layer.
+	var curvSnap = (FontRig.curvatureMode && typeof FontRig._snapshotCurvatureForNudge === 'function')
+		? FontRig._snapshotCurvatureForNudge(nodeIds, layer) : null;
+
 	for (var id of nodeIds) {
 		var ref = FontRig._findNodeInLayer(layer, id);
 		if (!ref) continue;
@@ -110,6 +115,12 @@ FontRig._moveNodesInLayer = function(layer, nodeIds, dx, dy) {
 	// Enforce smooth tangent continuity (same logic as enforceSmoothForKeys
 	// but operating on the given layer instead of the active layer)
 	FontRig._enforceSmoothForKeysInLayer(layer, nodeIds, dx, dy);
+
+	// Curvature mode: re-solve this layer's anchor handles to hold the
+	// snapshotted curvatures now that the nudge + smooth pass have run.
+	if (curvSnap && typeof FontRig._applyCurvatureForNudge === 'function') {
+		FontRig._applyCurvatureForNudge(curvSnap);
+	}
 };
 
 // Layer-parameterized version of enforceSmoothForKeys.

@@ -65,8 +65,12 @@ FontRig.toggleCurvatureMode = function(force) {
 // dragged. We store the anchor's fixed tangent direction and the
 // curvature to hold, plus the node indices we will rewrite each frame.
 // -------------------------------------------------------------------
-FontRig._buildCurvatureTargets = function(selectedIds) {
+// `layer` is optional — defaults to the active layer. Passing an explicit
+// layer lets the multi-master sync path build targets for each layer.
+FontRig._buildCurvatureTargets = function(selectedIds, layer) {
 	if (!FontRig.Curvature) return null;
+	layer = layer || (FontRig.getActiveLayer && FontRig.getActiveLayer());
+	if (!layer) return null;
 	var targets = [];
 
 	selectedIds.forEach(function(id) {
@@ -74,10 +78,10 @@ FontRig._buildCurvatureTargets = function(selectedIds) {
 		if (!m) return;
 		var ci = parseInt(m[1], 10), ni = parseInt(m[2], 10);
 
-		var ref = FontRig.findNodeById(id);
-		if (!ref || !ref.contour || ref.contour.kind === 'hobby') return;
-		var nodes = ref.contour.nodes;
-		if (!nodes || nodes[ni].type !== 'on') return;
+		var cref = FontRig._findContourInLayer(layer, ci);
+		if (!cref || !cref.contour || cref.contour.kind === 'hobby') return;
+		var nodes = cref.contour.nodes;
+		if (!nodes || !nodes[ni] || nodes[ni].type !== 'on') return;
 		var n = nodes.length;
 
 		// -- incoming segment (prevOn ... handles ... node) -----------
@@ -151,5 +155,174 @@ FontRig._applyCurvaturePreservation = function(targets) {
 		var far = nodes[t.farIdx];
 		far.x = round1(anchor.x + l0 * t.tAnchor.x);
 		far.y = round1(anchor.y + l0 * t.tAnchor.y);
+	}
+};
+
+// ===================================================================
+// Handle-drag = curvature editing
+// ===================================================================
+// When exactly one cubic off-curve BCP is selected, dragging it edits
+// that endpoint's curvature: the handle slides along its tangent (its
+// length = the curve tension there) and the segment's OPPOSITE handle
+// re-solves to hold the FAR endpoint's curvature fixed. One unknown,
+// one equation — same well-determined solve as the node drag.
+//
+// Returns the drag context, or null when the selection is not a single
+// standard cubic BCP (then the normal drag path runs).
+// -------------------------------------------------------------------
+FontRig._curvatureHandleTarget = function(sel, layer) {
+	if (!sel || sel.size !== 1) return null;
+	layer = layer || (FontRig.getActiveLayer && FontRig.getActiveLayer());
+	if (!layer) return null;
+	var id = sel.values().next().value;
+	var m = id.match(/^c(\d+)_n(\d+)$/);
+	if (!m) return null;
+
+	var cref = FontRig._findContourInLayer(layer, parseInt(m[1], 10));
+	if (!cref || !cref.contour || cref.contour.kind === 'hobby') return null;
+	var nodes = cref.contour.nodes;
+	var hi = parseInt(m[2], 10);
+	if (!nodes || !nodes[hi] || nodes[hi].type !== 'curve') return null;   // cubic BCP only
+	var n = nodes.length;
+
+	var prevOn = nodes[(hi - 1 + n) % n].type === 'on';
+	var nextOn = nodes[(hi + 1) % n].type === 'on';
+
+	var myOnIdx, otherIdx, farOnIdx;
+	if (prevOn && !nextOn) {              // near-handle b0 of [onA,b0,b1,onB]
+		myOnIdx  = (hi - 1 + n) % n;
+		otherIdx = (hi + 1) % n;
+		farOnIdx = (hi + 2) % n;
+	} else if (nextOn && !prevOn) {       // far-handle b1
+		myOnIdx  = (hi + 1) % n;
+		otherIdx = (hi - 1 + n) % n;
+		farOnIdx = (hi - 2 + n) % n;
+	} else {
+		return null;
+	}
+	if (nodes[otherIdx].type !== 'curve' || nodes[farOnIdx].type !== 'on') return null;
+
+	return { contour: cref.contour, nodes: nodes,
+		hi: hi, myOnIdx: myOnIdx, otherIdx: otherIdx, farOnIdx: farOnIdx };
+};
+
+FontRig._handleCurvatureHandleDrag = async function(stream, initialEvent, sx, sy, tgt) {
+	var C = FontRig.Curvature;
+	FontRig.pushUndo();
+	if (typeof FontRig.lerpEditStart === 'function') FontRig.lerpEditStart();
+
+	var nodes  = tgt.nodes;
+	var myOn   = nodes[tgt.myOnIdx];      // stationary on-curve (pivot)
+	var farOn  = nodes[tgt.farOnIdx];     // stationary anchor (curvature held)
+	var dragged = nodes[tgt.hi];
+	var other  = nodes[tgt.otherIdx];
+
+	// Fixed tangent directions (captured at drag start).
+	var dirDragged = _unit(dragged.x - myOn.x, dragged.y - myOn.y); // may be null
+	var tAnchor    = _unit(other.x - farOn.x, other.y - farOn.y);
+
+	// Curvature to hold at farOn, in the reversed frame [farOn,other,dragged,myOn].
+	var kAnchor = C.measureEndCurvatures(farOn, other, dragged, myOn).k0;
+
+	if (FontRig.dom.canvasWrap) FontRig.dom.canvasWrap.style.cursor = 'move';
+
+	for await (var event of stream) {
+		if (event.type === 'key') continue;
+
+		var evtCoords = FontRig._interactionCoords(event.absSx, event.absSy);
+		FontRig._withActiveOffset(function() {
+			var dgp = FontRig.screenToGlyph(evtCoords.sx, evtCoords.sy);
+
+			// Project the cursor onto the fixed tangent to get the new
+			// handle length. If the handle had no direction (zero length),
+			// let the cursor define it freely this frame.
+			var dir = dirDragged;
+			var L;
+			if (dir) {
+				L = (dgp.x - myOn.x) * dir.x + (dgp.y - myOn.y) * dir.y;
+			} else {
+				dir = _unit(dgp.x - myOn.x, dgp.y - myOn.y);
+				if (!dir) return;
+				L = Math.hypot(dgp.x - myOn.x, dgp.y - myOn.y);
+			}
+			if (L < 2) L = 2;                     // keep a minimal, valid handle
+
+			dragged.x = round1(myOn.x + L * dir.x);
+			dragged.y = round1(myOn.y + L * dir.y);
+
+			// Re-solve the opposite handle to hold farOn's curvature.
+			if (tAnchor) {
+				var tMoving = { x: -dir.x, y: -dir.y };  // unit(myOn - dragged)
+				var l1 = C.solveAnchorHandleLength(farOn, myOn, tAnchor, tMoving, L, kAnchor);
+				if (l1 !== null && isFinite(l1) && l1 > 0) {
+					other.x = round1(farOn.x + l1 * tAnchor.x);
+					other.y = round1(farOn.y + l1 * tAnchor.y);
+				}
+			}
+		});
+
+		if (typeof FontRig.invalidatePathCache === 'function') {
+			var lyr = FontRig.getActiveLayer && FontRig.getActiveLayer();
+			if (lyr) FontRig.invalidatePathCache(lyr);
+		}
+		if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();
+		FontRig.requestDraw();
+		FontRig.updateStatusSelected();
+	}
+
+	FontRig.updateCanvasCursor();
+};
+
+// ===================================================================
+// Keyboard (arrow-key nudge) support
+// ===================================================================
+// Arrow-key edits go through moveSelectedNodes, not the drag stream, so
+// they need their own hook. Snapshot the curvature targets BEFORE the
+// nudge (measuring the pre-move geometry), then re-apply AFTER the move
+// and the smooth-enforcement pass. Covers both on-curve node nudges
+// (hold adjacent anchor curvature) and a single-BCP nudge (hold the far
+// endpoint's curvature by re-solving the opposite handle).
+// -------------------------------------------------------------------
+FontRig._snapshotCurvatureForNudge = function(sel, layer) {
+	if (!FontRig.curvatureMode || !FontRig.Curvature) return null;
+
+	var nodeTargets = FontRig._buildCurvatureTargets(sel, layer);
+
+	var handleTarget = null;
+	var ht = FontRig._curvatureHandleTarget(sel, layer);
+	if (ht) {
+		var nodes = ht.nodes;
+		var k = FontRig.Curvature.measureEndCurvatures(
+			nodes[ht.farOnIdx], nodes[ht.otherIdx], nodes[ht.hi], nodes[ht.myOnIdx]).k0;
+		var tAnchor = _unit(nodes[ht.otherIdx].x - nodes[ht.farOnIdx].x,
+		                    nodes[ht.otherIdx].y - nodes[ht.farOnIdx].y);
+		if (tAnchor) handleTarget = { tgt: ht, kAnchor: k, tAnchor: tAnchor };
+	}
+
+	if (!nodeTargets && !handleTarget) return null;
+	return { nodeTargets: nodeTargets, handleTarget: handleTarget };
+};
+
+FontRig._applyCurvatureForNudge = function(snap) {
+	if (!snap) return;
+	if (snap.nodeTargets) FontRig._applyCurvaturePreservation(snap.nodeTargets);
+
+	if (snap.handleTarget) {
+		var C = FontRig.Curvature;
+		var ht = snap.handleTarget.tgt, nodes = ht.nodes;
+		var myOn = nodes[ht.myOnIdx], farOn = nodes[ht.farOnIdx];
+		var dragged = nodes[ht.hi], other = nodes[ht.otherIdx];
+		var tAnchor = snap.handleTarget.tAnchor;
+
+		var dir = _unit(dragged.x - myOn.x, dragged.y - myOn.y);
+		if (!dir) return;
+		var L = Math.hypot(dragged.x - myOn.x, dragged.y - myOn.y);
+		var tMoving = { x: -dir.x, y: -dir.y };
+
+		var l1 = C.solveAnchorHandleLength(farOn, myOn, tAnchor, tMoving, L, snap.handleTarget.kAnchor);
+		if (l1 !== null && isFinite(l1) && l1 > 0) {
+			other.x = round1(farOn.x + l1 * tAnchor.x);
+			other.y = round1(farOn.y + l1 * tAnchor.y);
+		}
 	}
 };

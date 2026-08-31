@@ -1621,6 +1621,12 @@ FontRig.moveSelectedNodes = function(dx, dy) {
 	const sel = FontRig.state.selectedNodeIds;
 	if (sel.size === 0) return;
 
+	// Curvature mode: snapshot the curvatures to hold BEFORE the nudge
+	// moves anything (see interaction/curvature-mode.js). Re-applied
+	// after the smooth pass below.
+	const curvSnap = (FontRig.curvatureMode && typeof FontRig._snapshotCurvatureForNudge === 'function')
+		? FontRig._snapshotCurvatureForNudge(sel) : null;
+
 	const hobbyContours = new Set();
 
 	for (const nodeId of sel) {
@@ -1648,6 +1654,12 @@ FontRig.moveSelectedNodes = function(dx, dy) {
 
 	// Enforce smooth tangent continuity on neighbors (bezier only)
 	FontRig.enforceSmoothForKeys(sel, dx, dy);
+
+	// Curvature mode: re-solve the anchor handles to hold the snapshotted
+	// curvatures now that the nudge + smooth pass have run.
+	if (curvSnap && typeof FontRig._applyCurvatureForNudge === 'function') {
+		FontRig._applyCurvatureForNudge(curvSnap);
+	}
 
 	// Live lerp: forward or reverse interpolation
 	if (typeof FontRig.lerpSync === 'function') FontRig.lerpSync();

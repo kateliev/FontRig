@@ -495,6 +495,17 @@ FontRig._handleNodeDrag = async function(stream, initialEvent, sx, sy) {
 		return;
 	}
 
+	// Curvature mode: dragging a single off-curve BCP edits that end's
+	// curvature — the handle slides along its tangent and the segment's
+	// opposite handle re-solves to hold the far endpoint's curvature.
+	if (FontRig.curvatureMode && typeof FontRig._curvatureHandleTarget === 'function') {
+		var chTarget = FontRig._curvatureHandleTarget(state.selectedNodeIds);
+		if (chTarget) {
+			await FontRig._handleCurvatureHandleDrag(stream, initialEvent, sx, sy, chTarget);
+			return;
+		}
+	}
+
 	FontRig.pushUndo();
 
 	// Ensure lerp snapshot is fresh (pushUndo also calls lerpEditStart,
