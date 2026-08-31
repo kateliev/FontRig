@@ -508,6 +508,22 @@ document.addEventListener('keydown', function(e) {
 		}
 	}
 
+	// C key: momentary curvature-handles mode (hold). Mirrors the S/A
+	// slide holds — activate while held, restore the prior state on
+	// release. If curvature mode was already on (via the menu), holding C
+	// is a no-op and it stays on afterwards.
+	if (e.code === 'KeyC' && !e.ctrlKey && !e.metaKey && !FontRig._isTypingInPanel(e.target)) {
+		if (!state.cKeyDown) {
+			state.cKeyDown = true;
+			state._curvatureModePrev = !!FontRig.curvatureMode;
+			if (!FontRig.curvatureMode && typeof FontRig.toggleCurvatureMode === 'function') {
+				FontRig.toggleCurvatureMode(true);
+			}
+		}
+		e.preventDefault();
+		return;
+	}
+
 	// XML textarea: Ctrl+Enter applies, other typing is free-form
 	// (XML panel instances handle their own Ctrl+Enter via mount wiring;
 	//  this guard prevents keyboard shortcuts from firing while typing)
@@ -555,6 +571,17 @@ document.addEventListener('keyup', function(e) {
 		if (state._kbSlideData && state._kbSlideData.mode === 'line') {
 			state._kbSlideData = null;
 			state._kbSlideDataLayers = null;
+		}
+	}
+
+	// C released: leave momentary curvature mode, restoring the prior
+	// state (only turn it off if it was off before C was held).
+	if (e.code === 'KeyC') {
+		if (state.cKeyDown) {
+			state.cKeyDown = false;
+			if (state._curvatureModePrev === false && typeof FontRig.toggleCurvatureMode === 'function') {
+				FontRig.toggleCurvatureMode(false);
+			}
 		}
 	}
 });

@@ -527,6 +527,87 @@ FontRig.drawStackedWarnings = function(layer) {
 	ctx.restore();
 };
 
+// -- G2 (curvature-continuity) warning glow -------------------------
+// Only active in curvature mode. Highlights SMOOTH on-curve nodes that
+// sit between two cubic segments but whose signed curvature does NOT
+// match across the node (i.e. tangent-continuous but not curvature-
+// continuous — "out of G2"). Mirrors the stacked-node halo, but as a
+// yellow rhombus. Corners and line-adjacent nodes are intentional
+// discontinuities and are skipped.
+FontRig.G2_TOLERANCE = 0.06;   // relative mismatch below which a node is "G2 enough" (no halo)
+FontRig.G2_FULL      = 0.60;   // relative mismatch at which the halo reaches full strength
+
+FontRig.drawG2Warnings = function(layer) {
+	if (!FontRig.curvatureMode || !FontRig.Curvature) return;
+	var ctx = FontRig.dom.ctx;
+	var C = FontRig.Curvature;
+
+	function rhomb(x, y, r) {
+		ctx.beginPath();
+		ctx.moveTo(x, y - r);
+		ctx.lineTo(x + r, y);
+		ctx.lineTo(x, y + r);
+		ctx.lineTo(x - r, y);
+		ctx.closePath();
+	}
+
+	ctx.save();
+	for (var si = 0; si < layer.shapes.length; si++) {
+		var shape = layer.shapes[si];
+		for (var ki = 0; ki < shape.contours.length; ki++) {
+			var contour = shape.contours[ki];
+			if (contour.kind === 'hobby') continue;
+			var nodes = contour.nodes;
+			var n = nodes.length;
+			if (n < 4) continue;
+
+			for (var ni = 0; ni < n; ni++) {
+				var node = nodes[ni];
+				if (node.type !== 'on' || !node.smooth) continue;
+
+				var inc = FontRig._analyzeIncoming(nodes, n, ni);
+				var out = FontRig._analyzeOutgoing(nodes, n, ni);
+				if (inc.type !== 'cubic' || out.type !== 'cubic') continue;
+				if (inc.handleIndices.length < 2 || out.handleIndices.length < 2) continue;
+
+				var prevOn = nodes[inc.prevOnIdx];
+				var farIn  = nodes[inc.handleIndices[inc.handleIndices.length - 1]];
+				var movIn  = nodes[inc.handleIndices[0]];
+				var kIn = C.measureEndCurvatures(prevOn, farIn, movIn, node).k1;
+
+				var nextOn = nodes[out.nextOnIdx];
+				var movOut = nodes[out.handleIndices[0]];
+				var farOut = nodes[out.handleIndices[out.handleIndices.length - 1]];
+				var kOut = C.measureEndCurvatures(node, movOut, farOut, nextOn).k0;
+
+				// Relative curvature mismatch: 0 = perfect G2, grows with
+				// the break. Normalised by the local curvature magnitude so
+				// the measure is scale-independent across a glyph.
+				var scale = Math.max(Math.abs(kIn), Math.abs(kOut));
+				var rel = Math.abs(kIn - kOut) / (scale + 1e-4);
+				if (rel <= FontRig.G2_TOLERANCE) continue;
+
+				// Ramp strength from the tolerance (just visible) up to
+				// G2_FULL (max) — bigger break = larger, more opaque halo.
+				var t = (rel - FontRig.G2_TOLERANCE) / (FontRig.G2_FULL - FontRig.G2_TOLERANCE);
+				t = t < 0 ? 0 : (t > 1 ? 1 : t);
+
+				var rOuter = 11 + 4 * t, rInner = 7 + 2 * t;
+				var aOuter = 0.10 + 0.16 * t, aInner = 0.22 + 0.30 * t;
+
+				var sp = FontRig.glyphToScreen(node.x, node.y);
+				rhomb(sp.x, sp.y, rOuter);
+				ctx.fillStyle = 'rgba(235, 205, 50, ' + aOuter.toFixed(3) + ')';
+				ctx.fill();
+				rhomb(sp.x, sp.y, rInner);
+				ctx.fillStyle = 'rgba(235, 205, 50, ' + aInner.toFixed(3) + ')';
+				ctx.fill();
+			}
+		}
+	}
+	ctx.restore();
+};
+
 // -- Nodes & handles ------------------------------------------------
 // Split into three independent functions for the visualization layer
 // system. The combined drawNodes() is kept for backward compat.

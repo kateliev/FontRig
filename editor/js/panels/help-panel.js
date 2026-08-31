@@ -45,6 +45,17 @@ FontRig.HelpPanel.mount = function(containerEl, ctx) {
 		'Slide respects the layer scope and propagates to all sync layers.',
 	]);
 
+	// -- Curvature handles mode ----------------------------------------
+	_addSection(content, 'Curvature Handles Mode (Editor > Curvature handles)', [
+		'A G2-aware editing mode after acko.net\'s curvature beziers.',
+		'Toggle it from Editor > Curvature handles, or hold C for a momentary press (release C to return to the previous state).',
+		'While on, off-curve handles show as amber rhombs.',
+		'Drag an on-curve node: adjacent segments re-scale their far handles to keep the curvature at the stationary anchors.',
+		'Drag a single handle: it slides along its tangent and the segment\'s opposite handle re-solves to hold the far end\'s curvature.',
+		'Arrow keys do the same, and it propagates to all sync layers.',
+		'Yellow rhomb halos mark smooth nodes that are NOT curvature-continuous (out of G2); a stronger/larger halo means a bigger break. The halos stay visible in preview so you can quality-check against the clean outline.',
+	]);
+
 	// -- Multi-layer editing -------------------------------------------
 	_addSection(content, 'Multi-Layer Editing', [
 		'The layer scope buttons in the toolbar control which layers are affected:',
@@ -113,6 +124,7 @@ FontRig.HelpPanel.mount = function(containerEl, ctx) {
 	var extras = [
 		{ shortcut: 'S + Drag / Arrows', desc: 'Slide node along curves' },
 		{ shortcut: 'A + Drag / Arrows', desc: 'Slide node along lines' },
+		{ shortcut: 'C (hold)',          desc: 'Momentary curvature-handles mode' },
 		{ shortcut: 'Space + Drag',      desc: 'Pan canvas' },
 		{ shortcut: 'Scroll Wheel',      desc: 'Zoom at cursor' },
 		{ shortcut: 'Ctrl + Scroll',     desc: 'Rotate grid column (multi-view)' },

@@ -183,6 +183,18 @@ FontRig.registerVizLayer({
 	}
 });
 
+// ----- z=310: G2 (curvature-continuity) warnings -------------------
+// Self-gates on FontRig.curvatureMode inside the draw fn, so no toggle.
+FontRig.registerVizLayer({
+	identifier:  'g2Warnings',
+	name:        'G2 continuity warnings',
+	zIndex:      310,
+	previewMode: 'both',   // curvature G2 check stays visible in preview
+	draw: function(ctx, layer) {
+		FontRig.drawG2Warnings(layer);
+	}
+});
+
 // ----- z=350: Selected segment highlights --------------------------
 FontRig.registerVizLayer({
 	identifier:  'selectedSegs',
