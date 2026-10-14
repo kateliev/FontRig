@@ -95,6 +95,7 @@ FontRig.state.vizLayers = {
 	anchors:        true,
 	selectionRect:  true,
 	transformFrame: true,
+	deltaLive:      true,
 	layerLabel:     true,
 	previewNodes:   true,
 };

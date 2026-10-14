@@ -105,6 +105,18 @@ FontRig.handleCanvasDrag = async function(stream, initialEvent) {
 	var coords = FontRig._interactionCoords(absSx, absSy);
 	var sx = coords.sx, sy = coords.sy;
 
+	// -- Delta Live Edit handles (canvas controls of the Delta panel)
+	if (FontRig.deltaLive && FontRig.deltaLive.active) {
+		var dlHit = null;
+		FontRig._withActiveOffset(function() {
+			dlHit = FontRig.deltaLive.hitTest(sx, sy);
+		});
+		if (dlHit) {
+			await FontRig.deltaLive.handleDrag(stream, initialEvent, sx, sy, dlHit);
+			return;
+		}
+	}
+
 	// -- Transform frame
 	if (FontRig.tf.active) {
 		var tfHandled = false;
@@ -912,6 +924,15 @@ FontRig.handleCanvasHover = function(event) {
 	// Preview mode / stem measurement: redraw on hover
 	if (state.previewMode || state.showStem) {
 		FontRig.requestDraw();
+	}
+
+	// Delta Live Edit handles take the hover (cursor + tooltip)
+	if (!state.spaceDown && FontRig.deltaLive && FontRig.deltaLive.active) {
+		var dlHover = false;
+		FontRig._withActiveOffset(function() {
+			dlHover = FontRig.deltaLive.handleHover(coords.sx, coords.sy);
+		});
+		if (dlHover) return;
 	}
 
 	// Hover cursor hint

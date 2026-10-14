@@ -203,6 +203,17 @@ FontRig.DeltaPanel.mount = function(containerEl, ctx) {
 		onClick: function() { FontRig.DeltaPanel._actionBake(inst); }
 	}));
 
+	inst._liveEditBtn = FRWidget.ToggleButton(null, {
+		icon: 'delta_machine',
+		tooltip: 'Live Edit — show the Live Axis controls on the glyph canvas',
+		active: false,
+		onChange: function(active) {
+			if (active) FontRig.DeltaPanel._liveEditStart(inst);
+			else FontRig.DeltaPanel._liveEditStop(inst);
+		}
+	});
+	grpActions.addWidget(inst._liveEditBtn);
+
 	grpActions.addWidget(FRWidget.Button(null, {
 		icon: 'stem_vertical_alt', tooltip: 'Measure V stem on selection',
 		onClick: function() { FontRig.DeltaPanel._actionMeasureStem(inst, 'x'); }
@@ -311,14 +322,19 @@ FontRig.DeltaPanel.mount = function(containerEl, ctx) {
 
 	// -- Options row -------------------------------------------------
 	var grpOpts = FRWidget.GroupBox('Options');
+	inst._optBtns = {};
 
 	function _optToggle(icon, tooltip, key) {
 		var btn = FRWidget.ToggleButton(null, {
 			icon: icon, tooltip: tooltip,
 			active: !!inst._setup.options[key],
-			onChange: function(active) { inst._setup.options[key] = !!active; }
+			onChange: function(active) {
+				inst._setup.options[key] = !!active;
+				FontRig.DeltaPanel._liveOptionChanged(inst, key);
+			}
 		});
 		grpOpts.addWidget(btn);
+		inst._optBtns[key] = btn;
 		return btn;
 	}
 
@@ -333,6 +349,7 @@ FontRig.DeltaPanel.mount = function(containerEl, ctx) {
 
 	// -- Transform-origin radio (stems mode + global) -----------------
 	var grpOrigin = FRWidget.GroupBox('Transform Origin');
+	inst._originBtns = {};
 
 	function _originRadio(icon, tooltip, code) {
 		var btn = FRWidget.ToggleButton(null, {
@@ -340,17 +357,25 @@ FontRig.DeltaPanel.mount = function(containerEl, ctx) {
 			active: inst._setup.options.origin === code,
 			group: 'delta-origin',
 			onChange: function(active) {
-				if (active) inst._setup.options.origin = code;
+				if (!active) return;
+				inst._setup.options.origin = code;
+				// Live: re-drive so the new alignment shows immediately
+				if (inst._liveEnabled || inst._liveEdit) FontRig.DeltaPanel._actionLiveDrive(inst);
 			}
 		});
 		grpOrigin.addWidget(btn);
+		inst._originBtns[code] = btn;
 	}
 
 	_originRadio('node_align_bottom_left', 'Baseline (origin)', 'BS');
 	_originRadio('node_bottom_left',       'Bottom Left',       'BL');
+	_originRadio('node_middle_bottom',     'Bottom Middle',     'BM');
 	_originRadio('node_bottom_right',      'Bottom Right',      'BR');
+	_originRadio('node_middle_left',       'Left Middle',       'LM');
 	_originRadio('node_center',            'Center',            'CE');
+	_originRadio('node_middle_right',      'Right Middle',      'RM');
 	_originRadio('node_top_left',          'Top Left',          'TL');
+	_originRadio('node_middle_top',        'Top Middle',        'TM');
 	_originRadio('node_top_right',         'Top Right',         'TR');
 
 	root.appendChild(grpOrigin);
@@ -367,7 +392,9 @@ FontRig.DeltaPanel.mount = function(containerEl, ctx) {
 	};
 	inst.unmount = function() {
 		FontRig.DeltaPanel._stopLayerWatcher(inst);
+		if (inst._liveEdit) FontRig.DeltaPanel._liveEditStop(inst);
 	};
+	FontRig.DeltaPanel._bindLiveApi(inst);
 	return inst;
 };
 
@@ -698,6 +725,7 @@ FontRig.DeltaPanel._buildSliderRow = function(inst, axis, treeEl) {
 	var lastStem  = axis.inputs[axis.inputs.length - 1] || firstStem;
 
 	var liveState = inst._liveState = inst._liveState || {};
+	inst._sliderCtrls = {};		// key -> { sl, sp }: Live Edit writes values back here
 	// Live axis is singular now — re-seed only if names disagree (the
 	// user renamed the live axis, basically).
 	if (liveState.axisName !== axis.name) {
@@ -742,6 +770,7 @@ FontRig.DeltaPanel._buildSliderRow = function(inst, axis, treeEl) {
 			if (!isNaN(v)) commit(v);
 		});
 
+		inst._sliderCtrls[key] = { sl: sl, sp: sp };
 		box.appendChild(item);
 	}
 
@@ -1351,20 +1380,47 @@ FontRig.DeltaPanel._actionResetAll = function(inst) {
 		'Reset all — masters re-seeded from glyph.', 'info');
 };
 
-// Fingerprint of the Live Axis structure (input names + stems) — used
-// to detect when the user edits the axis while Live mode is on, so we
-// can re-snapshot transparently.
-FontRig.DeltaPanel._liveFingerprint = function(liveAxis) {
+// Options the live snapshot is built with. Live Edit decides selection
+// mode from the canvas selection (captured in _liveSelMode); the
+// sliders alone follow the panel's Selection toggle.
+FontRig.DeltaPanel._liveOptions = function(inst) {
+	var o = Object.assign({}, inst._setup.options);
+	o.origin = o.origin || 'BS';
+	if (inst._liveEdit) o.selection = !!inst._liveSelMode;
+	return o;
+};
+
+// Fingerprint of everything the live snapshot is built from (Live Axis
+// inputs + stems, snapshot options) — used to detect when the user
+// edits the axis or an option while Live is on, so we can re-snapshot
+// transparently. The origin is excluded: it is sent per drive.
+FontRig.DeltaPanel._liveFingerprint = function(inst) {
+	var liveAxis = inst._setup.liveAxis;
 	if (!liveAxis || !liveAxis.inputs) return '';
-	return JSON.stringify(liveAxis.inputs.map(function(i) {
+	var o = FontRig.DeltaPanel._liveOptions(inst);
+	return JSON.stringify([liveAxis.inputs.map(function(i) {
 		return [i.name, i.vstem, i.hstem];
-	}));
+	}), !!o.metrics, !!o.anchors, !!o.extrapolate, !!o.selection, +o.italic_angle || 0]);
+};
+
+// A TypeRig core older than this panel lacks the newer dispatcher
+// arguments: say so instead of failing silently (the browser fetches the
+// core from TypeRig master).
+FontRig.DeltaPanel._warnStaleCore = function(e, arg) {
+	if (String(e).indexOf("'" + arg + "'") >= 0) {
+		console.warn('[DeltaPanel] The TypeRig core loaded from GitHub master is older than this panel '
+			+ '(no "' + arg + '" argument). Push TypeRig master, then reload FontRig.');
+	}
 };
 
 // Take a snapshot of the Live Axis. Inputs are cloned in Python
 // (deepcopy) so the snapshot is frozen — driving the active layer
 // later cannot feed back into the snapshot, which is the whole point.
+// With the selection option on, the core snapshots only the nodes
+// selected on the active layer (selection_layer). Returns the core's
+// status dict on success, false on failure (reason in _liveSetError).
 FontRig.DeltaPanel._actionLiveSet = function(inst) {
+	inst._liveSetError = null;
 	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return false;
 	var liveAxis = inst._setup.liveAxis;
 	if (!liveAxis || !liveAxis.inputs || liveAxis.inputs.length < 2) {
@@ -1378,31 +1434,33 @@ FontRig.DeltaPanel._actionLiveSet = function(inst) {
 			inputs: liveAxis.inputs,
 			targets: [],
 		}],
-		options: Object.assign({}, inst._setup.options, {
-			origin: inst._setup.options.origin || 'BS',
-		}),
+		options: FontRig.DeltaPanel._liveOptions(inst),
 	};
 	var json = JSON.stringify(liveSetup);
 	FontRig.pyBridge.pyodide.globals.set('_delta_setup_json', json);
+	FontRig.pyBridge.pyodide.globals.set('_delta_sel_layer', FontRig.state.activeLayer || '');
 	FontRig.pyBridge.syncToPython();
 	try {
 		var resJson = FontRig.pyBridge.pyodide.runPython(
 			'import json as _j; _j.dumps(' +
-			'npa("npa_delta_live_set", _delta_setup_json))'
+			'npa("npa_delta_live_set", _delta_setup_json, selection_layer=_delta_sel_layer))'
 		);
 		var res = JSON.parse(resJson || '{}');
 		if (!res.ok) {
 			console.warn('[DeltaPanel] Live snapshot failed:', res.error || res);
+			inst._liveSetError = res.error || 'snapshot failed';
 			inst._liveFingerprintCached = '';
 			return false;
 		}
-		inst._liveFingerprintCached =
-			FontRig.DeltaPanel._liveFingerprint(liveAxis);
+		inst._liveFingerprintCached = FontRig.DeltaPanel._liveFingerprint(inst);
 		FontRig.log('[DeltaPanel] Live snapshot taken — '
-			+ res.inputs + ' inputs, viable: ' + (res.viable || []).join(', '));
-		return true;
+			+ res.inputs + ' inputs, viable: ' + (res.viable || []).join(', ')
+			+ (res.selection ? ', selection: ' + res.selection + ' nodes' : ''));
+		return res;
 	} catch (e) {
 		console.warn('[DeltaPanel] Live snapshot failed:', e);
+		FontRig.DeltaPanel._warnStaleCore(e, 'selection_layer');
+		inst._liveSetError = 'snapshot failed (see console)';
 		return false;
 	}
 };
@@ -1455,6 +1513,9 @@ FontRig.DeltaPanel._neutralLiveState = function(inst, layerName) {
 FontRig.DeltaPanel._onActiveLayerChange = function(inst, newName) {
 	inst._liveCurrentLayer = newName;
 	if (!newName || !inst._liveEnabled) return;
+	// Live Edit keeps the Live Axis on a layer switch; the canvas tool
+	// handles it (liveCapture: reseed only, no re-snapshot).
+	if (inst._liveEdit) return;
 
 	// Re-snapshot — captures the editor's current layer states as the
 	// new baseline.
@@ -1502,11 +1563,15 @@ FontRig.DeltaPanel._actionLiveDrive = function(inst) {
 		? FontRig.getActiveLayer() : null;
 	if (!active) return;
 
-	// Re-snapshot transparently if the Live Axis was edited while
-	// Live was on (e.g. user dragged in a different master).
-	var fp = FontRig.DeltaPanel._liveFingerprint(inst._setup.liveAxis);
+	// Re-snapshot transparently if the Live Axis or a snapshot option
+	// was edited while Live was on (e.g. user dragged in a different master).
+	var fp = FontRig.DeltaPanel._liveFingerprint(inst);
 	if (fp !== inst._liveFingerprintCached) {
-		if (!FontRig.DeltaPanel._actionLiveSet(inst)) return;
+		if (inst._liveEdit) {
+			if (!FontRig.DeltaPanel._liveCapture(inst, true)) return;
+		} else if (!FontRig.DeltaPanel._actionLiveSet(inst)) {
+			return;
+		}
 	}
 
 	var s = inst._liveState;
@@ -1516,21 +1581,256 @@ FontRig.DeltaPanel._actionLiveDrive = function(inst) {
 	py.globals.set('_delta_live_h', s.hstem);
 	py.globals.set('_delta_live_sx', s.sx);
 	py.globals.set('_delta_live_sy', s.sy);
+	py.globals.set('_delta_live_origin', inst._setup.options.origin || 'BS');
 
 	// syncToPython: we need the editor's current glyph as the *write*
 	// target. The deltas read from the frozen snapshot in module state,
 	// so the live glyph state never feeds back into the inputs.
 	FontRig.pyBridge.syncToPython();
 	try {
-		py.runPython(
-			'npa("npa_delta_live_drive", _delta_live_target, ' +
-			'_delta_live_v, _delta_live_h, _delta_live_sx, _delta_live_sy)'
+		var resJson = py.runPython(
+			'import json as _j; _j.dumps(npa("npa_delta_live_drive", _delta_live_target, ' +
+			'_delta_live_v, _delta_live_h, _delta_live_sx, _delta_live_sy, ' +
+			'origin=_delta_live_origin))'
 		);
+		var res = JSON.parse(resJson || '{}');
+		if (!res.ok) console.warn('[DeltaPanel] Live drive:', res.error || res);
 		FontRig.pyBridge.syncFromPython();
 		if (FontRig.draw) FontRig.draw();
 	} catch (e) {
 		console.warn('[DeltaPanel] Live drive failed:', e);
+		FontRig.DeltaPanel._warnStaleCore(e, 'origin');
 	}
+
+	if (inst._liveEdit) FontRig.DeltaPanel._liveWrote(inst);
+};
+
+// =====================================================================
+// Live Edit (canvas) — second front-end for the Live Axis controls
+// =====================================================================
+// FontRig.deltaLive (tools/delta-live.js) draws the controls on the
+// glyph and writes through the inst.live* API below; _actionLiveDrive
+// does the work and notifies the tool. Same lifecycle as FontLab's
+// DeltaNew Live Edit:
+//   - capture on activation (snapshot + neutral controls + frame);
+//   - a layer switch keeps the Live Axis and only reseeds;
+//   - a glyph switch, an outside node edit or undo, a selection change,
+//     an option change or the recapture icon rebuild the snapshot;
+//   - the selection decides the mode (nodes selected -> selection mode,
+//     none -> whole layer);
+//   - no undo step per drag (as in FontLab; use the snapshot button).
+FontRig.DeltaPanel._bindLiveApi = function(inst) {
+	var DP = FontRig.DeltaPanel;
+	inst.liveState     = function() { return DP._liveStateOf(inst); };
+	inst.liveProblem   = function() { return DP._liveProblem(inst); };
+	inst.liveSet       = function(values) { DP._liveSetValues(inst, values); };
+	inst.liveCapture   = function() { return DP._liveCapture(inst, false); };
+	inst.liveRecapture = function() { return DP._liveCapture(inst, true); };
+	inst.liveReset     = function() { DP._liveReset(inst); };
+	inst.liveToggle    = function(option) { DP._liveToggle(inst, option); };
+	inst.liveClosed    = function() {
+		if (inst._liveEditBtn) inst._liveEditBtn.setValue(false);
+		DP._liveEditStop(inst);
+	};
+	inst.isAlive       = function() {
+		return !!inst._liveEdit && (!inst._containerEl || inst._containerEl.isConnected !== false);
+	};
+};
+
+FontRig.DeltaPanel._liveEditStart = function(inst) {
+	var DP = FontRig.DeltaPanel;
+	inst._liveEdit = true;
+	DP._liveCapture(inst, true);		// capture on activation
+	FontRig.deltaLive.start(inst);
+	var problem = DP._liveProblem(inst);
+	DP._setStatus(inst, problem ? 'Live Edit: ' + problem + '.' : 'Live Edit on — drag the controls on the glyph.',
+		problem ? 'warning' : 'info');
+};
+
+FontRig.DeltaPanel._liveEditStop = function(inst) {
+	if (!inst._liveEdit) return;
+	inst._liveEdit = false;
+	if (FontRig.deltaLive && FontRig.deltaLive.panel === inst) FontRig.deltaLive.stop();
+	inst._liveInfo = inst._liveRes = inst._liveGlyph = inst._liveFrame = null;
+	// The sliders keep driving with their own options; without them, drop the snapshot
+	if (inst._liveEnabled) FontRig.DeltaPanel._actionLiveSet(inst);
+	else FontRig.DeltaPanel._actionLiveClear(inst);
+};
+
+FontRig.DeltaPanel._liveProblem = function(inst) {
+	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return 'Python not ready';
+	var la = inst._setup.liveAxis;
+	if (!la || !la.inputs || la.inputs.length < 2) return 'Live Axis needs at least 2 inputs';
+	if (!inst._liveInfo) return inst._liveFail || 'nothing captured';
+	return null;
+};
+
+// State for the canvas, or null (see _liveProblem). Frames are
+// [xmin, ymin, xmax, ymax] with x deslanted; params in tool units
+// (width/height factors, stems in units, origin code).
+FontRig.DeltaPanel._liveStateOf = function(inst) {
+	if (FontRig.DeltaPanel._liveProblem(inst)) return null;
+	var info = inst._liveInfo, s = inst._liveState || {}, o = inst._setup.options;
+	return {
+		target: [info.glyph, info.layer],
+		frame: inst._liveFrame, srcFrame: info.srcFrame, slant: info.slant, seed: info.seed,
+		params: {
+			width: (+s.sx || 100) / 100, height: (+s.sy || 100) / 100,
+			stem_x: +s.vstem, stem_y: +s.hstem, origin: o.origin || 'BS',
+		},
+		selection: info.selection, warnings: info.warnings,
+		options: { metrics: !!o.metrics, anchors: !!o.anchors },
+		process: info.process,
+	};
+};
+
+// Canvas -> controls (tool units -> slider units), then one drive.
+FontRig.DeltaPanel._liveSetValues = function(inst, values) {
+	var DP = FontRig.DeltaPanel;
+	var s = inst._liveState = inst._liveState || DP._neutralLiveState(inst, FontRig.state.activeLayer);
+	if (values.width !== undefined) s.sx = Math.round(values.width * 100);
+	if (values.height !== undefined) s.sy = Math.round(values.height * 100);
+	if (values.stem_x !== undefined) s.vstem = Math.max(1, Math.round(values.stem_x));
+	if (values.stem_y !== undefined) s.hstem = Math.max(1, Math.round(values.stem_y));
+	if (values.origin && values.origin !== inst._setup.options.origin) {
+		inst._setup.options.origin = values.origin;
+		DP._syncOriginButtons(inst);
+	}
+	DP._syncSliders(inst);
+	DP._actionLiveDrive(inst);
+};
+
+// Capture for Live Edit: pick the mode from the selection, build (or
+// keep) the snapshot, seed neutral controls for the active layer and
+// measure the frame. Writes nothing. rebuild=false keeps the snapshot
+// when the glyph and the selection are unchanged (layer switch).
+FontRig.DeltaPanel._liveCapture = function(inst, rebuild) {
+	var DP = FontRig.DeltaPanel, M = FontRig.deltaLiveMath;
+	inst._liveInfo = null;
+	inst._liveFail = null;
+	if (!FontRig.pyBridge || !FontRig.pyBridge.ready) return false;
+	var la = inst._setup.liveAxis;
+	if (!la || !la.inputs || la.inputs.length < 2) return false;
+
+	var glyph = FontRig.state.glyphData;
+	var layer = typeof FontRig.getActiveLayer === 'function' ? FontRig.getActiveLayer() : null;
+	if (!glyph || !layer) { inst._liveFail = 'no glyph or layer'; return false; }
+
+	var points = DP._liveLayerPoints(layer);
+	if (!points.length) { inst._liveFail = 'active layer ' + layer.name + ' is empty'; return false; }
+
+	var selIds = FontRig.state.selectedNodeIds || new Set();
+	var sel = points.filter(function(p) { return selIds.has(p.id); });
+	var selSig = sel.map(function(p) { return p.id; }).sort().join(',');
+
+	var res = inst._liveRes;
+	var keep = !rebuild && res && inst._liveGlyph === glyph.name && inst._liveSelSig === selSig;
+	if (!keep) {
+		inst._liveSelMode = sel.length > 0;
+		res = DP._actionLiveSet(inst);
+		if (!res) {
+			inst._liveRes = null;
+			inst._liveFail = 'Live Axis snapshot failed: ' + (inst._liveSetError || 'see console');
+			return false;
+		}
+		inst._liveRes = res;
+	}
+
+	inst._liveState = DP._neutralLiveState(inst, layer.name);
+	DP._syncSliders(inst);
+
+	var slant = -(+inst._setup.options.italic_angle || 0) * Math.PI / 180;
+	var frame = M.slantBounds((res.selection ? sel : points).map(function(p) { return [p.x, p.y]; }), slant);
+
+	var used = res.used || [], warnings = [];
+	var skipped = la.inputs.map(function(i) { return i.name; }).filter(function(n) { return used.indexOf(n) < 0; });
+	if (used.length && skipped.length) warnings.push('skipped inputs: ' + skipped.join(', '));
+	if (used.length && used.indexOf(layer.name) < 0) warnings.push(layer.name + ' is not a Live Axis input: neutral = seed stems');
+	var process = (res.viable || []).filter(function(a) { return a !== 'point_array'; })
+		.map(function(a) { return a === 'metric_array' ? 'metrics' : 'anchors'; });
+
+	inst._liveGlyph = glyph.name;
+	inst._liveSelSig = selSig;
+	inst._liveFrame = frame;
+	inst._liveInfo = {
+		glyph: glyph.name, layer: layer.name, slant: slant, srcFrame: frame,
+		seed: [inst._liveState.vstem, inst._liveState.hstem],
+		selection: res.selection || null, warnings: warnings, process: process,
+	};
+	return true;
+};
+
+// After a live write: keep the output frame, notify the canvas tool.
+FontRig.DeltaPanel._liveWrote = function(inst) {
+	var info = inst._liveInfo, glyph = FontRig.state.glyphData;
+	var layer = typeof FontRig.getActiveLayer === 'function' ? FontRig.getActiveLayer() : null;
+	if (info && glyph && layer && info.glyph === glyph.name && info.layer === layer.name) {
+		var points = FontRig.DeltaPanel._liveLayerPoints(layer);
+		if (info.selection) {
+			var ids = FontRig.state.selectedNodeIds || new Set();
+			points = points.filter(function(p) { return ids.has(p.id); });
+		}
+		if (points.length) {
+			inst._liveFrame = FontRig.deltaLiveMath.slantBounds(
+				points.map(function(p) { return [p.x, p.y]; }), info.slant);
+		}
+	}
+	if (FontRig.deltaLive && FontRig.deltaLive.panel === inst) FontRig.deltaLive.panelWrote();
+};
+
+// Axis reset icon: neutral controls for the active layer, applied once.
+// On a Live Axis input this writes its captured state back.
+FontRig.DeltaPanel._liveReset = function(inst) {
+	if (!inst._liveInfo) return;
+	inst._liveState = FontRig.DeltaPanel._neutralLiveState(inst, inst._liveInfo.layer);
+	FontRig.DeltaPanel._syncSliders(inst);
+	FontRig.DeltaPanel._actionLiveDrive(inst);
+};
+
+// Metrics / anchors icon: flip the panel option. The kept Live Axis
+// was built with the old attributes, so this recaptures.
+FontRig.DeltaPanel._liveToggle = function(inst, option) {
+	inst._setup.options[option] = !inst._setup.options[option];
+	if (inst._optBtns && inst._optBtns[option]) inst._optBtns[option].setValue(inst._setup.options[option]);
+	FontRig.DeltaPanel._liveCapture(inst, true);
+};
+
+// Panel option toggled while Live Edit is on: snapshot options changed.
+// (Selection is decided by the canvas selection while Live Edit is on.)
+FontRig.DeltaPanel._liveOptionChanged = function(inst, key) {
+	if (!inst._liveEdit || key === 'selection') return;
+	FontRig.DeltaPanel._liveCapture(inst, true);
+	if (FontRig.deltaLive && FontRig.deltaLive.panel === inst) FontRig.deltaLive.panelWrote();
+};
+
+// [{x, y, id}] of a JS layer in point_array order; id is the editor's
+// node id ("c{contour}_n{node}", contours counted across shapes).
+FontRig.DeltaPanel._liveLayerPoints = function(layer) {
+	var out = [], ci = 0;
+	(layer.shapes || []).forEach(function(shape) {
+		(shape.contours || []).forEach(function(contour) {
+			(contour.nodes || []).forEach(function(node, ni) {
+				out.push({ x: node.x, y: node.y, id: 'c' + ci + '_n' + ni });
+			});
+			ci++;
+		});
+	});
+	return out;
+};
+
+FontRig.DeltaPanel._syncSliders = function(inst) {
+	var ctrls = inst._sliderCtrls, s = inst._liveState;
+	if (!ctrls || !s) return;
+	Object.keys(ctrls).forEach(function(key) {
+		if (s[key] === undefined) return;
+		ctrls[key].sl.value = s[key];
+		ctrls[key].sp.value = s[key];
+	});
+};
+
+FontRig.DeltaPanel._syncOriginButtons = function(inst) {
+	var btns = inst._originBtns || {}, origin = inst._setup.options.origin;
+	Object.keys(btns).forEach(function(code) { btns[code].setValue(code === origin); });
 };
 
 FontRig.DeltaPanel._actionBake = function(inst) {
