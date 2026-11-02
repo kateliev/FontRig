@@ -100,6 +100,23 @@ label.size {
 }
 input[type=range] { accent-color: var(--accent); width: 110px; }
 
+/* -- Layer dropdowns -- */
+select {
+	font-family: var(--mono);
+	font-size: 12px;
+	color: var(--text-primary);
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 6px 8px;
+	cursor: pointer;
+	max-width: 100%;
+}
+select:hover { border-color: var(--accent); }
+#globalLayer { color: var(--accent); }
+.layer-bar { padding: 8px 11px 0; }
+.layer-pick { width: 100%; font-size: 11px; padding: 4px 6px; }
+
 /* -- Dropzone -- */
 #dropzone {
 	margin: 20px;
@@ -168,6 +185,9 @@ input[type=range] { accent-color: var(--accent); width: 110px; }
 	<h1>FontRig <span class="dim">· Glyph Viewer</span></h1>
 	<span class="count" id="count">no files</span>
 	<div class="spacer"></div>
+	<span id="globalLayerWrap" hidden>
+		<select id="globalLayer" title="Layer for all .trglyph cards"><option value="">Layer: first</option></select>
+	</span>
 	<label class="size">size
 		<input type="range" id="sizeRange" min="90" max="320" value="180" step="10">
 	</label>
@@ -191,6 +211,19 @@ const grid = document.getElementById('grid');
 const dropzone = document.getElementById('dropzone');
 const countEl = document.getElementById('count');
 const fileInput = document.getElementById('file');
+const globalLayer = document.getElementById('globalLayer');
+const globalLayerWrap = document.getElementById('globalLayerWrap');
+
+// Global layer picker: apply to every .trglyph card that has that layer.
+globalLayer.addEventListener('change', () => {
+	const g = globalLayer.value;
+	for (const e of cards) {
+		if (!e.model.isTR) continue;
+		if (!g) renderCard(e, e.model.layers[0].name);
+		else if (e.model.layers.some(L => L.name === g)) renderCard(e, g);
+		// If this file lacks the chosen layer, leave it on its current one.
+	}
+});
 
 // ---------------------------------------------------------------
 // Each file is treated as a standalone image — no outside references.
@@ -234,13 +267,14 @@ function buildGlif(g) {
 	const warnings = components ? [`+${components} component(s) not rendered`] : [];
 
 	return {
-		kind: 'UFO .glif', name: g.getAttribute('name') || '',
-		advance, unicodes, contourCount, warnings, d, pts,
+		kind: 'UFO .glif', isTR: false, name: g.getAttribute('name') || '', unicodes,
+		layers: [{ name: 'outline', advance, contourCount, warnings, d, pts }],
 	};
 }
 
 // -- FontRig .trglyph -------------------------------------------
-// Renders the first layer. Node semantics mirror the editor's tracer:
+// Every layer (master) is parsed so a dropdown can switch between them.
+// Node semantics mirror the editor's tracer:
 //   on    -> line target
 //   curve -> first of two cubic control points (next node is the 2nd)
 //   off   -> single quadratic control point
@@ -248,12 +282,17 @@ function buildTrglyph(g) {
 	const name = g.getAttribute('name') || '';
 	const uni = g.getAttribute('unicodes') || '';
 	const unicodes = uni ? uni.split(/[\s,]+/).filter(Boolean) : [];
-	const layers = [...g.querySelectorAll(':scope > layer')];
+	const layerEls = [...g.querySelectorAll(':scope > layer')];
 
-	const base = { kind: 'FontRig .trglyph', name, unicodes };
-	if (!layers.length) return { ...base, advance: null, contourCount: 0, warnings: [], d: '', pts: [] };
+	const layers = layerEls.map((el, idx) => buildTrLayer(el, idx));
+	if (!layers.length) layers.push({ name: '(none)', advance: null, contourCount: 0, warnings: [], d: '', pts: [] });
 
-	const layer = layers[0];
+	return { kind: 'FontRig .trglyph', isTR: true, name, unicodes, layers };
+}
+
+// One .trglyph layer -> { name, advance, d, pts, contourCount, warnings }.
+function buildTrLayer(layer, idx) {
+	const name = layer.getAttribute('name') || `layer ${idx + 1}`;
 	const advance = parseFloat(layer.getAttribute('width') || '0') || null;
 	const pts = [];
 	let d = '', contourCount = 0, hobby = 0;
@@ -274,10 +313,8 @@ function buildTrglyph(g) {
 		}
 	}
 
-	const warnings = [];
-	if (hobby) warnings.push(`${hobby} Hobby contour(s) skipped`);
-	if (layers.length > 1) warnings.push(`layer 1 of ${layers.length} shown`);
-	return { ...base, advance, contourCount, warnings, d, pts };
+	const warnings = hobby ? [`${hobby} Hobby contour(s) skipped`] : [];
+	return { name, advance, contourCount, warnings, d, pts };
 }
 
 function parseTransformAttr(str) {
@@ -398,35 +435,101 @@ function renderPaths(d, pts) {
 // ---------------------------------------------------------------
 // Card building
 // ---------------------------------------------------------------
+// Live card registry so layers can be switched after rendering.
+const cards = [];        // { model, layerName, renderEl, metaEl, selectEl, name, path }
+const layerUnion = [];   // ordered unique layer names across all .trglyph cards
+
 function makeCard(name, path, text) {
 	const card = document.createElement('div');
 	card.className = 'card';
-	let renderHTML, metaHTML = '';
 
+	let model;
 	try {
-		const m = buildGlyph(text);
-		const svg = renderPaths(m.d, m.pts);
-		renderHTML = svg
-			? `<div class="render">${svg}</div>`
-			: `<div class="render empty">no outline</div>`;
-		const bits = [`<span class="fmt">${esc(m.kind)}</span>`];
-		if (m.name) bits.push(`<span>glyph <b>${esc(m.name)}</b></span>`);
-		if (m.advance != null) bits.push(`<span>adv <b>${m.advance}</b></span>`);
-		if (m.unicodes.length) bits.push(`<span>U+${m.unicodes.map(esc).join(' U+')}</span>`);
-		bits.push(`<span>${m.contourCount} contour${m.contourCount === 1 ? '' : 's'}</span>`);
-		metaHTML = `<div class="info">${bits.join('')}</div>`;
-		for (const w of m.warnings) metaHTML += `<div class="warn">${esc(w)}</div>`;
+		model = buildGlyph(text);
 	} catch (e) {
-		renderHTML = `<div class="render error">${esc(e.message)}</div>`;
+		card.innerHTML = `<div class="render error">${esc(e.message)}</div>` +
+			`<div class="meta"><div class="fname">${esc(name)}</div>` +
+			`${path && path !== name ? `<div class="fpath">${esc(path)}</div>` : ''}</div>`;
+		grid.appendChild(card);
+		return;
 	}
 
-	card.innerHTML = renderHTML +
-		`<div class="meta">
-			<div class="fname">${esc(name)}</div>
-			${path && path !== name ? `<div class="fpath">${esc(path)}</div>` : ''}
-			${metaHTML}
-		</div>`;
+	const renderEl = document.createElement('div');
+	const metaEl = document.createElement('div');
+	metaEl.className = 'meta';
+
+	// Per-card layer dropdown — only for .trglyph with more than one layer.
+	let selectEl = null;
+	if (model.isTR && model.layers.length > 1) {
+		selectEl = document.createElement('select');
+		selectEl.className = 'layer-pick';
+		for (const L of model.layers) {
+			const o = document.createElement('option');
+			o.value = L.name; o.textContent = L.name;
+			selectEl.appendChild(o);
+		}
+	}
+
+	const entry = { model, layerName: null, renderEl, metaEl, selectEl, name, path };
+	cards.push(entry);
+
+	// Honor the global pick when this file has that layer; else its first.
+	const g = globalLayer.value;
+	const initial = (g && model.layers.some(L => L.name === g)) ? g : model.layers[0].name;
+
+	card.appendChild(renderEl);
+	if (selectEl) {
+		const bar = document.createElement('div');
+		bar.className = 'layer-bar';
+		bar.appendChild(selectEl);
+		card.appendChild(bar);
+		selectEl.addEventListener('change', () => renderCard(entry, selectEl.value));
+	}
+	card.appendChild(metaEl);
+	renderCard(entry, initial);
 	grid.appendChild(card);
+
+	// Feed the global layer list.
+	if (model.isTR) {
+		let changed = false;
+		for (const L of model.layers) if (!layerUnion.includes(L.name)) { layerUnion.push(L.name); changed = true; }
+		if (changed) rebuildGlobalLayer();
+	}
+}
+
+// (Re)render one card entry at the named layer.
+function renderCard(entry, layerName) {
+	const { model } = entry;
+	const layer = model.layers.find(L => L.name === layerName) || model.layers[0];
+	entry.layerName = layer.name;
+
+	const svg = renderPaths(layer.d, layer.pts);
+	entry.renderEl.className = svg ? 'render' : 'render empty';
+	entry.renderEl.innerHTML = svg || 'no outline';
+
+	const bits = [`<span class="fmt">${esc(model.kind)}</span>`];
+	if (model.name) bits.push(`<span>glyph <b>${esc(model.name)}</b></span>`);
+	if (layer.advance != null) bits.push(`<span>adv <b>${layer.advance}</b></span>`);
+	if (model.unicodes.length) bits.push(`<span>U+${model.unicodes.map(esc).join(' U+')}</span>`);
+	bits.push(`<span>${layer.contourCount} contour${layer.contourCount === 1 ? '' : 's'}</span>`);
+	let meta = `<div class="info">${bits.join('')}</div>`;
+	for (const w of layer.warnings) meta += `<div class="warn">${esc(w)}</div>`;
+
+	entry.metaEl.innerHTML =
+		`<div class="fname">${esc(entry.name)}</div>` +
+		(entry.path && entry.path !== entry.name ? `<div class="fpath">${esc(entry.path)}</div>` : '') +
+		meta;
+
+	if (entry.selectEl) entry.selectEl.value = layer.name;
+}
+
+// Rebuild the header's global layer <select> from the union of names.
+function rebuildGlobalLayer() {
+	const cur = globalLayer.value;
+	globalLayer.innerHTML = '<option value="">Layer: first</option>' +
+		layerUnion.map(n => `<option value="${esc(n)}">Layer: ${esc(n)}</option>`).join('');
+	globalLayer.value = layerUnion.includes(cur) ? cur : '';
+	globalLayerWrap.hidden = layerUnion.length === 0;
 }
 
 function esc(s) {
@@ -492,7 +595,12 @@ function walkEntry(entry, prefix, out) {
 document.getElementById('pick').onclick = () => fileInput.click();
 fileInput.onchange = () => { addFiles(filesFromFileList(fileInput.files)); fileInput.value = ''; };
 
-document.getElementById('clear').onclick = () => { grid.innerHTML = ''; total = 0; updateCount(); };
+document.getElementById('clear').onclick = () => {
+	grid.innerHTML = ''; total = 0;
+	cards.length = 0; layerUnion.length = 0;
+	rebuildGlobalLayer();
+	updateCount();
+};
 
 document.getElementById('theme').onclick = () => {
 	const root = document.documentElement;
