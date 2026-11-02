@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FontRig · .glif Viewer</title>
+<title>FontRig · Glyph Viewer</title>
 <link rel="icon" href="../editor/favicon.svg">
 <style>
 /* Reuse the FontRig editor design tokens so this matches the app.
@@ -159,12 +159,13 @@ input[type=range] { accent-color: var(--accent); width: 110px; }
 }
 .info { font-size: 10.5px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
 .info b { color: var(--text-primary); font-weight: 600; }
+.info .fmt { color: var(--accent); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.2px; }
 .warn { font-size: 10px; color: var(--danger); margin-top: 2px; }
 </style>
 </head>
 <body>
 <header>
-	<h1>FontRig <span class="dim">· .glif Viewer</span></h1>
+	<h1>FontRig <span class="dim">· Glyph Viewer</span></h1>
 	<span class="count" id="count">no files</span>
 	<div class="spacer"></div>
 	<label class="size">size
@@ -173,12 +174,12 @@ input[type=range] { accent-color: var(--accent); width: 110px; }
 	<button class="btn primary" id="pick">Select files…</button>
 	<button class="btn" id="clear">Clear</button>
 	<button class="btn" id="theme" title="Toggle light/dark">◑</button>
-	<input type="file" id="file" accept=".glif,application/xml,text/xml" multiple hidden>
+	<input type="file" id="file" accept=".glif,.trglyph,application/xml,text/xml" multiple hidden>
 </header>
 
 <div id="dropzone">
-	<div class="big">Drop .glif files or a folder here</div>
-	<div class="small">Each file is rendered on its own — no UFO assembly, no .plist lookups. Components are not resolved.</div>
+	<div class="big">Drop .glif or .trglyph files or a folder here</div>
+	<div class="small">Each file is rendered on its own — no font assembly, no .plist lookups. UFO components are not resolved; .trglyph shows its first layer.</div>
 </div>
 
 <div id="grid"></div>
@@ -192,39 +193,130 @@ const countEl = document.getElementById('count');
 const fileInput = document.getElementById('file');
 
 // ---------------------------------------------------------------
-// Parse a standard UFO .glif into contours + components.
-// Treats the file as a standalone image: no outside references.
+// Each file is treated as a standalone image — no outside references.
+// Two formats are auto-detected by content:
+//   UFO .glif      -> <glyph><outline><contour><point>
+//   FontRig .trglyph -> <glyph><layer><shape><contour><node>
 // ---------------------------------------------------------------
-function parseGlif(xml) {
+function parseGlyphRoot(xml) {
 	const doc = new DOMParser().parseFromString(xml, 'text/xml');
-	const err = doc.querySelector('parsererror');
-	if (err) throw new Error('XML parse error');
+	if (doc.querySelector('parsererror')) throw new Error('XML parse error');
 	const g = doc.querySelector('glyph');
 	if (!g) throw new Error('no <glyph> element');
+	return g;
+}
 
+function buildGlyph(xml) {
+	const g = parseGlyphRoot(xml);
+	return g.querySelector(':scope > layer') ? buildTrglyph(g) : buildGlif(g);
+}
+
+// -- UFO .glif ---------------------------------------------------
+function buildGlif(g) {
 	const unicodes = [...g.querySelectorAll('unicode')]
 		.map(u => u.getAttribute('hex')).filter(Boolean);
 	const adv = g.querySelector('advance');
-	const width = adv ? parseFloat(adv.getAttribute('width') || '0') : null;
+	const advance = adv ? parseFloat(adv.getAttribute('width') || '0') : null;
 
-	const contours = [];
+	const pts = [];
+	let d = '', contourCount = 0;
 	for (const c of g.querySelectorAll('outline > contour')) {
-		const pts = [...c.querySelectorAll('point')].map(p => ({
+		const cp = [...c.querySelectorAll('point')].map(p => ({
 			x: parseFloat(p.getAttribute('x')),
 			y: parseFloat(p.getAttribute('y')),
 			type: p.getAttribute('type') || 'offcurve',
 		}));
-		if (pts.length) contours.push(pts);
+		if (!cp.length) continue;
+		const seg = contourToPath(cp);
+		if (seg) { d += seg + ' '; contourCount++; for (const p of cp) pts.push([p.x, p.y]); }
 	}
 	const components = g.querySelectorAll('outline > component').length;
+	const warnings = components ? [`+${components} component(s) not rendered`] : [];
 
 	return {
-		name: g.getAttribute('name') || '',
-		width, unicodes, contours, components,
+		kind: 'UFO .glif', name: g.getAttribute('name') || '',
+		advance, unicodes, contourCount, warnings, d, pts,
 	};
 }
 
-// Build an SVG path string (font coordinates, y-up) from one contour.
+// -- FontRig .trglyph -------------------------------------------
+// Renders the first layer. Node semantics mirror the editor's tracer:
+//   on    -> line target
+//   curve -> first of two cubic control points (next node is the 2nd)
+//   off   -> single quadratic control point
+function buildTrglyph(g) {
+	const name = g.getAttribute('name') || '';
+	const uni = g.getAttribute('unicodes') || '';
+	const unicodes = uni ? uni.split(/[\s,]+/).filter(Boolean) : [];
+	const layers = [...g.querySelectorAll(':scope > layer')];
+
+	const base = { kind: 'FontRig .trglyph', name, unicodes };
+	if (!layers.length) return { ...base, advance: null, contourCount: 0, warnings: [], d: '', pts: [] };
+
+	const layer = layers[0];
+	const advance = parseFloat(layer.getAttribute('width') || '0') || null;
+	const pts = [];
+	let d = '', contourCount = 0, hobby = 0;
+
+	for (const shape of layer.querySelectorAll(':scope > shape')) {
+		const tx = parseTransformAttr(shape.getAttribute('transform'));
+		for (const c of shape.querySelectorAll(':scope > contour')) {
+			if ((c.getAttribute('kind') || 'bezier') === 'hobby') { hobby++; continue; }
+			const closed = /^(True|true|1)$/.test(c.getAttribute('closed') || '');
+			let nodes = [...c.querySelectorAll(':scope > node')].map(n => ({
+				x: parseFloat(n.getAttribute('x') || '0'),
+				y: parseFloat(n.getAttribute('y') || '0'),
+				type: n.getAttribute('type') || 'on',
+			}));
+			if (tx) nodes = nodes.map(n => ({ ...n, x: tx[0] * n.x + tx[2] * n.y + tx[4], y: tx[1] * n.x + tx[3] * n.y + tx[5] }));
+			const seg = traceNodes(nodes, closed);
+			if (seg) { d += seg + ' '; contourCount++; for (const n of nodes) pts.push([n.x, n.y]); }
+		}
+	}
+
+	const warnings = [];
+	if (hobby) warnings.push(`${hobby} Hobby contour(s) skipped`);
+	if (layers.length > 1) warnings.push(`layer 1 of ${layers.length} shown`);
+	return { ...base, advance, contourCount, warnings, d, pts };
+}
+
+function parseTransformAttr(str) {
+	if (!str) return null;
+	const m = str.match(/^matrix\(([^)]+)\)$/);
+	if (!m) return null;
+	const p = m[1].trim().split(/\s+/).map(parseFloat);
+	return (p.length === 6 && !p.some(isNaN)) ? p : null;
+}
+
+// Trace FontRig bezier nodes into an SVG path fragment (font y-up).
+function traceNodes(nodes, closed) {
+	const n = nodes.length;
+	if (!n) return '';
+	let firstOn = 0;
+	for (let j = 0; j < n; j++) if (nodes[j].type === 'on') { firstOn = j; break; }
+
+	let d = `M ${nodes[firstOn].x} ${nodes[firstOn].y} `;
+	let i = (firstOn + 1) % n, count = 0;
+	while (count < n - 1) {
+		const node = nodes[i];
+		if (node.type === 'curve') {
+			const b2 = nodes[(i + 1) % n], on = nodes[(i + 2) % n];
+			d += `C ${node.x} ${node.y} ${b2.x} ${b2.y} ${on.x} ${on.y} `;
+			i = (i + 2) % n; count += 2;
+		} else if (node.type === 'off') {
+			const on2 = nodes[(i + 1) % n];
+			d += `Q ${node.x} ${node.y} ${on2.x} ${on2.y} `;
+			i = (i + 1) % n; count += 1;
+		} else {
+			d += `L ${node.x} ${node.y} `;
+		}
+		i = (i + 1) % n; count++;
+	}
+	if (closed) d += 'Z';
+	return d;
+}
+
+// Build an SVG path string (font coordinates, y-up) from one UFO contour.
 function contourToPath(pts) {
 	const onCurve = p => p.type !== 'offcurve';
 	const open = pts[0].type === 'move';
@@ -278,17 +370,15 @@ function segmentTo(ctrl, p) {
 	return s;
 }
 
-// Render parsed glyph to an <svg>, fitted to its own bounding box.
-function renderSVG(glyph) {
+// Render a path (font coords, y-up) + its point list into a fitted <svg>.
+function renderPaths(d, pts) {
+	if (!d || !pts.length) return null;
 	let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-	for (const c of glyph.contours) for (const p of c) {
-		if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-		if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+	for (const [x, y] of pts) {
+		if (x < minX) minX = x; if (x > maxX) maxX = x;
+		if (y < minY) minY = y; if (y > maxY) maxY = y;
 	}
-	if (!isFinite(minX)) return null; // nothing to draw
-
-	const paths = glyph.contours.map(contourToPath).filter(Boolean).join(' ');
-	if (!paths) return null;
+	if (!isFinite(minX)) return null;
 
 	const pad = Math.max((maxX - minX), (maxY - minY)) * 0.06 + 10;
 	const vbX = minX - pad, vbW = (maxX - minX) + pad * 2;
@@ -298,7 +388,7 @@ function renderSVG(glyph) {
 
 	return `<svg viewBox="${vbX} ${vbY} ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg">
 		<g transform="scale(1,-1)">
-			<path d="${paths}" fill="var(--outline-fill)" stroke="var(--outline-stroke)"
+			<path d="${d}" fill="var(--outline-fill)" stroke="var(--outline-stroke)"
 			      stroke-width="1" stroke-linejoin="round" stroke-linecap="round"
 			      fill-rule="nonzero" vector-effect="non-scaling-stroke"/>
 		</g>
@@ -314,20 +404,18 @@ function makeCard(name, path, text) {
 	let renderHTML, metaHTML = '';
 
 	try {
-		const glyph = parseGlif(text);
-		const svg = renderSVG(glyph);
-		if (svg) {
-			renderHTML = `<div class="render">${svg}</div>`;
-		} else {
-			renderHTML = `<div class="render empty">no outline</div>`;
-		}
-		const bits = [];
-		if (glyph.name) bits.push(`<span>glyph <b>${esc(glyph.name)}</b></span>`);
-		if (glyph.width != null) bits.push(`<span>adv <b>${glyph.width}</b></span>`);
-		if (glyph.unicodes.length) bits.push(`<span>U+${glyph.unicodes.map(esc).join(' U+')}</span>`);
-		bits.push(`<span>${glyph.contours.length} contour${glyph.contours.length === 1 ? '' : 's'}</span>`);
+		const m = buildGlyph(text);
+		const svg = renderPaths(m.d, m.pts);
+		renderHTML = svg
+			? `<div class="render">${svg}</div>`
+			: `<div class="render empty">no outline</div>`;
+		const bits = [`<span class="fmt">${esc(m.kind)}</span>`];
+		if (m.name) bits.push(`<span>glyph <b>${esc(m.name)}</b></span>`);
+		if (m.advance != null) bits.push(`<span>adv <b>${m.advance}</b></span>`);
+		if (m.unicodes.length) bits.push(`<span>U+${m.unicodes.map(esc).join(' U+')}</span>`);
+		bits.push(`<span>${m.contourCount} contour${m.contourCount === 1 ? '' : 's'}</span>`);
 		metaHTML = `<div class="info">${bits.join('')}</div>`;
-		if (glyph.components) metaHTML += `<div class="warn">+${glyph.components} component(s) not rendered</div>`;
+		for (const w of m.warnings) metaHTML += `<div class="warn">${esc(w)}</div>`;
 	} catch (e) {
 		renderHTML = `<div class="render error">${esc(e.message)}</div>`;
 	}
@@ -351,11 +439,11 @@ function esc(s) {
 let total = 0;
 function addFiles(list) {
 	// list: array of {name, path, file}
-	const glifs = list.filter(f => /\.glif$/i.test(f.name));
-	if (!glifs.length) return;
+	const picked = list.filter(f => /\.(glif|trglyph)$/i.test(f.name));
+	if (!picked.length) return;
 	// Sort by path for stable, folder-like ordering.
-	glifs.sort((a, b) => (a.path || a.name).localeCompare(b.path || b.name));
-	for (const f of glifs) {
+	picked.sort((a, b) => (a.path || a.name).localeCompare(b.path || b.name));
+	for (const f of picked) {
 		const reader = new FileReader();
 		reader.onload = () => { makeCard(f.name, f.path, reader.result); updateCount(); };
 		reader.onerror = () => { makeCard(f.name, f.path, ''); };
