@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FontRig · .glif Viewer</title>
+<link rel="icon" href="../editor/favicon.svg">
+<style>
+/* Reuse the FontRig editor design tokens so this matches the app.
+   Kept inline so the tool is a single independent file. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+	--bg-primary: #1a1a1e;
+	--bg-secondary: #222226;
+	--bg-tertiary: #2a2a2e;
+	--bg-hover: #333338;
+	--border: #3a3a40;
+	--border-subtle: #2e2e34;
+	--text-primary: #e8e8ec;
+	--text-secondary: #9898a0;
+	--text-dim: #686870;
+	--accent: #5b9def;
+	--accent-bg: rgba(91,157,239,0.08);
+	--outline-fill: rgba(200,200,210,0.12);
+	--outline-stroke: #c8c8d2;
+	--danger: #ff6b6b;
+	--mono: 'IBM Plex Mono', monospace;
+}
+[data-theme="light"] {
+	--bg-primary: #fafafa;
+	--bg-secondary: #ffffff;
+	--bg-tertiary: #f0f0f0;
+	--bg-hover: #e5e5e5;
+	--border: #d0d0d0;
+	--border-subtle: #e5e5e5;
+	--text-primary: #383a42;
+	--text-secondary: #696c77;
+	--text-dim: #a0a1a7;
+	--accent: #4078f2;
+	--accent-bg: rgba(64,120,242,0.08);
+	--outline-fill: rgba(56,58,66,0.08);
+	--outline-stroke: #383a42;
+	--danger: #e45649;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+	font-family: 'DM Sans', sans-serif;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	min-height: 100vh;
+	-webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* -- Header / toolbar -- */
+header {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	flex-wrap: wrap;
+	padding: 12px 20px;
+	background: var(--bg-secondary);
+	border-bottom: 1px solid var(--border);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+h1 {
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: 0.3px;
+}
+h1 .dim { color: var(--text-dim); font-weight: 400; }
+.spacer { flex: 1; }
+
+.btn {
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--text-primary);
+	background: var(--bg-tertiary);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 7px 14px;
+	cursor: pointer;
+	transition: background 0.12s, border-color 0.12s;
+}
+.btn:hover { background: var(--bg-hover); border-color: var(--accent); }
+.btn.primary { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.count { font-size: 12px; color: var(--text-secondary); }
+
+label.size {
+	display: flex; align-items: center; gap: 8px;
+	font-size: 12px; color: var(--text-secondary);
+}
+input[type=range] { accent-color: var(--accent); width: 110px; }
+
+/* -- Dropzone -- */
+#dropzone {
+	margin: 20px;
+	border: 2px dashed var(--border);
+	border-radius: 10px;
+	padding: 40px 20px;
+	text-align: center;
+	color: var(--text-secondary);
+	transition: border-color 0.15s, background 0.15s;
+}
+#dropzone.hot { border-color: var(--accent); background: var(--accent-bg); color: var(--text-primary); }
+#dropzone .big { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+#dropzone .small { font-size: 12px; color: var(--text-dim); }
+
+/* -- Grid of glyph cards -- */
+#grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(var(--card, 180px), 1fr));
+	gap: 14px;
+	padding: 0 20px 40px;
+}
+.card {
+	background: var(--bg-secondary);
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+.render {
+	background: var(--bg-tertiary);
+	border-bottom: 1px solid var(--border-subtle);
+	aspect-ratio: 1 / 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 10px;
+}
+.render svg { width: 100%; height: 100%; display: block; }
+.render.empty { color: var(--text-dim); font-size: 12px; font-style: italic; }
+.render.error { color: var(--danger); font-size: 11px; text-align: center; padding: 14px; font-family: var(--mono); overflow: auto; }
+
+.meta { padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fname {
+	font-family: var(--mono);
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-primary);
+	word-break: break-all;
+}
+.fpath {
+	font-family: var(--mono);
+	font-size: 10px;
+	color: var(--text-dim);
+	word-break: break-all;
+	line-height: 1.4;
+}
+.info { font-size: 10.5px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
+.info b { color: var(--text-primary); font-weight: 600; }
+.warn { font-size: 10px; color: var(--danger); margin-top: 2px; }
+</style>
+</head>
+<body>
+<header>
+	<h1>FontRig <span class="dim">· .glif Viewer</span></h1>
+	<span class="count" id="count">no files</span>
+	<div class="spacer"></div>
+	<label class="size">size
+		<input type="range" id="sizeRange" min="90" max="320" value="180" step="10">
+	</label>
+	<button class="btn primary" id="pick">Select files…</button>
+	<button class="btn" id="clear">Clear</button>
+	<button class="btn" id="theme" title="Toggle light/dark">◑</button>
+	<input type="file" id="file" accept=".glif,application/xml,text/xml" multiple hidden>
+</header>
+
+<div id="dropzone">
+	<div class="big">Drop .glif files or a folder here</div>
+	<div class="small">Each file is rendered on its own — no UFO assembly, no .plist lookups. Components are not resolved.</div>
+</div>
+
+<div id="grid"></div>
+
+<script>
+'use strict';
+
+const grid = document.getElementById('grid');
+const dropzone = document.getElementById('dropzone');
+const countEl = document.getElementById('count');
+const fileInput = document.getElementById('file');
+
+// ---------------------------------------------------------------
+// Parse a standard UFO .glif into contours + components.
+// Treats the file as a standalone image: no outside references.
+// ---------------------------------------------------------------
+function parseGlif(xml) {
+	const doc = new DOMParser().parseFromString(xml, 'text/xml');
+	const err = doc.querySelector('parsererror');
+	if (err) throw new Error('XML parse error');
+	const g = doc.querySelector('glyph');
+	if (!g) throw new Error('no <glyph> element');
+
+	const unicodes = [...g.querySelectorAll('unicode')]
+		.map(u => u.getAttribute('hex')).filter(Boolean);
+	const adv = g.querySelector('advance');
+	const width = adv ? parseFloat(adv.getAttribute('width') || '0') : null;
+
+	const contours = [];
+	for (const c of g.querySelectorAll('outline > contour')) {
+		const pts = [...c.querySelectorAll('point')].map(p => ({
+			x: parseFloat(p.getAttribute('x')),
+			y: parseFloat(p.getAttribute('y')),
+			type: p.getAttribute('type') || 'offcurve',
+		}));
+		if (pts.length) contours.push(pts);
+	}
+	const components = g.querySelectorAll('outline > component').length;
+
+	return {
+		name: g.getAttribute('name') || '',
+		width, unicodes, contours, components,
+	};
+}
+
+// Build an SVG path string (font coordinates, y-up) from one contour.
+function contourToPath(pts) {
+	const onCurve = p => p.type !== 'offcurve';
+	const open = pts[0].type === 'move';
+	let seq = pts;
+
+	if (!open) {
+		// Closed: rotate so it starts on an on-curve point.
+		const start = pts.findIndex(onCurve);
+		if (start === -1) return '';               // all off-curve: skip (rare)
+		seq = pts.slice(start).concat(pts.slice(0, start));
+	}
+
+	let d = `M ${seq[0].x} ${seq[0].y} `;
+	let ctrl = [];
+	const rest = seq.slice(1).concat(open ? [] : [seq[0]]); // wrap to close
+
+	for (const p of rest) {
+		if (!onCurve(p)) { ctrl.push(p); continue; }
+		d += segmentTo(ctrl, p);
+		ctrl = [];
+	}
+	if (!open) d += 'Z';
+	return d;
+}
+
+// One segment ending at on-curve point `p`, using accumulated off-curve `ctrl`.
+// The on-curve point's TYPE decides the curve kind — don't guess from count:
+//   line   -> straight
+//   curve  -> cubic Bézier (PostScript), two controls
+//   qcurve -> quadratic run (TrueType): implied on-curve midpoints between
+//             every pair of controls, so a 4-control arc stays round.
+function segmentTo(ctrl, p) {
+	if (ctrl.length === 0) return `L ${p.x} ${p.y} `;
+
+	if (p.type === 'curve' && ctrl.length >= 2) {
+		const a = ctrl[ctrl.length - 2], b = ctrl[ctrl.length - 1];
+		return `C ${a.x} ${a.y} ${b.x} ${b.y} ${p.x} ${p.y} `;
+	}
+
+	if (ctrl.length === 1) return `Q ${ctrl[0].x} ${ctrl[0].y} ${p.x} ${p.y} `;
+
+	// Quadratic run with implied midpoints (TrueType qcurve).
+	let s = '';
+	for (let i = 0; i < ctrl.length - 1; i++) {
+		const mx = (ctrl[i].x + ctrl[i + 1].x) / 2;
+		const my = (ctrl[i].y + ctrl[i + 1].y) / 2;
+		s += `Q ${ctrl[i].x} ${ctrl[i].y} ${mx} ${my} `;
+	}
+	const last = ctrl[ctrl.length - 1];
+	s += `Q ${last.x} ${last.y} ${p.x} ${p.y} `;
+	return s;
+}
+
+// Render parsed glyph to an <svg>, fitted to its own bounding box.
+function renderSVG(glyph) {
+	let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+	for (const c of glyph.contours) for (const p of c) {
+		if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+		if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+	}
+	if (!isFinite(minX)) return null; // nothing to draw
+
+	const paths = glyph.contours.map(contourToPath).filter(Boolean).join(' ');
+	if (!paths) return null;
+
+	const pad = Math.max((maxX - minX), (maxY - minY)) * 0.06 + 10;
+	const vbX = minX - pad, vbW = (maxX - minX) + pad * 2;
+	const vbH = (maxY - minY) + pad * 2;
+	// y-flip: scale(1,-1) maps font y-up to screen y-down.
+	const vbY = -(maxY) - pad;
+
+	return `<svg viewBox="${vbX} ${vbY} ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg">
+		<g transform="scale(1,-1)">
+			<path d="${paths}" fill="var(--outline-fill)" stroke="var(--outline-stroke)"
+			      stroke-width="1" stroke-linejoin="round" stroke-linecap="round"
+			      fill-rule="nonzero" vector-effect="non-scaling-stroke"/>
+		</g>
+	</svg>`;
+}
+
+// ---------------------------------------------------------------
+// Card building
+// ---------------------------------------------------------------
+function makeCard(name, path, text) {
+	const card = document.createElement('div');
+	card.className = 'card';
+	let renderHTML, metaHTML = '';
+
+	try {
+		const glyph = parseGlif(text);
+		const svg = renderSVG(glyph);
+		if (svg) {
+			renderHTML = `<div class="render">${svg}</div>`;
+		} else {
+			renderHTML = `<div class="render empty">no outline</div>`;
+		}
+		const bits = [];
+		if (glyph.name) bits.push(`<span>glyph <b>${esc(glyph.name)}</b></span>`);
+		if (glyph.width != null) bits.push(`<span>adv <b>${glyph.width}</b></span>`);
+		if (glyph.unicodes.length) bits.push(`<span>U+${glyph.unicodes.map(esc).join(' U+')}</span>`);
+		bits.push(`<span>${glyph.contours.length} contour${glyph.contours.length === 1 ? '' : 's'}</span>`);
+		metaHTML = `<div class="info">${bits.join('')}</div>`;
+		if (glyph.components) metaHTML += `<div class="warn">+${glyph.components} component(s) not rendered</div>`;
+	} catch (e) {
+		renderHTML = `<div class="render error">${esc(e.message)}</div>`;
+	}
+
+	card.innerHTML = renderHTML +
+		`<div class="meta">
+			<div class="fname">${esc(name)}</div>
+			${path && path !== name ? `<div class="fpath">${esc(path)}</div>` : ''}
+			${metaHTML}
+		</div>`;
+	grid.appendChild(card);
+}
+
+function esc(s) {
+	return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// ---------------------------------------------------------------
+// File intake
+// ---------------------------------------------------------------
+let total = 0;
+function addFiles(list) {
+	// list: array of {name, path, file}
+	const glifs = list.filter(f => /\.glif$/i.test(f.name));
+	if (!glifs.length) return;
+	// Sort by path for stable, folder-like ordering.
+	glifs.sort((a, b) => (a.path || a.name).localeCompare(b.path || b.name));
+	for (const f of glifs) {
+		const reader = new FileReader();
+		reader.onload = () => { makeCard(f.name, f.path, reader.result); updateCount(); };
+		reader.onerror = () => { makeCard(f.name, f.path, ''); };
+		reader.readAsText(f.file);
+		total++;
+	}
+	updateCount();
+}
+
+function updateCount() {
+	const shown = grid.children.length;
+	countEl.textContent = total ? `${shown} / ${total} file${total === 1 ? '' : 's'}` : 'no files';
+}
+
+// Plain multi-file select / file drop (browser gives only the name).
+function filesFromFileList(fileList) {
+	return [...fileList].map(file => ({
+		name: file.name,
+		path: file.webkitRelativePath || file.name,
+		file,
+	}));
+}
+
+// Folder drop: recurse the entry tree to recover relative paths.
+function walkEntry(entry, prefix, out) {
+	return new Promise(resolve => {
+		if (entry.isFile) {
+			entry.file(file => { out.push({ name: file.name, path: prefix + file.name, file }); resolve(); });
+		} else if (entry.isDirectory) {
+			const reader = entry.createReader();
+			const all = [];
+			const readBatch = () => reader.readEntries(entries => {
+				if (!entries.length) {
+					Promise.all(all.map(e => walkEntry(e, prefix + entry.name + '/', out))).then(resolve);
+					return;
+				}
+				all.push(...entries);
+				readBatch();
+			});
+			readBatch();
+		} else resolve();
+	});
+}
+
+// -- events --
+document.getElementById('pick').onclick = () => fileInput.click();
+fileInput.onchange = () => { addFiles(filesFromFileList(fileInput.files)); fileInput.value = ''; };
+
+document.getElementById('clear').onclick = () => { grid.innerHTML = ''; total = 0; updateCount(); };
+
+document.getElementById('theme').onclick = () => {
+	const root = document.documentElement;
+	root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+};
+
+document.getElementById('sizeRange').oninput = e => {
+	document.documentElement.style.setProperty('--card', e.target.value + 'px');
+};
+
+['dragenter', 'dragover'].forEach(ev =>
+	dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('hot'); }));
+['dragleave', 'drop'].forEach(ev =>
+	dropzone.addEventListener(ev, e => { e.preventDefault(); if (ev !== 'dragleave' || e.target === dropzone) dropzone.classList.remove('hot'); }));
+
+dropzone.addEventListener('drop', async e => {
+	const items = e.dataTransfer.items;
+	// Prefer the entry API so dropped folders keep their paths.
+	if (items && items.length && items[0].webkitGetAsEntry) {
+		const entries = [...items].map(i => i.webkitGetAsEntry()).filter(Boolean);
+		if (entries.length) {
+			const out = [];
+			await Promise.all(entries.map(en => walkEntry(en, '', out)));
+			addFiles(out);
+			return;
+		}
+	}
+	addFiles(filesFromFileList(e.dataTransfer.files));
+});
+
+// Allow dropping anywhere on the page too.
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { if (e.target !== dropzone && !dropzone.contains(e.target)) e.preventDefault(); });
+</script>
+</body>
+</html>
